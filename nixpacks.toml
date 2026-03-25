@@ -1,0 +1,18 @@
+providers = ["node"]
+
+[variables]
+NODE_ENV = "production"
+
+[phases.install]
+cmds = [
+  "cd app && npm ci",
+  "cd backend && npm ci"
+]
+
+[phases.build]
+cmds = [
+  "cd app && npm run build"
+]
+
+[start]
+cmd = "cd backend && npm start"

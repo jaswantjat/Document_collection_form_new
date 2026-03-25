@@ -1,0 +1,161 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 230 100% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 236 100% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 230 100% 95%;
+    --secondary-foreground: 236 100% 62%;
+    --muted: 230 50% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 230 100% 95%;
+    --accent-foreground: 236 100% 62%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 230 30% 90%;
+    --input: 230 30% 90%;
+    --ring: 236 100% 62%;
+    --radius: 12px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-eltex-lavender text-foreground font-sans antialiased;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F0F4FF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3B46FF;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2A33CC;
+}
+
+/* Form input styles */
+.form-input {
+  @apply w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 transition-all duration-200;
+  @apply focus:border-eltex-blue focus:ring-4 focus:ring-eltex-blue/10 focus:outline-none;
+  @apply hover:border-gray-300;
+  min-height: 56px;
+}
+
+.form-input.error {
+  @apply border-eltex-error focus:border-eltex-error focus:ring-eltex-error/10;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply w-full py-4 px-6 bg-eltex-blue text-white font-semibold rounded-xl transition-all duration-200;
+  @apply hover:bg-eltex-blue-dark hover:shadow-lg hover:shadow-eltex-blue/25;
+  @apply active:scale-[0.98];
+  @apply disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:hover:shadow-none;
+}
+
+.btn-secondary {
+  @apply px-4 py-3 bg-white border border-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200;
+  @apply hover:bg-gray-50 hover:border-gray-300;
+}
+
+/* Card styles */
+.form-card {
+  @apply bg-white rounded-2xl shadow-xl shadow-gray-200/50 overflow-hidden;
+}
+
+/* Upload zone styles */
+.upload-zone {
+  @apply relative border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 transition-all duration-200 cursor-pointer;
+  @apply hover:border-eltex-blue hover:bg-eltex-blue-light/30;
+}
+
+.upload-zone.dragging {
+  @apply border-eltex-blue bg-eltex-blue-light/50 scale-[1.02];
+}
+
+.upload-zone.has-file {
+  @apply border-eltex-success bg-eltex-success/5;
+}
+
+/* Signature pad */
+.signature-canvas {
+  @apply w-full h-48 bg-white border border-gray-200 rounded-xl cursor-crosshair touch-none;
+}
+
+/* Progress bar */
+.progress-bar {
+  @apply h-2 bg-gray-100 rounded-full overflow-hidden;
+}
+
+.progress-bar-fill {
+  @apply h-full bg-eltex-blue rounded-full transition-all duration-500 ease-out;
+}
+
+/* Status badges */
+.status-badge {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium;
+}
+
+.status-badge-success {
+  @apply bg-eltex-success/10 text-eltex-success;
+}
+
+.status-badge-pending {
+  @apply bg-eltex-warning/10 text-eltex-warning;
+}
+
+.status-badge-missing {
+  @apply bg-gray-100 text-gray-500;
+}
+
+/* Required field indicator */
+.required::after {
+  content: " *";
+  @apply text-eltex-error;
+}
+
+/* Animation utilities */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
