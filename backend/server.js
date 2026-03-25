@@ -1177,4 +1177,11 @@ app.listen(PORT, () => {
   }
   console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar)');
   console.log('Test phones: +34612345678 | +34623456789 | +34655443322');
+  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003'];
+  testCodes.forEach(code => {
+    const p = database.projects[code];
+    if (p?.accessToken) {
+      console.log(`🔗 ${code}: /?code=${code}&token=${p.accessToken}`);
+    }
+  });
 });

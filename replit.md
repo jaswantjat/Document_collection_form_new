@@ -33,6 +33,36 @@ Default projects seeded in db.json:
 - `ELT20250002` — Juan Pérez Martínez (aerothermal)
 - `ELT20250003` — Laura Fernández Ruiz (solar)
 
+## Changes (2026-03-25, Session 2)
+
+### UI: Carousel + Single Signature
+- `RepresentationSection` redesigned to show all regional documents in a horizontal swipeable carousel on a single screen
+- One shared `SignaturePad` below the carousel — the user signs once and the signature is applied to all documents simultaneously
+- Documents render previews (without signature) for review before signing
+- Carousel has navigation arrows, dot indicators, and shows document count (e.g. "1 de 3")
+
+### Signature Mapping Fix
+- `drawSignature()` and `drawPercentSignature()` in `signedDocumentOverlays.ts` now paint a white rectangle over the sign-here area before drawing the actual signature, preventing overlap with any template indicator
+- Template version bumped to `2026-03-25.3`
+
+### Smart Edit-Link Routing
+- `App.tsx` uses `getInitialSection()` to determine the first incomplete step when a project loads via URL code
+- Routing order: if representation is done → go to review; if location set → go to representation; if docs done → go to province-selection; otherwise → property-docs
+
+### Review Section
+- Shows only pending (incomplete) checklist items when some are incomplete
+- Shows all items only when everything is complete — keeping the interface clean when returning via edit link
+- Passes `projectToken` to `submitForm` for IDOR-protected submission
+
+### IDOR Security (Insecure Direct Object Reference)
+- All projects now get a UUID `accessToken` on creation
+- Existing projects in `db.json` get tokens auto-assigned on server startup
+- `GET /api/project/:code`, `POST /api/project/:code/save`, and `POST /api/project/:code/submit` all require `x-project-token` header to match the stored token
+- Dashboard endpoints bypass project token check (they use dashboard auth instead)
+- Phone lookup returns project including `accessToken` so the frontend can build the full URL
+- Edit links now include `?code=...&token=...` format
+- On startup, the server prints access URLs for test projects (code + token)
+
 ## Document Overlay Fixes (2026-03-25)
 
 All 5 document types have been analyzed and corrected:
