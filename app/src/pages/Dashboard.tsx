@@ -570,7 +570,7 @@ function ProjectTableRow({
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="flex flex-col gap-2 min-w-[130px]">
           <a
-            href={`/?code=${project.code}`}
+            href={`/?code=${project.code}${project.accessToken ? `&token=${project.accessToken}` : ''}`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center"
@@ -958,7 +958,7 @@ function ProjectDetailPanel({
 
           <div className="flex flex-wrap gap-2">
             <a
-              href={`/?code=${project.code}`}
+              href={`/?code=${project.code}${project.accessToken ? `&token=${project.accessToken}` : ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50"

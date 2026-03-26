@@ -44,7 +44,7 @@ if (!initialOpenRouterApiKey) {
 const OPENROUTER_MODEL = 'google/gemini-3.1-flash-lite-preview';
 
 // Middleware
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token'] }));
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.static('uploads'));
 

@@ -89,7 +89,7 @@ function FormApp() {
           setLoadError(res.error || 'PROJECT_NOT_FOUND');
         }
       })
-      .catch(() => setLoadError('CONNECTION_ERROR'))
+      .catch(() => setLoadError('NETWORK_ERROR'))
       .finally(() => setLoading(false));
   }, [urlCode, urlToken]);
 

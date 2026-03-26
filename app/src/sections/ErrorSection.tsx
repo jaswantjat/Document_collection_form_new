@@ -17,6 +17,10 @@ const errorMessages: Record<string, { title: string; description: string }> = {
     title: 'Sin conexión',
     description: 'No se ha podido conectar con el servidor. Comprueba tu conexión a internet e inténtalo de nuevo.',
   },
+  FORBIDDEN: {
+    title: 'Enlace no válido',
+    description: 'Este enlace no tiene autorización para acceder al proyecto. Asegúrate de usar el enlace completo que te ha enviado tu asesor de Eltex.',
+  },
   UNKNOWN_ERROR: {
     title: 'Error inesperado',
     description: 'Ha ocurrido un error inesperado. Por favor, recarga la página o contacta con tu asesor.',
