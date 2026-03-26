@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { ArrowRight, ArrowLeft, MapPin, Building2, User, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { SignaturePad } from '@/components/SignaturePad';
 import type { FormData, RenderedDocumentAsset, RepresentationData, LocationRegion } from '@/types';
@@ -110,6 +110,25 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [sharedSignature, setSharedSignature] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
+
+  const previewFormData = useMemo<FormData>(() => {
+    if (!sharedSignature) return formData;
+    const isCataluna = location === 'cataluna';
+    const signaturePatch: Partial<RepresentationData> = isCataluna
+      ? {
+          ivaCertificateSignature: sharedSignature,
+          generalitatSignature: sharedSignature,
+          representacioSignature: sharedSignature,
+        }
+      : {
+          ivaCertificateEsSignature: sharedSignature,
+          poderRepresentacioSignature: sharedSignature,
+        };
+    return {
+      ...formData,
+      representation: { ...formData.representation, ...signaturePatch },
+    };
+  }, [formData, sharedSignature, location]);
 
   const step0Valid = !!location &&
     (!data.isCompany || (data.companyName.trim() !== '' && data.companyNIF.trim() !== ''));
@@ -278,7 +297,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                 key={doc.kind}
                 className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
               >
-                <SignedDocumentPreview formData={formData} kind={doc.kind} alt={doc.title} />
+                <SignedDocumentPreview formData={previewFormData} kind={doc.kind} alt={doc.title} />
               </div>
             ))}
           </div>

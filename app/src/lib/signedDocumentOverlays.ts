@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-25.3';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.1';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -32,11 +32,11 @@ const REPRESENTACIO_FIELDS = {
 
 const GENERALITAT_PAGE_SIZE = { width: 1357, height: 1920 };
 const GENERALITAT_FIELDS = {
-  nom: [146, 255, 977, 292],
-  dni: [982, 255, 1295, 292],
+  nom: [146, 262, 977, 290],
+  dni: [982, 262, 1295, 290],
   checkboxTitular: [147, 327, 172, 353],
   checkboxRepresentant: [459, 327, 484, 353],
-  signatura: [147, 1389, 1295, 1492],
+  signatura: [147, 1390, 1295, 1498],
 } as const;
 
 const IVA_ES_PAGE_SIZE = { width: 1448, height: 2048 };

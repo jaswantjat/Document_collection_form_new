@@ -142,14 +142,14 @@ export const CATALUNA_GENERALITAT_SPEC: DocumentSpec = {
   pageSize: { width: 1357, height: 1920 },
   fields: {
     personaInteressada: {
-      nom: [146, 255, 977, 292],
-      nif: [982, 255, 1295, 292],
+      nom: [146, 262, 977, 290],
+      nif: [982, 262, 1295, 290],
     },
   },
   signatureBoxes: [
     {
       id: 'catalunaGeneralitatCustomer',
-      box: [147, 1389, 1295, 1492],
+      box: [147, 1390, 1295, 1498],
       signatureType: 'customer',
       label: 'Firma cliente',
     },
