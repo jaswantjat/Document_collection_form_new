@@ -25,12 +25,20 @@ This document collection form app is ready for deployment on Railway.com.
      - builds `app/`
      - starts `backend/server.js`
 
-3. **Add environment variables**
+3. **Attach persistent storage**
+   - Add a Railway volume mounted at `/data`
+   - The app now stores uploads and `db.json` in `/data` automatically on Railway
+   - Without a volume, uploaded files and saved form data will be lost on redeploy
+
+4. **Add environment variables**
    - Go to your project's "Variables" tab
    - Add `OPENROUTER_API_KEY` with your actual API key
+   - Add `DASHBOARD_PASSWORD` with a strong password
    - Add `PORT` = `3001` (Railway may set this automatically)
+   - Optional: add `DATA_DIR=/data` explicitly if you want the path to be visible in config
+   - Optional: add `SEED_SAMPLE_DATA=true` only for demo environments
 
-4. **Deploy**
+5. **Deploy**
    - Click "Deploy" button
    - Railway will build and deploy your backend
 
@@ -56,13 +64,16 @@ The current backend already serves the production frontend from `app/dist`, so n
 ## Environment Variables
 
 - `OPENROUTER_API_KEY` - Your OpenRouter API key for AI extraction
+- `DASHBOARD_PASSWORD` - Required in production for dashboard access
+- `DATA_DIR` - Optional custom data directory. Defaults to `/data` on Railway.
+- `SEED_SAMPLE_DATA` - Optional. Set to `true` only if you want demo projects created.
 - `PORT` - Port number (default: 3001)
 
 ## Railway-Specific Considerations
 
 - Railway provides automatic HTTPS
-- Persistent disk storage may be needed for file uploads
-- Database: Currently uses JSON file storage, consider upgrading to Railway's PostgreSQL for production
+- Attach a Railway volume so uploaded files and `db.json` survive restarts and redeploys
+- Database: Currently uses JSON file storage on the mounted volume; consider Railway PostgreSQL for multi-instance production later
 
 ## Troubleshooting
 
@@ -76,7 +87,7 @@ The current backend already serves the production frontend from `app/dist`, so n
 - Check Railway logs for error messages
 
 ### File upload issues
-- Railway's filesystem is ephemeral - consider using Railway's volume storage or external storage (S3, etc.)
+- Railway's root filesystem is ephemeral. Confirm the service has a volume mounted at `/data`.
 
 ## Monitoring
 

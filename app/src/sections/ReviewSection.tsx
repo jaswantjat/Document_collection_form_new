@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
-import type { FormData, ProjectData, LocationRegion } from '@/types';
+import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
 import { submitForm } from '@/services/api';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
 
@@ -98,16 +98,17 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
   function stripRenderedImages(fd: FormData): FormData {
     const docs = fd.representation?.renderedDocuments;
     if (!docs) return fd;
-    const stripped: Record<string, object> = {};
-    for (const [key, val] of Object.entries(docs)) {
-      if (val && typeof val === 'object') {
-        const { imageDataUrl: _omit, ...meta } = val as { imageDataUrl?: string; [k: string]: unknown };
-        stripped[key] = meta;
-      }
+    const stripped: NonNullable<FormData['representation']['renderedDocuments']> = {};
+    for (const [key, val] of Object.entries(docs) as [RenderedDocumentKey, RenderedDocumentAsset | undefined][]) {
+      if (!val) continue;
+      stripped[key] = {
+        generatedAt: val.generatedAt,
+        templateVersion: val.templateVersion,
+      };
     }
     return {
       ...fd,
-      representation: { ...fd.representation, renderedDocuments: stripped as typeof docs },
+      representation: { ...fd.representation, renderedDocuments: stripped },
     };
   }
 

@@ -128,7 +128,7 @@ function FormApp() {
     setLocation,
     setRepresentation,
     setDocumentProcessingState,
-    validatePropertyDocs, validateRepresentation,
+    validatePropertyDocs,
     canSubmit,
   } = useFormState(project?.code ?? null, project?.productType ?? 'solar', project?.formData ?? null, projectToken);
 

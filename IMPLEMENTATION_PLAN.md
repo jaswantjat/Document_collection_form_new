@@ -58,7 +58,7 @@ backend/
 public/           Template images for signed documents (PNGs/JPEGs)
 ```
 
-**Dev routing:** Frontend runs at `:5173`, proxied through Express at `:3001`. All API calls use relative paths (`/api/…`). The Replit preview iframe hits `:3001`.
+**Dev routing:** Frontend runs at `:5173`, proxied through Express at `:3001`. All API calls use relative paths (`/api/…`). In local development, use the Express server on `:3001`.
 
 **Auth:**
 - Customer form: `x-project-token` header (per-project token stored in `db.json`)
@@ -466,7 +466,7 @@ Transforms raw project data into typed dashboard display objects:
 
 - **Fixed auto-submit bug in ReviewSection:** Removed the `useEffect` that auto-fired `submit()` 600ms after landing on the review screen (triggered every time the component mounted). Replaced with an explicit "Enviar documentación" button. Added `onBack` prop with proper routing (→ `province-selection` for `other`, → `representation` for all other locations).
 - **Fixed B1/B6 — `other` province dead-end:** `hasRepresentationDone` now returns `true` for `other`; `ProvinceSelectionSection.onContinue` skips to `review` for `other`; `RepresentationSection` shows a friendly message + continue button when `docs[]` is empty; `validateRepresentation` skips signature checks for `other`
-- **Fixed B2/B7 — Dashboard popup blockers:** Replaced all `window.open()` calls with anchor element click pattern (works in Replit iframes); applies to `openDataUrlInNewTab`, `viewPDFInNewTab`, and thumbnail `onClick` in `DocumentTableCell` and `ElectricityTableCell`
+- **Fixed B2/B7 — Dashboard popup blockers:** Replaced all `window.open()` calls with anchor element click pattern (works reliably in embedded browser contexts); applies to `openDataUrlInNewTab`, `viewPDFInNewTab`, and thumbnail `onClick` in `DocumentTableCell` and `ElectricityTableCell`
 - **Fixed B4 — Electricity duplicate detection:** `ElectricityCard` now checks `pages.some(p => p.photo?.preview === photo.preview)` before calling `onAddPage` — duplicate uploads silently ignored
 - **Dashboard admin document upload:** `AdminUploadModal` added — upload any document type (DNI front/back, IBI, electricity page) directly from the dashboard; uses AI extraction + `PUT /api/project/:code/admin-formdata`; rendered via React `createPortal`; "Subir docs" button added to each project row's actions column
 
@@ -497,7 +497,7 @@ Transforms raw project data into typed dashboard display objects:
 | # | Bug | File | Status |
 |---|-----|------|--------|
 | B1 | `other` location dead-end in Representation step — `hasRepresentationDone` returns `false`; `docs[]` empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Fixed 2026-03-26** |
-| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — `window.open()` blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
+| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in embedded browser contexts — `window.open()` blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
 | B3 | `buildSignedPdfFactory` — `imageDataUrl` always `undefined` (stripped from upload); fallback re-render adds latency | `Dashboard.tsx` | Working (acceptable) |
 | **B8** | **`GET /api/project/:code` is fully public — returns entire project including base64 images, DNI number, NIF, address, and `accessToken`.** Sequential codes (`ELT20260001`, `ELT20260002`) mean any attacker can enumerate all projects and read sensitive customer PII. | `backend/server.js` line 356 | **Fixed 2026-03-26** |
 | **B9** | **`accessToken` exposed in public GET response** — since `GET /api/project/:code` returns the full project object (including `project.accessToken`), an attacker who reads any project also gains its write token, enabling them to overwrite formData via `/save` and `/submit`. Combined with B8 this is a full read+write IDOR. | `backend/server.js` line 360 | **Fixed 2026-03-26** |

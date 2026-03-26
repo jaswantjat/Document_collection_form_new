@@ -5,9 +5,6 @@ import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Archive,
-  Building2,
-  Calendar,
-  Camera,
   CheckCircle,
   Clock,
   CreditCard,
@@ -18,10 +15,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
-  Mail,
-  MapPin,
   PenLine,
-  Phone,
   RefreshCw,
   Search,
   Sun,
@@ -35,7 +29,6 @@ import {
 import { dashboardLogout, fetchDashboard, generateImagePDF, extractDocument, adminUpdateFormData } from '@/services/api';
 import {
   getDashboardProjectSummary,
-  getDashboardElectricityPages,
   type DashboardAssetGroup,
   type DashboardAssetItem,
   type DashboardDocumentItem,
@@ -81,10 +74,6 @@ function sanitizeFilename(input: string) {
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toLowerCase();
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -232,7 +221,7 @@ function FieldRow({ label, value }: { label: string; value: any }) {
   );
 }
 
-function InfoCard({
+export function InfoCard({
   icon: Icon,
   label,
   value,
@@ -252,7 +241,7 @@ function InfoCard({
   );
 }
 
-function QuickStat({
+export function QuickStat({
   label,
   value,
   tone = 'gray',
@@ -860,7 +849,7 @@ function ImagePreviewCard({
   );
 }
 
-function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string }) {
+export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string }) {
   if (!dni?.front?.photo && !dni?.back?.photo) return null;
 
   const frontData = dni.front?.extraction?.extractedData;
@@ -911,7 +900,7 @@ function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string }) {
   );
 }
 
-function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string }) {
+export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string }) {
   if (!ibi?.photo) return null;
 
   const data = ibi.extraction?.extractedData;
@@ -958,7 +947,7 @@ function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string }) {
   );
 }
 
-function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCode: string }) {
+export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCode: string }) {
   const pages: any[] = bill?.pages ?? [];
   // backward compat: migrate old front/back into pages if needed
   const normalised = pages.length === 0
@@ -1011,7 +1000,7 @@ function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCode: str
   );
 }
 
-function PhotoGallery({
+export function PhotoGallery({
   group,
   projectCode,
 }: {
@@ -1038,7 +1027,7 @@ function PhotoGallery({
   );
 }
 
-function FinalSignaturesPanel({
+export function FinalSignaturesPanel({
   signatures,
   projectCode,
 }: {
@@ -1065,7 +1054,7 @@ function FinalSignaturesPanel({
   );
 }
 
-function SignedDocumentsSection({
+export function SignedDocumentsSection({
   project,
   items,
 }: {
@@ -1117,7 +1106,7 @@ function SignedDocumentsSection({
   );
 }
 
-function DownloadGroupsSection({
+export function DownloadGroupsSection({
   groups,
   projectCode,
 }: {
@@ -1143,149 +1132,6 @@ function DownloadGroupsSection({
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function ProjectDetailPanel({
-  project,
-  token,
-}: {
-  project: any;
-  token: string;
-}) {
-  const [downloading, setDownloading] = useState(false);
-  const summary = getDashboardProjectSummary(project);
-  const formData = project.formData;
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-gray-100">
-        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs font-bold text-eltex-blue bg-eltex-blue-light px-2.5 py-1 rounded-lg">
-                {project.code}
-              </span>
-              <ProductBadge type={project.productType} />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">{summary.customerDisplayName}</h2>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{project.phone || '—'}</span>
-              <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{project.email || '—'}</span>
-              <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{project.assessor || '—'}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={`/?code=${project.code}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50"
-            >
-              Abrir formulario
-            </a>
-            <button
-              type="button"
-              disabled={downloading}
-              onClick={async () => {
-                setDownloading(true);
-                try { await downloadProjectZip(project, token); }
-                catch { alert('Error al descargar los archivos del expediente.'); }
-                finally { setDownloading(false); }
-              }}
-              className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <Download className="w-3 h-3" />
-              {downloading ? 'Descargando...' : 'Descargar ZIP'}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid md:grid-cols-2 xl:grid-cols-4 gap-3">
-          <InfoCard icon={Calendar} label="Última actualización" value={formatDate(summary.lastUpdated)} />
-          <InfoCard icon={MapPin} label="Región" value={locationLabel(summary.location)} />
-          <InfoCard icon={MapPin} label="Dirección" value={summary.address || '—'} />
-          <InfoCard
-            icon={CheckCircle}
-            label="Estado"
-            value={project.submissionCount > 0 ? `${project.submissionCount} envío${project.submissionCount !== 1 ? 's' : ''}` : 'Pendiente'}
-          />
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <QuickStat
-            label="documentos"
-            value={`${summary.counts.documentsPresent}/${summary.counts.documentsTotal}`}
-            tone={summary.counts.manualReview ? 'orange' : 'blue'}
-          />
-          <QuickStat
-            label="formularios firmados"
-            value={`${summary.counts.signedFormsPresent}/${summary.counts.signedFormsTotal}`}
-            tone="green"
-          />
-          <QuickStat
-            label="PDFs disponibles"
-            value={`${summary.counts.pdfsAvailable}/${summary.counts.pdfsTotal}`}
-            tone={summary.counts.pdfsAvailable ? 'green' : 'gray'}
-          />
-          <QuickStat
-            label="firmas finales"
-            value={`${summary.counts.finalSignaturesPresent}/${summary.counts.finalSignaturesTotal}`}
-            tone="gray"
-          />
-        </div>
-      </div>
-
-      <div className="p-5 space-y-6 bg-gradient-to-b from-gray-50/60 to-white">
-        {!formData && (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-400">
-            Este proyecto aún no tiene datos guardados.
-          </div>
-        )}
-
-        {formData && (
-          <>
-            <DNIDisplay dni={formData.dni} projectCode={project.code} />
-            <IBIDisplay ibi={formData.ibi} projectCode={project.code} />
-            <ElectricityDisplay bill={formData.electricityBill} projectCode={project.code} />
-            <SignedDocumentsSection project={project} items={summary.signedDocuments} />
-
-            {summary.photoGroups.length > 0 && (
-              <div className="space-y-4">
-                <SectionHeading icon={Camera} label="Fotos del inmueble" />
-                {summary.photoGroups.map((group) => (
-                  <PhotoGallery key={group.key} group={group} projectCode={project.code} />
-                ))}
-              </div>
-            )}
-
-            <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
-            <DownloadGroupsSection groups={summary.downloadGroups} projectCode={project.code} />
-          </>
-        )}
-
-        {project.submissionCount > 0 && project.latestSubmission && (
-          <div className="space-y-2">
-            <SectionHeading icon={CheckCircle} label="Último envío" />
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs space-y-1">
-              <div className="flex gap-2">
-                <span className="text-emerald-600 font-semibold">ID:</span>
-                <span className="font-mono text-emerald-700">{project.latestSubmission.id}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-emerald-600 font-semibold">Fecha:</span>
-                <span className="text-emerald-700">{formatDate(project.latestSubmission.timestamp)}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-emerald-600 font-semibold">Origen:</span>
-                <span className="text-emerald-700 capitalize">{project.latestSubmission.source}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

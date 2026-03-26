@@ -13,6 +13,10 @@ build
 # Railway
 .railway/
 
+# Legacy platform config
+.replit
+replit.md
+
 # Uploads and temporary files
 backend/uploads/
 backend/db.json

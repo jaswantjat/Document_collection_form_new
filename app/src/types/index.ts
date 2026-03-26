@@ -79,6 +79,8 @@ export interface IBIData {
 
 export interface ElectricityBillData {
   pages: DocSlot[];
+  front?: DocSlot;
+  back?: DocSlot;
 }
 
 export type LocationRegion = 'cataluna' | 'madrid' | 'valencia' | 'other';
@@ -91,7 +93,7 @@ export type RenderedDocumentKey =
   | 'spainPoder';
 
 export interface RenderedDocumentAsset {
-  imageDataUrl: string;
+  imageDataUrl?: string;
   generatedAt: string;
   templateVersion: string;
 }

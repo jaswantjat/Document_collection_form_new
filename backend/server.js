@@ -33,6 +33,14 @@ function getOpenRouterApiKey() {
 
 loadEnvFiles();
 
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT !== undefined;
+const DATA_DIR = process.env.DATA_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/data' : __dirname);
+const uploadDir = path.join(DATA_DIR, 'uploads');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(uploadDir, { recursive: true });
+
 // OpenRouter API config — key loaded from environment
 const initialOpenRouterApiKey = getOpenRouterApiKey();
 if (!initialOpenRouterApiKey) {
@@ -46,14 +54,7 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flas
 // Middleware
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));
 app.use(express.json({ limit: '25mb' }));
-app.use(express.static('uploads'));
-
-// Uploads directory
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-// ── File-based persistence ──────────────────────────────────────────────────────
-const DB_FILE = path.join(__dirname, 'db.json');
+app.use('/uploads', express.static(uploadDir));
 
 function loadDB() {
   try {
@@ -76,6 +77,10 @@ function saveDB() {
 }
 
 function getDefaultProjects() {
+  if (isProduction && process.env.SEED_SAMPLE_DATA !== 'true') {
+    return {};
+  }
+
   return {
     'ELT20250001': {
       code: 'ELT20250001',
@@ -477,10 +482,17 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // ── Dashboard auth ─────────────────────────────────────────────────────────────
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'eltex2025'; // override via .env
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || (!isProduction ? 'eltex2025' : null);
 const dashboardSessions = new Set();
 
+if (isProduction && !DASHBOARD_PASSWORD) {
+  console.warn('⚠️  DASHBOARD_PASSWORD not set; dashboard login is disabled until configured.');
+}
+
 app.post('/api/dashboard/login', (req, res) => {
+  if (!DASHBOARD_PASSWORD) {
+    return res.status(503).json({ success: false, message: 'Dashboard login is not configured.' });
+  }
   const { password } = req.body;
   if (!password) return res.status(400).json({ success: false, message: 'Contraseña requerida.' });
   if (password !== DASHBOARD_PASSWORD) return res.status(401).json({ success: false, message: 'Contraseña incorrecta.' });
@@ -1503,7 +1515,6 @@ app.post('/api/generate-image-pdf', async (req, res) => {
 });
 
 // Serve frontend in production, proxy to Vite dev server in development
-const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT !== undefined;
 const distPath = path.join(__dirname, '../app/dist');
 
 if (isProduction) {
@@ -1529,13 +1540,18 @@ app.listen(PORT, () => {
   } else {
     console.log('🔧 Development mode: proxying to Vite on port 5173');
   }
-  console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar)');
-  console.log('Test phones: +34612345678 | +34623456789 | +34655443322');
   const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003'];
-  testCodes.forEach(code => {
-    const p = database.projects[code];
-    if (p?.accessToken) {
-      console.log(`🔗 ${code}: /?code=${code}&token=${p.accessToken}`);
-    }
-  });
+  const availableTestProjects = testCodes
+    .map((code) => database.projects[code])
+    .filter(Boolean);
+
+  if (availableTestProjects.length > 0) {
+    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar)');
+    console.log('Test phones: +34612345678 | +34623456789 | +34655443322');
+    availableTestProjects.forEach((project) => {
+      if (project?.accessToken) {
+        console.log(`🔗 ${project.code}: /?code=${project.code}&token=${project.accessToken}`);
+      }
+    });
+  }
 });
