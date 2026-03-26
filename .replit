@@ -66,3 +66,4 @@ build = ["bash", "-c", "cd app && npm run build"]
 
 [userenv.shared]
 OPENROUTER_API_KEY = "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"
+STIRLING_PDF_API_KEY = "75ac58db-9504-47e6-9d10-11d4ab37df6b"

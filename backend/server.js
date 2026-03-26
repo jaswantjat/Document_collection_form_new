@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { PDFDocument, rgb } = require('pdf-lib');
+const AdmZip = require('adm-zip');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -621,6 +622,107 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
   }
 
   res.json({ success: true, projectCode: project.code, customerName: project.customerName, files });
+});
+
+// ── PDF → Images via Stirling-PDF API ──────────────────────────────────────────
+const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+const STIRLING_PDF_URL = 'https://s-pdf-production-ed78.up.railway.app/api/v1/convert/pdf/img';
+
+function getStirlingApiKey() {
+  const key = process.env.STIRLING_PDF_API_KEY;
+  if (key) return key;
+  loadEnvFiles();
+  return process.env.STIRLING_PDF_API_KEY || null;
+}
+
+app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No se recibió ningún archivo PDF.' });
+    }
+
+    const apiKey = getStirlingApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ success: false, message: 'Servicio de conversión de PDF no configurado.' });
+    }
+
+    // Build multipart request for Stirling-PDF
+    const boundary = `----FormBoundary${Date.now()}`;
+    const parts = [];
+
+    const addField = (name, value) => {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+      );
+    };
+
+    addField('imageFormat', 'png');
+    addField('singleImage', 'false');
+    addField('dpi', '150');
+
+    // File part header
+    const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="${req.file.originalname}"\r\nContent-Type: application/pdf\r\n\r\n`;
+    const fileFooter = `\r\n--${boundary}--\r\n`;
+
+    const bodyParts = Buffer.concat([
+      Buffer.from(parts.join('')),
+      Buffer.from(fileHeader),
+      req.file.buffer,
+      Buffer.from(fileFooter),
+    ]);
+
+    const stirlingRes = await fetch(STIRLING_PDF_URL, {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': apiKey,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: bodyParts,
+    });
+
+    if (!stirlingRes.ok) {
+      const errText = await stirlingRes.text().catch(() => '');
+      console.error(`[pdf-to-images] Stirling-PDF error ${stirlingRes.status}:`, errText.slice(0, 200));
+      return res.status(502).json({ success: false, message: `El servicio de conversión de PDF devolvió un error (${stirlingRes.status}).` });
+    }
+
+    const zipBuffer = Buffer.from(await stirlingRes.arrayBuffer());
+
+    let zip;
+    try {
+      zip = new AdmZip(zipBuffer);
+    } catch (e) {
+      console.error('[pdf-to-images] Failed to parse ZIP response:', e.message);
+      return res.status(502).json({ success: false, message: 'La respuesta del servicio de conversión no era válida.' });
+    }
+
+    const entries = zip.getEntries()
+      .filter(e => !e.isDirectory && /\.(png|jpg|jpeg)$/i.test(e.entryName))
+      .sort((a, b) => a.entryName.localeCompare(b.entryName, undefined, { numeric: true }));
+
+    if (entries.length === 0) {
+      return res.status(502).json({ success: false, message: 'El PDF no generó ninguna imagen. Comprueba que el archivo sea válido.' });
+    }
+
+    const images = entries.map(entry => {
+      const ext = entry.entryName.match(/\.(png|jpg|jpeg)$/i)?.[1]?.toLowerCase() || 'png';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const fileName = entry.entryName.replace(/^.*[\\/]/, '');
+      return {
+        name: fileName,
+        data: entry.getData().toString('base64'),
+        mimeType,
+      };
+    });
+
+    console.log(`[pdf-to-images] Converted "${req.file.originalname}" → ${images.length} image(s)`);
+    res.json({ success: true, images });
+
+  } catch (err) {
+    console.error('[pdf-to-images] Unexpected error:', err);
+    res.status(500).json({ success: false, message: 'Error inesperado al convertir el PDF.' });
+  }
 });
 
 // ── AI Document Extraction ─────────────────────────────────────────────────────

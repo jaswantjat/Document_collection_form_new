@@ -25,6 +25,17 @@ The Vite dev server proxies `/api` requests to the backend at `http://localhost:
 ## Environment Variables
 
 - `OPENROUTER_API_KEY` — Required for AI extraction features (OpenRouter API key for Gemini 2.0 Flash).
+- `STIRLING_PDF_API_KEY` — Required for PDF-to-image conversion (Stirling-PDF hosted API at `s-pdf-production-ed78.up.railway.app`). Sent as `X-API-KEY` header.
+
+## PDF Conversion
+
+PDFs uploaded in the electricity bill section are converted server-side via the Stirling-PDF API:
+1. Frontend POSTs the PDF file to `/api/pdf-to-images` on the backend.
+2. Backend calls Stirling-PDF (`/api/v1/convert/pdf/img`) with `imageFormat=png`, `singleImage=false`, `dpi=150`.
+3. Stirling-PDF returns a ZIP file; the backend extracts the PNG images, sorts them by page order, and returns them as base64 strings.
+4. Frontend converts each base64 string to a `File` object and processes them through the normal validation + AI extraction pipeline.
+
+Error handling covers: API unavailability, password-protected PDFs, empty ZIP, and parse failures — all surface a dismissable error banner to the user.
 
 ## Test Data
 
