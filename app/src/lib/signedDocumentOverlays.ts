@@ -47,7 +47,7 @@ const IVA_ES_FIELDS = {
   codigo_postal: [350, 492, 571, 494],
   localidad: [694, 492, 1237, 494],
   provincia: [315, 554, 571, 556],
-  firma_aprobacion: [860, 1560, 1265, 1782],
+  firma_aprobacion: [860, 1650, 1265, 1870],
   fecha_lugar_en: [232, 1937, 722, 1939],
   fecha_dia_el: [782, 1937, 846, 1939],
   fecha_mes: [931, 1937, 1110, 1939],
@@ -343,7 +343,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawPercentText(ctx, date.day, 54.0, 92.6, ctx.canvas.width * 0.0155);
       drawPercentText(ctx, date.month, 62.0, 92.6, ctx.canvas.width * 0.0155);
       drawPercentText(ctx, date.yearShort, 85.0, 92.6, ctx.canvas.width * 0.0155);
-      await drawPercentSignature(ctx, representation.ivaCertificateSignature, 65.2, 72.3, 24, 11);
+      await drawPercentSignature(ctx, representation.ivaCertificateSignature, 65.2, 77.5, 24, 11);
     });
   }
 

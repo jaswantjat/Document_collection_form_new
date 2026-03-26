@@ -46,7 +46,7 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
   const visibleItems = pendingItems.length > 0 ? pendingItems : allItems;
 
   const submit = async () => {
-    if (submitting || hasBlockingDocumentProcessing) return;
+    if (submitting) return;
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -64,15 +64,17 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
   const submitRef = useRef(submit);
   submitRef.current = submit;
 
-  const hasStartedSubmit = useRef(false);
+  const hasFiredSubmit = useRef(false);
+
   useEffect(() => {
-    if (hasStartedSubmit.current) return;
-    hasStartedSubmit.current = true;
+    if (hasFiredSubmit.current) return;
+    if (hasBlockingDocumentProcessing) return;
+    hasFiredSubmit.current = true;
     const timer = setTimeout(() => {
       submitRef.current();
-    }, 800);
+    }, 600);
     return () => clearTimeout(timer);
-  }, []);
+  }, [hasBlockingDocumentProcessing]);
 
   return (
     <div className="min-h-screen bg-white p-5 pb-10">
@@ -83,9 +85,11 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           <p className="text-gray-400 text-sm mt-1">
             {submitting
               ? 'Enviando tu documentación...'
-              : pendingItems.length > 0
-                ? `${pendingItems.length} elemento${pendingItems.length !== 1 ? 's' : ''} pendiente${pendingItems.length !== 1 ? 's' : ''}`
-                : `${doneCount} de ${allItems.length} elementos completados`}
+              : hasBlockingDocumentProcessing
+                ? 'Procesando documentos...'
+                : pendingItems.length > 0
+                  ? `${pendingItems.length} elemento${pendingItems.length !== 1 ? 's' : ''} pendiente${pendingItems.length !== 1 ? 's' : ''}`
+                  : `${doneCount} de ${allItems.length} elementos completados`}
           </p>
         </div>
 
@@ -110,11 +114,13 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           ))}
         </div>
 
-        {/* Submitting indicator */}
-        {submitting && (
+        {/* Waiting / submitting indicator */}
+        {(submitting || (hasBlockingDocumentProcessing && !submitError)) && (
           <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
             <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
-            <p className="text-sm font-medium text-eltex-blue">Enviando documentación...</p>
+            <p className="text-sm font-medium text-eltex-blue">
+              {submitting ? 'Enviando documentación...' : 'Preparando documentos...'}
+            </p>
           </div>
         )}
 
@@ -134,7 +140,7 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           </div>
         )}
 
-        {!submitting && !submitError && (
+        {!submitting && !submitError && !hasBlockingDocumentProcessing && (
           <p className="text-xs text-center text-gray-400">
             Puedes enviar aunque falten algunos documentos.
           </p>
