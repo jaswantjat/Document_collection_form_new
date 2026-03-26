@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "7Qug7gYczMC3G7UZHs_VU"
+uri = "file://IMPLEMENTATION_PLAN.md"
+type = "text"
+title = "Eltex Digital Onboarding — Implementation Plan"
