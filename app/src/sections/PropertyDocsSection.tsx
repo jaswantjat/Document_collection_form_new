@@ -233,11 +233,14 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         onPhotoChange(createUploadedPhoto(firstPage, preview, check.width ?? 0, check.height ?? 0));
         onExtractionChange({ ...res.extraction, needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false, confirmedByUser: true });
         onProcessingChange(slotKey, { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
-      } catch {
+      } catch (err) {
+        const message = err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña.';
         onProcessingChange(slotKey, {
           status: hadAcceptedDocument ? 'accepted' : 'rejected',
           errorCode: 'temporary-error',
-          errorMessage: 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña.',
+          errorMessage: message,
           pendingPreview: null,
         });
       }
@@ -663,8 +666,11 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
             await processFiles(converted, true);
           }
         }
-      } catch {
-        setPdfError('No se pudo leer el PDF. Comprueba que no esté protegido con contraseña y vuelve a intentarlo.');
+      } catch (err) {
+        const message = err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña y vuelve a intentarlo.';
+        setPdfError(message);
       } finally {
         setPdfExpanding(false);
       }
