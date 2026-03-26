@@ -176,7 +176,9 @@ function FormApp() {
         return (
           <ProvinceSelectionSection
             formData={formData}
+            representationData={formData.representation}
             onLocationSelect={setLocation}
+            onRepresentationChange={(patch) => setRepresentation({ ...formData.representation, ...patch })}
             onBack={() => goTo('property-docs')}
             onContinue={() => goTo('representation')}
           />
