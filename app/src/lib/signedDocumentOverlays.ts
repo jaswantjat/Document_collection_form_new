@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.1';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.2';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -27,7 +27,7 @@ const REPRESENTACIO_FIELDS = {
   empresaMunicipi: [202, 515, 812, 548],
   lloc: [130, 1459, 560, 1496],
   data: [725, 1459, 1100, 1496],
-  signaturaPersonaInteressada: [76, 1552, 575, 1685],
+  signaturaPersonaInteressada: [76, 1488, 575, 1560],
 } as const;
 
 const GENERALITAT_PAGE_SIZE = { width: 1357, height: 1920 };
@@ -47,7 +47,7 @@ const IVA_ES_FIELDS = {
   codigo_postal: [350, 492, 571, 494],
   localidad: [694, 492, 1237, 494],
   provincia: [315, 554, 571, 556],
-  firma_aprobacion: [860, 1650, 1265, 1870],
+  firma_aprobacion: [860, 1650, 1265, 1760],
   fecha_lugar_en: [232, 1937, 722, 1939],
   fecha_dia_el: [782, 1937, 846, 1939],
   fecha_mes: [931, 1937, 1110, 1939],
@@ -68,7 +68,7 @@ const PODER_ES_FIELDS = {
   persona_juridica_representante_legal_municipio: { x: 233, y: 620, stopX: 950 },
   lugar: { x: 139, y: 1719, stopX: 310 },
   fecha: { x: 842, y: 1722, stopX: 1145 },
-  firma_persona_interesada_safe_box: [175, 1810, 355, 1905] as Box,
+  firma_persona_interesada_safe_box: [175, 1737, 600, 1820] as Box,
 } as const;
 
 function getSourceFormData(source: any): FormData {
@@ -343,7 +343,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawPercentText(ctx, date.day, 54.0, 92.6, ctx.canvas.width * 0.0155);
       drawPercentText(ctx, date.month, 62.0, 92.6, ctx.canvas.width * 0.0155);
       drawPercentText(ctx, date.yearShort, 85.0, 92.6, ctx.canvas.width * 0.0155);
-      await drawPercentSignature(ctx, representation.ivaCertificateSignature, 65.2, 77.5, 24, 11);
+      await drawPercentSignature(ctx, representation.ivaCertificateSignature, 65.2, 76.5, 24, 7.5);
     });
   }
 
