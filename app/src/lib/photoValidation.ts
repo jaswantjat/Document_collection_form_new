@@ -5,7 +5,7 @@ const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 // 100 catches truly blurry/unreadable images while accepting normal phone photos
 const BLUR_THRESHOLD = 100;
 
-export async function validatePhoto(file: File): Promise<PhotoValidationResult> {
+export async function validatePhoto(file: File, options?: { skipBlurCheck?: boolean }): Promise<PhotoValidationResult> {
   if (file.size > MAX_SIZE_BYTES) {
     return {
       valid: false,
@@ -31,14 +31,16 @@ export async function validatePhoto(file: File): Promise<PhotoValidationResult> 
       };
     }
 
-    // Blur check — hard reject
-    const blurScore = await measureBlur(file);
-    if (blurScore < BLUR_THRESHOLD) {
-      return {
-        valid: false,
-        error: 'La imagen está desenfocada. Asegúrate de que el texto sea perfectamente legible y vuelve a fotografiar el documento.',
-        sizeBytes: file.size, width, height,
-      };
+    // Blur check — hard reject (skip for PDF-converted images which are always sharp)
+    if (!options?.skipBlurCheck) {
+      const blurScore = await measureBlur(file);
+      if (blurScore < BLUR_THRESHOLD) {
+        return {
+          valid: false,
+          error: 'La imagen está desenfocada. Asegúrate de que el texto sea perfectamente legible y vuelve a fotografiar el documento.',
+          sizeBytes: file.size, width, height,
+        };
+      }
     }
 
     return { valid: true, width, height, sizeBytes: file.size };

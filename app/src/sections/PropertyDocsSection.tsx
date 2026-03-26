@@ -431,20 +431,21 @@ interface ElectricityCardProps {
 function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: ElectricityCardProps) {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [pdfExpanding, setPdfExpanding] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const isBusy = pdfExpanding || pendingItems.some(p => p.status !== 'failed');
   const hasPages = pages.length > 0;
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
-  const processFiles = useCallback(async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[], skipBlurCheck = false) => {
     const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
 
     await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
 
-      const check = await validatePhoto(file);
+      const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
         return;
@@ -483,24 +484,29 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
   const handleFileSelect = useCallback(async (selectedFiles: File[]) => {
     const pdfs = selectedFiles.filter(f => f.type === 'application/pdf');
     const images = selectedFiles.filter(f => f.type !== 'application/pdf');
-    const allImages: File[] = [...images];
+
+    setPdfError(null);
+
+    if (images.length > 0) {
+      await processFiles(images, false);
+    }
 
     if (pdfs.length > 0) {
       setPdfExpanding(true);
       try {
         for (const pdf of pdfs) {
           const converted = await pdfToImageFiles(pdf);
-          allImages.push(...converted);
+          if (converted.length === 0) {
+            setPdfError('El PDF no pudo convertirse. Prueba a exportarlo de nuevo o sube una imagen directamente.');
+          } else {
+            await processFiles(converted, true);
+          }
         }
       } catch {
-        // silently continue with images collected so far
+        setPdfError('No se pudo leer el PDF. Comprueba que no esté protegido con contraseña y vuelve a intentarlo.');
       } finally {
         setPdfExpanding(false);
       }
-    }
-
-    if (allImages.length > 0) {
-      await processFiles(allImages);
     }
   }, [processFiles]);
 
@@ -590,6 +596,20 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
             <p className="text-xs text-blue-400">Esto puede tardar unos segundos</p>
           </div>
           <Loader2 className="w-4 h-4 text-eltex-blue animate-spin shrink-0" />
+        </div>
+      )}
+
+      {/* PDF conversion error */}
+      {pdfError && !pdfExpanding && (
+        <div className="flex items-start gap-3 py-3 px-4 bg-red-50 border border-red-200 rounded-xl">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-700">Error al procesar el PDF</p>
+            <p className="text-xs text-red-500 mt-0.5">{pdfError}</p>
+          </div>
+          <button type="button" onClick={() => setPdfError(null)} className="shrink-0 text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

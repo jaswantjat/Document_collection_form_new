@@ -3,8 +3,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
-const RENDER_SCALE = 2.0;
-const JPEG_QUALITY = 0.92;
+const RENDER_SCALE = 1.5;
+const JPEG_QUALITY = 0.85;
 
 export async function pdfToImageFiles(file: File): Promise<File[]> {
   const buffer = await file.arrayBuffer();
