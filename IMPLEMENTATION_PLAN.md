@@ -1,6 +1,6 @@
 # Eltex Digital Onboarding — Implementation Plan & Technical Reference
 
-> **Last updated:** March 26, 2026  
+> **Last updated:** March 26, 2026 (Session 5 — deep bug audit)  
 > **Status:** Active development  
 > **Stack:** React (Vite) + Node.js (Express) + `db.json` file database
 
@@ -431,6 +431,24 @@ Transforms raw project data into typed dashboard display objects:
 
 ## 9. Completed Work (Changelog)
 
+### March 26, 2026 (Session 5 — Deep Bug Audit)
+
+- **No code changes this session** — full read-only analysis of all key source files
+- **Identified B8/B9:** Public `GET /api/project/:code` exposes full PII + `accessToken` (write token) — IDOR with full read+write impact
+- **Identified B10:** `OPENROUTER_MODEL` env var is ignored — model hardcoded as `gemini-3.1-flash-lite-preview` instead of reading from env
+- **Identified B11:** Spain IVA/Poder `PAGE_SIZE` constants may not match actual template image dimensions — all text overlays may be proportionally misaligned; needs verification
+- **Identified B12:** Cataluña IVA and Generalitat template filenames differ between code and plan — need to verify which is correct
+- **Identified B13:** `handleContinue` in RepresentationSection swallows errors with no user feedback
+- **Identified B14:** Double-click race condition on RepresentationSection continue button (async state guard)
+- **Identified B15:** `/submit` and `/save` accept `formData: null` without validation
+- **Identified B16:** ReviewSection does not validate signature presence before submitting
+- **Identified B17:** `generateProjectCode` has a race condition under concurrent creates
+- **Identified B18:** `saveDB()` concurrent write-corruption risk
+- **Identified B19:** Stale closure in `ProvinceSelectionSection` auto-confirm useEffect
+- **Identified B20:** `getAutoProvince` uses first page's province — wrong-page order causes incorrect region assignment
+- **Identified B21:** `ensureRenderedDocuments` passes `code: 'project'` literal causing cosmetically wrong PDF filenames
+- **Identified L1–L8:** TypeScript `any` prop, duplicate province array entry, always-true `canSubmit`, in-memory sessions, hardcoded Stirling URL, UX flash on phone confirm, location dual source of truth, phone normalizer edge cases
+
 ### March 26, 2026 (Session 4)
 
 - **Fixed auto-submit bug in ReviewSection:** Removed the `useEffect` that auto-fired `submit()` 600ms after landing on the review screen (triggered every time the component mounted). Replaced with an explicit "Enviar documentación" button. Added `onBack` prop with proper routing (→ `province-selection` for `other`, → `representation` for all other locations).
@@ -457,29 +475,55 @@ Transforms raw project data into typed dashboard display objects:
 
 ## 10. Known Bugs & Edge Cases
 
+> Last audit: **2026-03-26 Session 5** — full codebase review covering `server.js`, `App.tsx`, `useFormState.ts`, `RepresentationSection.tsx`, `ReviewSection.tsx`, `ProvinceSelectionSection.tsx`, `signedDocumentOverlays.ts`, `provinceMapping.ts`, `api.ts`.
+
+---
+
 ### Critical
 
 | # | Bug | File | Status |
 |---|-----|------|--------|
-| B1 | `other` location creates dead-end in Representation step — `hasRepresentationDone` returns `false` for `other`; `docs[]` is empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Fixed 2026-03-26** |
-| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — uses `window.open()` which is blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
-| B3 | `buildSignedPdfFactory` — `imageDataUrl` is now always `undefined` (stripped from upload); relies entirely on `renderSignedDocumentOverlay` fallback | `Dashboard.tsx` | Working (fallback works, but adds latency) |
+| B1 | `other` location dead-end in Representation step — `hasRepresentationDone` returns `false`; `docs[]` empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Fixed 2026-03-26** |
+| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — `window.open()` blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
+| B3 | `buildSignedPdfFactory` — `imageDataUrl` always `undefined` (stripped from upload); fallback re-render adds latency | `Dashboard.tsx` | Working (acceptable) |
+| **B8** | **`GET /api/project/:code` is fully public — returns entire project including base64 images, DNI number, NIF, address, and `accessToken`.** Sequential codes (`ELT20260001`, `ELT20260002`) mean any attacker can enumerate all projects and read sensitive customer PII. | `backend/server.js` line 356 | **Open — HIGH** |
+| **B9** | **`accessToken` exposed in public GET response** — since `GET /api/project/:code` returns the full project object (including `project.accessToken`), an attacker who reads any project also gains its write token, enabling them to overwrite formData via `/save` and `/submit`. Combined with B8 this is a full read+write IDOR. | `backend/server.js` line 360 | **Open — HIGH** |
 
 ### Medium
 
 | # | Bug | File | Status |
 |---|-----|------|--------|
-| B4 | Electricity bill pages: no duplicate detection — user can upload the same page multiple times | `PropertyDocsSection.tsx` | **Fixed 2026-03-26** |
-| B5 | Company data change clears ALL signed artifacts — even fixing a typo forces full re-sign | `useFormState.ts` | Known limitation |
-| B6 | `getInitialSection` returns `representation` for `other` province — user is sent to Representation but no docs exist | `App.tsx` | **Fixed 2026-03-26** |
-| B7 | `DocumentTableCell` and `ElectricityTableCell` use `window.open()` for thumbnail preview — same popup blocker issue | `Dashboard.tsx` | **Fixed 2026-03-26** |
+| B4 | Electricity bill duplicate page detection | `PropertyDocsSection.tsx` | **Fixed 2026-03-26** |
+| B5 | Company data change clears all signed artifacts — even a typo forces full re-sign | `useFormState.ts` | Known limitation |
+| B6 | `getInitialSection` returns `representation` for `other` province | `App.tsx` | **Fixed 2026-03-26** |
+| B7 | `window.open()` in dashboard thumbnails | `Dashboard.tsx` | **Fixed 2026-03-26** |
+| **B10** | **`OPENROUTER_MODEL` env var is ignored.** `server.js` line 44 hardcodes `'google/gemini-3.1-flash-lite-preview'` ignoring the env var. The plan says it should be read from `process.env.OPENROUTER_MODEL`. | `backend/server.js` line 44 | **Open** |
+| **B11** | **`IVA_ES_PAGE_SIZE` and `PODER_ES_PAGE_SIZE` use `{width:1448, height:2048}` but the plan shows the actual template images are `1410×2100`.** Since all text/signature coordinates are scaled against `PAGE_SIZE`, a dimension mismatch causes proportionally wrong placement of all overlaid text and signatures. Actual file dimensions need to be verified and constants reconciled. | `signedDocumentOverlays.ts` lines 42, 57 | **Open — verify** |
+| **B12** | **Template filenames in code don't match the file map in this plan:** `cataluna-iva` renders `/certificat-iva-10-cat.png` (code) vs `/verify_iva_es_top.png` (plan); `cataluna-generalitat` renders `/generalitat-declaration.png` (code) vs `/verify_iva_es_bottom_fixed.png` (plan). If these files don't exist on disk the render silently fails (canvas shows blank, no error to user). | `signedDocumentOverlays.ts` lines 349, 365 | **Open — verify** |
+| **B13** | **`handleContinue` in `RepresentationSection` swallows rendering errors.** The `catch` block only logs to console. If `renderSignedDocumentOverlay` throws (e.g. missing template file, canvas memory limit), `setApplying(false)` is called but no user-visible error message appears — the button just stops spinning. | `RepresentationSection.tsx` line 169 | **Open** |
+| **B14** | **Double-click race condition on `handleContinue`.** The `applying` guard is React state (`useState`); two rapid clicks can both pass `if (!sharedSignature \|\| applying)` before the state update from the first click is committed, firing the expensive document render twice and potentially calling `onChange` twice. A `useRef` guard would be atomic. | `RepresentationSection.tsx` line 135 | **Open** |
+| **B15** | **`submitForm` / `/submit` endpoint accepts `formData: null` or malformed data.** The endpoint does `project.formData = req.body.formData` with no schema validation. A client (or attacker with the project token) can submit `{formData: null}` and erase all saved progress. | `backend/server.js` line 448 | **Open** |
+| **B16** | **`ReviewSection` does not validate signatures before submitting.** `ensureRenderedDocuments` can return successfully with no rendered documents (if no signatures exist). A user can reach the review screen (e.g. via direct link to a partially complete project) and submit with zero signatures. No client-side or server-side signature presence check before submission. | `ReviewSection.tsx`, `backend/server.js` | **Open** |
+| **B17** | **`generateProjectCode` race condition.** Two simultaneous `POST /api/project/create` requests could both calculate the same next code before either writes. The second write would silently overwrite the first project. | `backend/server.js` lines 339–346 | **Open (low probability)** |
+| **B18** | **`db.json` concurrent write corruption.** `saveDB()` uses synchronous `fs.writeFileSync`. Two simultaneous save/submit requests that both call `saveDB()` operate on the same in-memory `database` object; the slower one wins and the faster one's changes are lost (last-write-wins). | `backend/server.js` line 70 | **Open (low probability)** |
+| **B19** | **`ProvinceSelectionSection` auto-confirm `useEffect` has a stale closure.** The effect runs only on mount (`[]` deps, suppressed with `eslint-disable`). The `confirmLocation` inside it reads `locationConfirmed`, `showManual`, and `province` from the initial render snapshot. If any of these change in the 350ms window before the timer fires (e.g. user clicks "Cambiar" immediately), the auto-confirm still runs with the stale values and overrides the user's action. | `ProvinceSelectionSection.tsx` lines 50–58 | **Open** |
+| **B20** | **`getAutoProvince` returns the first province found across electricity pages — page order wins.** If page 1 has a wrong/partial province (e.g. AI hallucination) and page 2 has the correct one, page 1 always wins. No priority weighting or merging. | `ProvinceSelectionSection.tsx` lines 29–35 | **Open** |
+| **B21** | **`ensureRenderedDocuments` passes `code: 'project'` as a literal string** — `getSignedDocumentDefinitions({ formData: source, code: 'project' })` causes generated filenames to be `project_iva-cat.pdf` instead of the real project code. Functional rendering works but ZIP download manifest entries would have wrong filenames if this path were used for downloads. | `signedDocumentOverlays.ts` line 153 | **Open (cosmetic)** |
 
-### Low / Security
+### Low / Technical Debt
 
-| # | Issue | Details |
-|---|-------|---------|
-| S1 | IDOR risk: project codes are sequential (`ELT20250001`, `ELT20250002`) — anyone who guesses a code can read the full formData (DNI, name, address) via public `GET /api/project/:code` | Consider adding a read token or making the endpoint require dashboard auth |
-| S2 | `dashboard_token` stored in `sessionStorage` — cleared on tab close, but not on browser close if session survives |
+| # | Issue | File | Details |
+|---|-------|------|---------|
+| S1 | IDOR on `GET /api/project/:code` | `backend/server.js` | **Now upgraded to B8/B9 (Critical)** |
+| S2 | `dashboard_token` in `sessionStorage` survives browser restart | `DashboardLogin.tsx` | Low risk — cleared on tab close |
+| **L1** | **`formData` prop on `RepresentationSection` typed as `any`** | `RepresentationSection.tsx` line 13 | Loses all TypeScript safety; runtime shape errors would be invisible to the compiler |
+| **L2** | **`valenciaProvinces` array has duplicate `'valencia'` entry** | `provinceMapping.ts` line 50–51 | `'valencia'` appears twice. Harmless but messy; indicates copy/paste error |
+| **L3** | **`canSubmit()` always returns `true`** — all `FormItem` entries have `required: false`, so the required-items filter is always empty. The prop is passed to `ReviewSection` but has no effect. | `useFormState.ts` lines 159–192 | No blocking validation at submit time |
+| **L4** | **`dashboardSessions` Set is in-memory** — lost on server restart, forcing all admins to re-login | `backend/server.js` line 471 | Known limitation of file-based architecture |
+| **L5** | **`Stirling PDF` service URL is hardcoded** — `STIRLING_PDF_URL` is a string literal; should be an env var for configurability | `backend/server.js` line 722 | Low risk |
+| **L6** | **`handlePhoneConfirmed` always navigates to `property-docs` before smart routing corrects it** — `goTo('property-docs')` fires immediately; the `useEffect([project])` that calls `getInitialSection` fires one render later, causing a brief flash of the property-docs step before jumping to the correct section for a returning customer | `App.tsx` lines 126–132 | Minor UX flash |
+| **L7** | **`formData.location` and `formData.representation.location` are a dual source of truth** — `normalizeFormData` syncs them on load but intermediate mutations may diverge. Pattern `formData.location ?? formData.representation.location` is used in 5+ places | `App.tsx`, `useFormState.ts`, `signedDocumentOverlays.ts` | Technical debt |
+| **L8** | **`normalizePhone` regex edge cases** — `replace(/^(?=\d{9}$)/, '+34')` handles 9-digit strings but won't normalize 10-digit landlines with area codes (`912345678` = 9 digits starting with 9 but that's a mobile pattern in Spain; `91 234 5678` = landline that totals 9 digits after strip) | `backend/server.js` line 178 | Low risk for current use case |
 
 ---
 
@@ -570,6 +614,218 @@ Flow per upload:
 
 Wire into `ProjectTableRow` actions column as "Subir docs" button.
 Also update `DNIDisplay`, `IBIDisplay`, `ElectricityDisplay` to show even when no data exists (removing early `if (!asset) return null`).
+
+---
+
+### High Priority (New — Session 5 Audit)
+
+#### FIX — B8/B9: IDOR — Public project endpoint exposes PII + write token
+
+**File:** `backend/server.js` lines 356–361
+
+**Problem:** `GET /api/project/:code` is completely unauthenticated. The response includes the full project object — customer DNI image (base64), NIF, address, signatures, and critically `project.accessToken` (the write token for `/save` and `/submit`). Project codes are sequential (`ELT20260001`) so an attacker can enumerate all projects.
+
+**Fix (recommended — Option B, minimal change):**
+
+Strip `accessToken` from the public GET response so it is never sent to unauthenticated callers. The frontend already captures the token from `project.accessToken` on load (App.tsx line 86–88) — instead, the token should only be returned after a phone-based lookup (which proves the caller knows the phone number) or after dashboard login.
+
+```js
+// backend/server.js — GET /api/project/:code
+app.get('/api/project/:code', (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND' });
+  // Strip write token from public response — never expose it unauthenticated
+  const { accessToken: _omit, ...safeProject } = project;
+  res.json({ success: true, project: safeProject });
+});
+```
+
+The phone lookup endpoint (`/api/lookup/phone/:phone`) already proves identity and can be the only place that returns the full project with `accessToken`. The frontend then stores it in state via `handlePhoneConfirmed`.
+
+**Also** update `fetchProject` in `api.ts` to only send the token if it is already known (it currently does this correctly at line 16). No frontend change required for this fix.
+
+---
+
+#### FIX — B10: `OPENROUTER_MODEL` env var ignored
+
+**File:** `backend/server.js` line 44
+
+**Problem:** The constant is hardcoded:
+```js
+const OPENROUTER_MODEL = 'google/gemini-3.1-flash-lite-preview';
+```
+The env var `OPENROUTER_MODEL` documented in §13 is never read.
+
+**Fix:**
+```js
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
+```
+
+---
+
+#### FIX — B11: Verify `IVA_ES_PAGE_SIZE` and `PODER_ES_PAGE_SIZE` template dimensions
+
+**File:** `signedDocumentOverlays.ts` lines 42–57
+
+**Problem:** Both constants use `{ width: 1448, height: 2048 }` but this plan's §6 file map states the Spain IVA and Poder templates are `1410×2100`. All text/signature boxes are scaled proportionally to these reference dimensions. If they are wrong, all overlaid data is misaligned.
+
+**Action:** Run the following check and update the constants if needed:
+```bash
+python3 -c "
+from PIL import Image
+for f in ['app/public/certificat-iva-10-es.png', 'app/public/poder-representacio.png']:
+  img = Image.open(f)
+  print(f, img.size)
+"
+```
+Or check via Node:
+```js
+const { createCanvas, loadImage } = require('canvas');
+loadImage('app/public/certificat-iva-10-es.png').then(img => console.log(img.width, img.height));
+```
+
+Also reconcile the §6 File Map table with actual image dimensions and update `SIGNED_DOCUMENT_TEMPLATE_VERSION` after any fix.
+
+---
+
+#### FIX — B12: Verify Cataluña template filenames on disk
+
+**File:** `signedDocumentOverlays.ts` lines 349, 365
+
+**Problem:** The renderer loads:
+- `cataluna-iva` → `/certificat-iva-10-cat.png`
+- `cataluna-generalitat` → `/generalitat-declaration.png`
+
+But this plan's §6 file map lists the Cataluña IVA template as `/verify_iva_es_top.png` and the Generalitat as `/verify_iva_es_bottom_fixed.png`. One of these is wrong (either the code was updated and the plan wasn't, or the opposite).
+
+**Action:** Check `app/public/` directory for actual filenames. If the plan is outdated, update §6 in this document. If the code is outdated, update the `renderTemplate(...)` calls.
+
+---
+
+#### FIX — B13: User-visible error on `handleContinue` render failure
+
+**File:** `RepresentationSection.tsx` lines 135–174
+
+**Problem:** If `renderSignedDocumentOverlay` throws, the catch silently logs to console and the button stops spinning with no feedback. User must guess what happened.
+
+**Fix:** Add state for error message and display it:
+```tsx
+const [applyError, setApplyError] = useState<string | null>(null);
+
+// In handleContinue catch:
+} catch (err) {
+  console.error('Failed to apply signatures:', err);
+  setApplyError('Error al aplicar la firma. Inténtalo de nuevo.');
+} finally {
+  setApplying(false);
+}
+
+// In render, below the nav buttons:
+{applyError && (
+  <p className="text-sm text-red-600 text-center">{applyError}</p>
+)}
+```
+Clear `applyError` on the next signature pad change.
+
+---
+
+#### FIX — B14: Double-click guard for `handleContinue`
+
+**File:** `RepresentationSection.tsx` line 135
+
+**Problem:** `applying` state guard is async; two rapid clicks can both pass before the first state update commits.
+
+**Fix:** Replace the state guard with a ref:
+```tsx
+const applyingRef = useRef(false);
+
+const handleContinue = async () => {
+  if (!sharedSignature || applyingRef.current) return;
+  applyingRef.current = true;
+  setApplying(true);
+  try {
+    // ... existing logic
+  } finally {
+    applyingRef.current = false;
+    setApplying(false);
+  }
+};
+```
+
+---
+
+#### FIX — B15: Validate `formData` shape on `/submit` endpoint
+
+**File:** `backend/server.js` line 438–460
+
+**Problem:** `project.formData = req.body.formData` with no validation. A `formData: null` payload erases all data.
+
+**Fix:** Add null/type guard:
+```js
+app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
+  const { formData, source } = req.body;
+  if (!formData || typeof formData !== 'object') {
+    return res.status(400).json({ success: false, message: 'formData inválido.' });
+  }
+  // ... rest of handler
+});
+```
+Apply the same guard to `/save`.
+
+---
+
+#### FIX — B19: Stale closure in `ProvinceSelectionSection` auto-confirm `useEffect`
+
+**File:** `ProvinceSelectionSection.tsx` lines 50–58
+
+**Problem:** The effect has empty deps (`[]`) via `eslint-disable`. The 350ms timer's callback reads `locationConfirmed`, `showManual`, and the `confirmLocation` closure from mount — if the user clicks "Cambiar" in under 350ms, the auto-confirm fires anyway.
+
+**Fix:** Either (a) use a ref for the cancellation flag that the "Cambiar" button sets, or (b) include the actual reactive values in deps and guard correctly:
+```tsx
+useEffect(() => {
+  if (locationConfirmed || showManual || !province) return;
+  const locInfo = getLocationInfo(province);
+  if (locInfo.id === 'other') return;
+  const timer = setTimeout(() => {
+    // Re-read current state from refs to avoid stale closure
+    if (!locationConfirmedRef.current && !showManualRef.current) {
+      confirmLocation(locInfo.id);
+    }
+  }, 350);
+  return () => clearTimeout(timer);
+}, [province]); // Only depend on province
+```
+
+---
+
+### Medium Priority (New — Session 5 Audit)
+
+#### FIX — B16: Add signature presence check before review submission
+
+**File:** `ReviewSection.tsx`, `backend/server.js`
+
+**Problem:** A user who has no signed documents (or navigates directly to review) can submit with zero signatures. No validation catches this.
+
+**Options:**
+- **Client-side:** In `ReviewSection`, before calling `submit()`, check `hasRepresentationDone(formData, location)` and warn or block if false.
+- **Server-side:** On `/submit`, check that `formData.representation` contains at least one signature for the project's location.
+
+Recommended: add a client-side warning (not a hard block — in line with current "you can submit with missing docs" philosophy) and a server-side log.
+
+---
+
+#### FIX — L2: Remove duplicate `'valencia'` entry in `provinceMapping.ts`
+
+**File:** `provinceMapping.ts` line 50–51
+
+```ts
+// Before:
+const valenciaProvinces = [
+  'valencia',
+  'valencia', // Valencia/València   ← remove duplicate
+  'alicante',
+  ...
+```
 
 ---
 
