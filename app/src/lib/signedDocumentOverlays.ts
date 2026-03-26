@@ -249,9 +249,6 @@ async function drawSignature(
   const y = scaledY(box[1], pageSize.height, ctx.canvas.height);
   const width = scaledX(box[2] - box[0], pageSize.width, ctx.canvas.width);
   const height = scaledY(box[3] - box[1], pageSize.height, ctx.canvas.height);
-  // Clear template sign-here indicator before drawing the actual signature
-  ctx.fillStyle = 'white';
-  ctx.fillRect(x, y, width, height);
   ctx.drawImage(img, x, y, width, height);
 }
 
@@ -269,9 +266,6 @@ async function drawPercentSignature(
   const y = (topPct / 100) * ctx.canvas.height;
   const width = (widthPct / 100) * ctx.canvas.width;
   const height = (heightPct / 100) * ctx.canvas.height;
-  // Clear template sign-here indicator before drawing the actual signature
-  ctx.fillStyle = 'white';
-  ctx.fillRect(x, y, width, height);
   ctx.drawImage(img, x, y, width, height);
 }
 

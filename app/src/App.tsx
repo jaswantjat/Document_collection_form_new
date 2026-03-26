@@ -189,9 +189,7 @@ function FormApp() {
             location={formData.location ?? formData.representation.location ?? null}
             onChange={setRepresentation}
             onBack={() => goTo('province-selection')}
-            onContinue={() => {
-              if (validateRepresentation()) goTo('review');
-            }}
+            onContinue={() => goTo('review')}
           />
         );
 
