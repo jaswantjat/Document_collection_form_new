@@ -612,7 +612,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
   }, [processFiles]);
 
   return (
-    <div className="rounded-2xl border-2 border-eltex-blue/20 bg-blue-50/20 p-5 space-y-4">
+    <div className={`rounded-2xl border-2 transition-colors ${hasPages ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
       <div className="flex items-center gap-2">
         <Zap className="w-5 h-5 text-eltex-blue" />
         <p className="font-semibold text-gray-900">Factura de luz</p>
@@ -667,7 +667,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
 
       {/* Pending items (parallel) */}
       {pendingItems.map(item => (
-        <div key={item.id} className="rounded-xl border border-dashed border-eltex-blue/30 bg-white p-3 space-y-2">
+        <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
           {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
           {item.status === 'failed' ? (
             <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
