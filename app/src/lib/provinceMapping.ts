@@ -47,7 +47,6 @@ export function mapProvinceToLocation(province: string | null | undefined): Loca
   // Valencia provinces (with alternative names)
   const valenciaProvinces = [
     'valencia',
-    'valencia', // Valencia/València
     'alicante',
     'alacant', // Catalan name
     'castellon',

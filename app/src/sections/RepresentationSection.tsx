@@ -97,6 +97,8 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const [sharedSignature, setSharedSignature] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const applyingRef = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   const previewFormData = useMemo<FormData>(() => {
@@ -133,8 +135,10 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   };
 
   const handleContinue = async () => {
-    if (!sharedSignature || applying) return;
+    if (!sharedSignature || applyingRef.current) return;
+    applyingRef.current = true;
     setApplying(true);
+    setApplyError(null);
 
     try {
       const isCataluna = location === 'cataluna';
@@ -168,7 +172,9 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       onContinue();
     } catch (err) {
       console.error('Failed to apply signatures:', err);
+      setApplyError('Error al aplicar la firma. Inténtalo de nuevo.');
     } finally {
+      applyingRef.current = false;
       setApplying(false);
     }
   };
@@ -277,7 +283,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             Firma para aprobar todos los documentos <span className="text-eltex-error">*</span>
           </p>
           <SignaturePad
-            onSignature={setSharedSignature}
+            onSignature={(sig) => { setSharedSignature(sig); setApplyError(null); }}
             existingSignature={sharedSignature}
           />
         </div>
@@ -305,6 +311,10 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             )}
           </button>
         </div>
+
+        {applyError && (
+          <p className="text-sm text-red-600 text-center">{applyError}</p>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 # Eltex Digital Onboarding — Implementation Plan & Technical Reference
 
-> **Last updated:** March 26, 2026 (Session 5 — deep bug audit)  
+> **Last updated:** March 26, 2026 (Session 6 — bug fixes)  
 > **Status:** Active development  
 > **Stack:** React (Vite) + Node.js (Express) + `db.json` file database
 
@@ -431,6 +431,19 @@ Transforms raw project data into typed dashboard display objects:
 
 ## 9. Completed Work (Changelog)
 
+### March 26, 2026 (Session 6 — Bug Fixes)
+
+- **Fixed B8/B9 — IDOR: Strip `accessToken` from public GET response:** `GET /api/project/:code` now returns `{ ...project }` without `accessToken`. The write token is only returned by `/api/lookup/phone/:phone` (requires knowing the phone number) and from the URL `?token=TOKEN` on magic links. Frontend `App.tsx` was already correctly using the URL token; no frontend change required.
+- **Fixed B10 — `OPENROUTER_MODEL` env var ignored:** `server.js` line 44 changed to `process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001'`.
+- **Verified B11 — Spain IVA/Poder PAGE_SIZE:** Actual file dimensions measured: `certificat-iva-10-es.png` = 2482×3509, `poder-representacio.png` = 1358×1920. Both have the same ~0.707 aspect ratio as `PAGE_SIZE {1448, 2048}`. Since `renderTemplate` draws the canvas at actual image dimensions and field coords are scaled proportionally via `scaledX/scaledY`, placement is proportionally correct. **Not a bug — no fix needed.**
+- **Verified B12 — Cataluña template filenames:** Files on disk are `certificat-iva-10-cat.png` and `generalitat-declaration.png`, matching the code. Plan §6 file map was outdated. Updated §6 to reflect correct filenames.
+- **Fixed B13 — User-visible error on render failure:** `RepresentationSection.handleContinue` catch block now sets `applyError` state and displays `"Error al aplicar la firma. Inténtalo de nuevo."` below nav buttons. Error is cleared on next signature change.
+- **Fixed B14 — Double-click race condition:** Added `applyingRef = useRef(false)` guard; `handleContinue` now checks and sets `applyingRef.current` atomically before any async work. State `applying` is kept for UI updates only.
+- **Fixed B15 — `formData: null` accepted by `/save` and `/submit`:** Both endpoints now validate `if (!formData || typeof formData !== 'object')` and return `400` with `"formData inválido."`. Also cleaned up stale `req.body.formData` references — both handlers now use destructured `const { formData } = req.body`.
+- **Fixed B16 — No signature validation before submission:** `ReviewSection` now calls `hasRequiredSignatures(formData)` on render. If the user has a known location (not `other`) but has not signed, an amber warning banner is shown. Submission is still allowed (non-blocking, consistent with existing philosophy).
+- **Fixed B19 — Stale closure in `ProvinceSelectionSection` auto-confirm:** Added `locationConfirmedRef` and `showManualRef` refs kept in sync with state. `useEffect` now checks refs instead of stale closure values; timer callback re-checks refs before auto-confirming. `useEffect` deps changed from `[]` to `[province]`. "Cambiar" and "Seleccionar provincia" buttons now also update `showManualRef.current`.
+- **Fixed L2 — Duplicate `'valencia'` in `valenciaProvinces` array:** Removed the duplicate entry from `provinceMapping.ts`.
+
 ### March 26, 2026 (Session 5 — Deep Bug Audit)
 
 - **No code changes this session** — full read-only analysis of all key source files
@@ -486,8 +499,8 @@ Transforms raw project data into typed dashboard display objects:
 | B1 | `other` location dead-end in Representation step — `hasRepresentationDone` returns `false`; `docs[]` empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Fixed 2026-03-26** |
 | B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — `window.open()` blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
 | B3 | `buildSignedPdfFactory` — `imageDataUrl` always `undefined` (stripped from upload); fallback re-render adds latency | `Dashboard.tsx` | Working (acceptable) |
-| **B8** | **`GET /api/project/:code` is fully public — returns entire project including base64 images, DNI number, NIF, address, and `accessToken`.** Sequential codes (`ELT20260001`, `ELT20260002`) mean any attacker can enumerate all projects and read sensitive customer PII. | `backend/server.js` line 356 | **Open — HIGH** |
-| **B9** | **`accessToken` exposed in public GET response** — since `GET /api/project/:code` returns the full project object (including `project.accessToken`), an attacker who reads any project also gains its write token, enabling them to overwrite formData via `/save` and `/submit`. Combined with B8 this is a full read+write IDOR. | `backend/server.js` line 360 | **Open — HIGH** |
+| **B8** | **`GET /api/project/:code` is fully public — returns entire project including base64 images, DNI number, NIF, address, and `accessToken`.** Sequential codes (`ELT20260001`, `ELT20260002`) mean any attacker can enumerate all projects and read sensitive customer PII. | `backend/server.js` line 356 | **Fixed 2026-03-26** |
+| **B9** | **`accessToken` exposed in public GET response** — since `GET /api/project/:code` returns the full project object (including `project.accessToken`), an attacker who reads any project also gains its write token, enabling them to overwrite formData via `/save` and `/submit`. Combined with B8 this is a full read+write IDOR. | `backend/server.js` line 360 | **Fixed 2026-03-26** |
 
 ### Medium
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle, Circle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft } from 'lucide-react';
-import type { FormData, ProjectData } from '@/types';
+import type { FormData, ProjectData, LocationRegion } from '@/types';
 import { submitForm } from '@/services/api';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
 
@@ -16,9 +16,20 @@ interface Props {
   onBack?: () => void;
 }
 
+function hasRequiredSignatures(formData: FormData): boolean {
+  const location = (formData.location ?? (formData.representation as any)?.location ?? null) as LocationRegion | null;
+  if (!location || location === 'other') return true;
+  const rep = formData.representation;
+  if (location === 'cataluna') {
+    return !!(rep?.ivaCertificateSignature && rep?.generalitatSignature && rep?.representacioSignature);
+  }
+  return !!(rep?.ivaCertificateEsSignature && rep?.poderRepresentacioSignature);
+}
+
 export function ReviewSection({ project, formData, source, hasBlockingDocumentProcessing, onEdit, onSuccess, projectToken, onBack }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
   const ebPages = electricityBill.pages ?? [];
@@ -149,7 +160,14 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           </div>
         )}
 
-        {!submitting && !submitError && !hasBlockingDocumentProcessing && (
+        {!submitting && !submitError && !hasBlockingDocumentProcessing && !signaturesOk && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Aún no has firmado los documentos de representación. Puedes enviar igualmente, pero se recomienda completar la firma.</span>
+          </div>
+        )}
+
+        {!submitting && !submitError && !hasBlockingDocumentProcessing && signaturesOk && (
           <p className="text-xs text-center text-gray-400">
             Puedes enviar aunque falten algunos documentos.
           </p>

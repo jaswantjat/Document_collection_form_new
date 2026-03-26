@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle, MapPin, Building2, User } from 'lucide-react';
 import type { FormData, RepresentationData } from '@/types';
 import { getLocationInfo, AVAILABLE_LOCATIONS, type LocationRegion } from '@/lib/provinceMapping';
@@ -24,6 +24,8 @@ export function ProvinceSelectionSection({
   const [locationConfirmed, setLocationConfirmed] = useState(!!existingLocation);
   const [showManual, setShowManual] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationRegion | null>(existingLocation);
+  const locationConfirmedRef = useRef(!!existingLocation);
+  const showManualRef = useRef(false);
 
   // Province comes only from electricity bill — never from DNI or IBI
   function getAutoProvince(): string | null {
@@ -43,19 +45,26 @@ export function ProvinceSelectionSection({
     onLocationSelect(loc);
     setSelectedLocation(loc);
     setLocationConfirmed(true);
+    locationConfirmedRef.current = true;
     setShowManual(false);
+    showManualRef.current = false;
   };
 
   // Auto-confirm when province is detected and maps to a known region
   useEffect(() => {
-    if (locationConfirmed || showManual || !province) return;
+    if (locationConfirmedRef.current || showManualRef.current || !province) return;
     const locInfo = getLocationInfo(province);
     if (locInfo.id === 'other') return;
     // Brief delay so user sees "Detected" before it auto-confirms
-    const timer = setTimeout(() => confirmLocation(locInfo.id), 350);
+    const timer = setTimeout(() => {
+      // Re-check refs to avoid stale closure overriding user action
+      if (!locationConfirmedRef.current && !showManualRef.current) {
+        confirmLocation(locInfo.id);
+      }
+    }, 350);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [province]);
 
   const canContinue =
     locationConfirmed &&
@@ -96,7 +105,7 @@ export function ProvinceSelectionSection({
               </button>
               <button
                 type="button"
-                onClick={() => setShowManual(true)}
+                onClick={() => { setShowManual(true); showManualRef.current = true; }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 px-4 rounded-xl transition-colors"
               >
                 Cambiar
@@ -115,7 +124,7 @@ export function ProvinceSelectionSection({
             </div>
             <button
               type="button"
-              onClick={() => setShowManual(true)}
+              onClick={() => { setShowManual(true); showManualRef.current = true; }}
               className="w-full bg-eltex-blue hover:bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors"
             >
               Seleccionar provincia

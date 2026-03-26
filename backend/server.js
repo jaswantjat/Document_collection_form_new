@@ -41,7 +41,7 @@ if (!initialOpenRouterApiKey) {
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
 }
-const OPENROUTER_MODEL = 'google/gemini-3.1-flash-lite-preview';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
 
 // Middleware
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));
@@ -357,7 +357,9 @@ app.get('/api/project/:code', (req, res) => {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
-  res.json({ success: true, project });
+  // Strip write token from public response — never expose it unauthenticated
+  const { accessToken: _omit, ...safeProject } = project;
+  res.json({ success: true, project: safeProject });
 });
 
 // Look up project by phone number
@@ -420,14 +422,18 @@ function checkCataloniaPDFs(formData) {
 // Auto-save progress (requires access token)
 app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
   const project = req.project;
-  project.formData = req.body.formData;
+  const { formData } = req.body;
+  if (!formData || typeof formData !== 'object') {
+    return res.status(400).json({ success: false, message: 'formData inválido.' });
+  }
+  project.formData = formData;
   project.lastActivity = new Date().toISOString();
   // Update customer name from DNI extraction if available
-  const dniName = req.body.formData?.dni?.front?.extraction?.extractedData?.fullName;
+  const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
   if (dniName) project.customerName = dniName;
 
   // Check if Catalonia PDFs can be generated
-  const pdfStatus = checkCataloniaPDFs(req.body.formData);
+  const pdfStatus = checkCataloniaPDFs(formData);
   project.cataloniaPDFs = pdfStatus;
 
   saveDB();
@@ -437,22 +443,26 @@ app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
 // Final submit (requires access token)
 app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   const project = req.project;
+  const { formData, source } = req.body;
+  if (!formData || typeof formData !== 'object') {
+    return res.status(400).json({ success: false, message: 'formData inválido.' });
+  }
   const submission = {
     id: uuidv4(),
     timestamp: new Date().toISOString(),
-    source: req.body.source || 'customer',
+    source: source || 'customer',
     ipAddress: req.ip,
-    formData: req.body.formData
+    formData
   };
   project.submissions.push(submission);
-  project.formData = req.body.formData;
+  project.formData = formData;
   project.lastActivity = new Date().toISOString();
   // Update customer name from DNI extraction if available
-  const dniName = req.body.formData?.dni?.front?.extraction?.extractedData?.fullName;
+  const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
   if (dniName) project.customerName = dniName;
 
   // Check if Catalonia PDFs can be generated
-  const pdfStatus = checkCataloniaPDFs(req.body.formData);
+  const pdfStatus = checkCataloniaPDFs(formData);
   project.cataloniaPDFs = pdfStatus;
 
   saveDB();
