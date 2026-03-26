@@ -126,8 +126,7 @@ function FormApp() {
     setProject(foundProject);
     const token = foundProject.accessToken || null;
     setProjectToken(token);
-    const tokenParam = token ? `&token=${token}` : '';
-    navigate(`/?code=${foundProject.code}${tokenParam}`, { replace: true });
+    navigate(`/?code=${foundProject.code}`, { replace: true });
     goTo('property-docs');
   };
 

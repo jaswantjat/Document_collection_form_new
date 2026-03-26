@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.2';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.3';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -27,7 +27,7 @@ const REPRESENTACIO_FIELDS = {
   empresaMunicipi: [202, 515, 812, 548],
   lloc: [130, 1459, 560, 1496],
   data: [725, 1459, 1100, 1496],
-  signaturaPersonaInteressada: [76, 1488, 575, 1560],
+  signaturaPersonaInteressada: [76, 1552, 575, 1685],
 } as const;
 
 const GENERALITAT_PAGE_SIZE = { width: 1357, height: 1920 };
@@ -101,7 +101,7 @@ function getSnapshot(source: any) {
     dniNumber: dniFront.dniNumber || eb0.nifTitular || eb1.nifTitular || ibi.titularNif || '',
     address: dniBack.address || eb0.direccionSuministro || eb1.direccionSuministro || ibi.direccion || '',
     municipality: dniBack.municipality || eb0.municipio || eb1.municipio || ibi.municipio || '',
-    province: dniBack.province || dniBack.provincia || eb0.provincia || eb1.provincia || ibi.provincia || '',
+    province: eb0.provincia || eb1.provincia || '',
     postalCode: eb0.codigoPostal || eb1.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }
@@ -164,7 +164,6 @@ export async function ensureRenderedDocuments(source: FormData): Promise<FormDat
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;

@@ -25,13 +25,13 @@ export function ProvinceSelectionSection({
   const [showManual, setShowManual] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationRegion | null>(existingLocation);
 
-  // Province comes only from electricity bill or IBI — never from DNI
+  // Province comes only from electricity bill — never from DNI or IBI
   function getAutoProvince(): string | null {
     for (const page of formData.electricityBill?.pages ?? []) {
       const prov = page.extraction?.extractedData?.provincia;
       if (prov) return prov;
     }
-    return formData.ibi?.extraction?.extractedData?.provincia ?? null;
+    return null;
   }
   const province = getAutoProvince();
   const locationInfo = province ? getLocationInfo(province) : null;

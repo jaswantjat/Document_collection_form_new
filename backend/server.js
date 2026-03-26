@@ -226,8 +226,8 @@ function getProjectSnapshot(formData) {
     dniNumber: dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
     address: eb.direccionSuministro || dniBack.address || ibi.direccion || '',
     municipality: eb.municipio || dniBack.municipality || ibi.municipio || '',
-    // Province: electricity bill first, then IBI only (DNI province excluded by design)
-    province: eb.provincia || ibi.provincia || '',
+    // Province: electricity bill only (IBI and DNI excluded by design)
+    province: eb.provincia || '',
     postalCode: eb.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }
@@ -352,9 +352,12 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Backend is running', timestamp: new Date().toISOString() });
 });
 
-// Get project by code (requires access token if project has one)
-app.get('/api/project/:code', requireProjectToken, (req, res) => {
-  res.json({ success: true, project: req.project });
+// Get project by code (public read — code alone is sufficient as identifier)
+app.get('/api/project/:code', (req, res) => {
+  const code = req.params.code;
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  res.json({ success: true, project });
 });
 
 // Look up project by phone number
