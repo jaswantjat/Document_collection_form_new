@@ -57,3 +57,8 @@ externalPort = 80
 deploymentTarget = "vm"
 run = ["bash", "-c", "cd backend && node server.js"]
 build = ["bash", "-c", "cd app && npm run build"]
+
+[userenv]
+
+[userenv.shared]
+OPENROUTER_API_KEY = "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"
