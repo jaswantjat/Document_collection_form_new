@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText } from 'lucide-react';
+import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type {
   IBIData,
   ElectricityBillData,
@@ -230,24 +231,23 @@ interface DNICardProps {
 function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange, onBusyChange }: DNICardProps) {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
+  const hasFront = !!front.photo;
+  const hasBack = !!back.photo;
+  const hasAny = hasFront || hasBack;
+  const isBusy = pendingItems.some(p => p.status !== 'failed');
+
+  useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
+
   const processFiles = useCallback(async (files: File[]) => {
     const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
-    setPendingItems(prev => {
-      const next = [...prev, ...newItems];
-      onBusyChange(next.some(p => p.status !== 'failed'));
-      return next;
-    });
+    setPendingItems(prev => [...prev, ...newItems]);
 
     await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
 
       const check = await validatePhoto(file);
       if (!check.valid) {
-        setPendingItems(prev => {
-          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
         return;
       }
 
@@ -259,11 +259,7 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
         const res = await extractDocument(base64, 'dniAuto');
 
         if (!res.success || !res.extraction) {
-          setPendingItems(prev => {
-            const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar el DNI.' } : p);
-            onBusyChange(next.some(p => p.status !== 'failed'));
-            return next;
-          });
+          setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar el DNI.' } : p));
           return;
         }
 
@@ -282,33 +278,16 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
           onFrontExtractionChange(extraction);
         }
 
-        setPendingItems(prev => {
-          const next = prev.filter(p => p.id !== id);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.filter(p => p.id !== id));
       } catch {
-        setPendingItems(prev => {
-          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p));
       }
     }));
-  }, [onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange, onBusyChange]);
+  }, [onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange]);
 
   const dismissError = (id: string) => {
-    setPendingItems(prev => {
-      const next = prev.filter(p => p.id !== id);
-      onBusyChange(next.some(p => p.status !== 'failed'));
-      return next;
-    });
+    setPendingItems(prev => prev.filter(p => p.id !== id));
   };
-
-  const hasFront = !!front.photo;
-  const hasBack = !!back.photo;
-  const hasAny = hasFront || hasBack;
-  const isBusy = pendingItems.some(p => p.status !== 'failed');
 
   return (
     <div className={`rounded-2xl border-2 transition-colors ${hasAny ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
@@ -451,25 +430,23 @@ interface ElectricityCardProps {
 
 function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: ElectricityCardProps) {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [pdfExpanding, setPdfExpanding] = useState(false);
+
+  const isBusy = pdfExpanding || pendingItems.some(p => p.status !== 'failed');
+  const hasPages = pages.length > 0;
+
+  useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
   const processFiles = useCallback(async (files: File[]) => {
     const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
-    setPendingItems(prev => {
-      const next = [...prev, ...newItems];
-      onBusyChange(next.some(p => p.status !== 'failed'));
-      return next;
-    });
+    setPendingItems(prev => [...prev, ...newItems]);
 
     await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
 
       const check = await validatePhoto(file);
       if (!check.valid) {
-        setPendingItems(prev => {
-          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
         return;
       }
 
@@ -481,11 +458,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         const res = await extractDocument(base64, 'electricity');
 
         if (!res.success || !res.extraction) {
-          setPendingItems(prev => {
-            const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar la factura.' } : p);
-            onBusyChange(next.some(p => p.status !== 'failed'));
-            return next;
-          });
+          setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar la factura.' } : p));
           return;
         }
 
@@ -496,32 +469,40 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
           confirmedByUser: true,
         };
         onAddPage(photo, extraction);
-
-        setPendingItems(prev => {
-          const next = prev.filter(p => p.id !== id);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.filter(p => p.id !== id));
       } catch {
-        setPendingItems(prev => {
-          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p);
-          onBusyChange(next.some(p => p.status !== 'failed'));
-          return next;
-        });
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p));
       }
     }));
-  }, [onAddPage, onBusyChange]);
+  }, [onAddPage]);
 
   const dismissError = (id: string) => {
-    setPendingItems(prev => {
-      const next = prev.filter(p => p.id !== id);
-      onBusyChange(next.some(p => p.status !== 'failed'));
-      return next;
-    });
+    setPendingItems(prev => prev.filter(p => p.id !== id));
   };
 
-  const isBusy = pendingItems.some(p => p.status !== 'failed');
-  const hasPages = pages.length > 0;
+  const handleFileSelect = useCallback(async (selectedFiles: File[]) => {
+    const pdfs = selectedFiles.filter(f => f.type === 'application/pdf');
+    const images = selectedFiles.filter(f => f.type !== 'application/pdf');
+    const allImages: File[] = [...images];
+
+    if (pdfs.length > 0) {
+      setPdfExpanding(true);
+      try {
+        for (const pdf of pdfs) {
+          const converted = await pdfToImageFiles(pdf);
+          allImages.push(...converted);
+        }
+      } catch {
+        // silently continue with images collected so far
+      } finally {
+        setPdfExpanding(false);
+      }
+    }
+
+    if (allImages.length > 0) {
+      await processFiles(allImages);
+    }
+  }, [processFiles]);
 
   return (
     <div className="rounded-2xl border-2 border-eltex-blue/20 bg-blue-50/20 p-5 space-y-4">
@@ -536,7 +517,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
       </div>
 
       <p className="text-xs text-gray-500">
-        Sube todas las páginas de tu factura de luz — puedes seleccionar varias imágenes a la vez.
+        Sube las páginas de tu factura de luz como imágenes o en PDF — puedes seleccionar varios archivos a la vez.
       </p>
 
       {/* Uploaded pages grid */}
@@ -600,7 +581,19 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         </div>
       ))}
 
-      {/* Add images button */}
+      {/* PDF expanding indicator */}
+      {pdfExpanding && (
+        <div className="flex items-center gap-3 py-3 px-4 bg-blue-50 border border-eltex-blue/20 rounded-xl">
+          <FileText className="w-5 h-5 text-eltex-blue shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-eltex-blue">Convirtiendo PDF en páginas...</p>
+            <p className="text-xs text-blue-400">Esto puede tardar unos segundos</p>
+          </div>
+          <Loader2 className="w-4 h-4 text-eltex-blue animate-spin shrink-0" />
+        </div>
+      )}
+
+      {/* Add images/PDF button */}
       {!isBusy && (
         <label className={`flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
           hasPages
@@ -609,17 +602,17 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         }`}>
           <input
             type="file"
-            accept="image/jpeg,image/png"
+            accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
             onChange={e => {
               const files = Array.from(e.target.files || []);
               e.target.value = '';
-              if (files.length) processFiles(files);
+              if (files.length) handleFileSelect(files);
             }}
           />
           <Plus className="w-5 h-5" />
-          <span className="text-sm font-medium">{hasPages ? 'Añadir más páginas' : 'Añadir imágenes'}</span>
+          <span className="text-sm font-medium">{hasPages ? 'Añadir más páginas o PDF' : 'Añadir imágenes o PDF'}</span>
         </label>
       )}
     </div>
