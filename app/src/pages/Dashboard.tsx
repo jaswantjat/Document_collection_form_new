@@ -105,13 +105,20 @@ function downloadDataUrlAsset(asset: DashboardAssetItem, projectCode: string) {
 }
 
 function openDataUrlInNewTab(dataUrl: string) {
-  const previewWindow = window.open('', '_blank', 'noopener,noreferrer');
-  if (!previewWindow) {
+  try {
+    const [header, base64] = dataUrl.split(',');
+    const mimeMatch = header.match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    if (w) setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
     window.open(dataUrl, '_blank', 'noopener,noreferrer');
-    return;
   }
-
-  previewWindow.location.href = dataUrl;
 }
 
 async function viewPDFInNewTab(pdfFactory: () => Promise<Blob>) {
