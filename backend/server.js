@@ -583,6 +583,44 @@ app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
   res.send('\uFEFF' + csv); // BOM for Excel
 });
 
+// ── Admin formdata update (dashboard auth) ────────────────────────────────────
+function deepMerge(target, source) {
+  if (!source || typeof source !== 'object') return source ?? target;
+  if (!target || typeof target !== 'object') return source;
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key]; // arrays and primitives replace
+    }
+  }
+  return result;
+}
+
+app.put('/api/project/:code/admin-formdata', requireDashboardAuth, (req, res) => {
+  const { code } = req.params;
+  const { formDataPatch } = req.body;
+
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ success: false, message: 'Proyecto no encontrado.' });
+  if (!formDataPatch || typeof formDataPatch !== 'object') {
+    return res.status(400).json({ success: false, message: 'formDataPatch requerido.' });
+  }
+
+  project.formData = deepMerge(project.formData || {}, formDataPatch);
+  project.lastActivity = new Date().toISOString();
+
+  const dniName = project.formData?.dni?.front?.extraction?.extractedData?.fullName;
+  if (dniName) project.customerName = dniName;
+
+  const pdfStatus = checkCataloniaPDFs(project.formData);
+  project.cataloniaPDFs = pdfStatus;
+
+  saveDB();
+  res.json({ success: true, formData: project.formData });
+});
+
 // ── Download all project files as a ZIP ───────────────────────────────────────
 app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
   const project = database.projects[req.params.code];
