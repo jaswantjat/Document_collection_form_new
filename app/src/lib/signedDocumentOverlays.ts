@@ -150,12 +150,27 @@ export async function createRenderedDocumentAsset(source: any, kind: SignedDocum
 }
 
 export async function ensureRenderedDocuments(source: FormData): Promise<FormData> {
-  let nextFormData = source;
   const definitions = getSignedDocumentDefinitions({ formData: source, code: 'project' }).filter((item) => item.present);
 
-  for (const item of definitions) {
-    const asset = await createRenderedDocumentAsset(nextFormData, item.key);
-    nextFormData = setStoredRenderedDocument(nextFormData, item.key, asset);
+  // Identify which documents need rendering (missing or outdated template version)
+  const toRender = definitions.filter((item) => {
+    const stored = getStoredRenderedDocument(source, item.key);
+    return !stored || stored.templateVersion !== SIGNED_DOCUMENT_TEMPLATE_VERSION;
+  });
+
+  if (toRender.length === 0) return source;
+
+  // Render all missing/outdated documents in parallel
+  const rendered = await Promise.all(
+    toRender.map(async (item) => ({
+      key: item.key,
+      asset: await createRenderedDocumentAsset(source, item.key),
+    }))
+  );
+
+  let nextFormData = source;
+  for (const { key, asset } of rendered) {
+    nextFormData = setStoredRenderedDocument(nextFormData, key, asset);
   }
 
   return nextFormData;
@@ -278,7 +293,7 @@ async function renderTemplate(templateSrc: string, draw: (ctx: CanvasRenderingCo
 
   ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
   await draw(ctx);
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 function getCurrentCatalanDate() {

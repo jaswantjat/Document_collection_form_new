@@ -219,8 +219,10 @@ export const useFormState = (projectCode: string | null, productType: ProductTyp
     if (!projectCode) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const cleanData = JSON.parse(JSON.stringify(formData, (_key, value) => {
+      const cleanData = JSON.parse(JSON.stringify(formData, (key, value) => {
         if (value instanceof File) return undefined;
+        // Strip large rendered document images — dashboard re-renders on demand
+        if (key === 'imageDataUrl' && typeof value === 'string' && value.startsWith('data:image/')) return undefined;
         return value;
       }));
       saveProgress(projectCode, cleanData, projectToken).catch(() => {});

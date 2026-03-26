@@ -51,7 +51,10 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
     setSubmitError('');
     try {
       const renderedFormData = await ensureRenderedDocuments(formData);
-      const res = await submitForm(project.code, renderedFormData, source, projectToken);
+      // Strip rendered document images from the payload to reduce upload size.
+      // The dashboard can re-render them on demand from the stored signature data.
+      const submitPayload = stripRenderedImages(renderedFormData);
+      const res = await submitForm(project.code, submitPayload, source, projectToken);
       if (res.success) onSuccess();
       else setSubmitError('Error al enviar. Inténtalo de nuevo.');
     } catch {
@@ -60,6 +63,22 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
       setSubmitting(false);
     }
   };
+
+  function stripRenderedImages(fd: FormData): FormData {
+    const docs = fd.representation?.renderedDocuments;
+    if (!docs) return fd;
+    const stripped: Record<string, object> = {};
+    for (const [key, val] of Object.entries(docs)) {
+      if (val && typeof val === 'object') {
+        const { imageDataUrl: _omit, ...meta } = val as { imageDataUrl?: string; [k: string]: unknown };
+        stripped[key] = meta;
+      }
+    }
+    return {
+      ...fd,
+      representation: { ...fd.representation, renderedDocuments: stripped as typeof docs },
+    };
+  }
 
   const submitRef = useRef(submit);
   submitRef.current = submit;
