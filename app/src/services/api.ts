@@ -112,6 +112,26 @@ export async function extractDocument(
   return res.json();
 }
 
+export async function extractDocumentBatch(
+  imagesBase64: string[],
+  documentType: 'electricity' | 'ibi'
+): Promise<{
+  success: boolean;
+  extraction?: any;
+  needsManualReview?: boolean;
+  isWrongDocument?: boolean;
+  isUnreadable?: boolean;
+  reason?: string;
+  message?: string;
+}> {
+  const res = await fetch(`${API_BASE}/extract-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imagesBase64, documentType }),
+  });
+  return res.json();
+}
+
 export async function generateImagePDF(imageDataUrl: string, filename?: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}/generate-image-pdf`, {
     method: 'POST',

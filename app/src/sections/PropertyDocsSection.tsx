@@ -12,8 +12,8 @@ import type {
   DocumentSlotKey,
   DocumentProcessingState,
 } from '@/types';
-import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64 } from '@/lib/photoValidation';
-import { extractDocument } from '@/services/api';
+import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI } from '@/lib/photoValidation';
+import { extractDocument, extractDocumentBatch } from '@/services/api';
 
 interface Props {
   dni: DNIData;
@@ -88,11 +88,8 @@ function genId() {
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
 function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtractionChange, onProcessingChange }: DocCardProps) {
-  const process = useCallback(async (file: File) => {
-    const hadAcceptedDocument = !!data.photo;
-    onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
-
-    const check = await validatePhoto(file);
+  const processImageFile = useCallback(async (file: File, hadAcceptedDocument: boolean) => {
+    const check = await validatePhoto(file, { skipBlurCheck: false });
     if (!check.valid) {
       onProcessingChange(slotKey, {
         status: hadAcceptedDocument ? 'accepted' : 'rejected',
@@ -112,7 +109,8 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
     });
 
     try {
-      const base64 = await fileToBase64(file);
+      const raw = await fileToBase64(file);
+      const base64 = await compressImageForAI(raw);
       const res = await extractDocument(base64, slotKey as 'ibi');
 
       if (!res.success || !res.extraction) {
@@ -138,10 +136,43 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         status: hadAcceptedDocument ? 'accepted' : 'rejected',
         errorCode: 'temporary-error',
         errorMessage: 'Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.',
-        pendingPreview: hadAcceptedDocument ? null : preview,
+        pendingPreview: null,
       });
     }
-  }, [data.photo, onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
+  }, [onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
+
+  const process = useCallback(async (file: File) => {
+    const hadAcceptedDocument = !!data.photo;
+    onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
+
+    if (file.type === 'application/pdf') {
+      // Convert PDF → images, use first page
+      onProcessingChange(slotKey, { status: 'extracting', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
+      try {
+        const pages = await pdfToImageFiles(file);
+        if (pages.length === 0) {
+          onProcessingChange(slotKey, {
+            status: hadAcceptedDocument ? 'accepted' : 'rejected',
+            errorCode: 'validation',
+            errorMessage: 'El PDF no tiene páginas legibles. Prueba a exportarlo de nuevo.',
+            pendingPreview: null,
+          });
+          return;
+        }
+        await processImageFile(pages[0], hadAcceptedDocument);
+      } catch {
+        onProcessingChange(slotKey, {
+          status: hadAcceptedDocument ? 'accepted' : 'rejected',
+          errorCode: 'temporary-error',
+          errorMessage: 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña.',
+          pendingPreview: null,
+        });
+      }
+      return;
+    }
+
+    await processImageFile(file, hadAcceptedDocument);
+  }, [data.photo, processImageFile, onProcessingChange, slotKey]);
 
   const reset = useCallback(() => {
     onPhotoChange(null);
@@ -163,9 +194,9 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
 
       {!accepted && !isBusy && (
         <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
-          <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
+          <input type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
           <Camera className="w-7 h-7 text-gray-300" />
-          <span className="text-sm font-medium text-gray-500">Toca para añadir foto</span>
+          <span className="text-sm font-medium text-gray-500">Foto o PDF</span>
           <span className="text-xs text-gray-400 text-center px-4">{hint}</span>
         </label>
       )}
@@ -204,8 +235,8 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
           </div>
           <div className="flex gap-2">
             <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
-              <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
-              <Camera className="w-3.5 h-3.5" /> Sustituir foto
+              <input type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
+              <Camera className="w-3.5 h-3.5" /> Sustituir
             </label>
             <button type="button" onClick={reset} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center">
               <RotateCcw className="w-3.5 h-3.5" /> Quitar
@@ -255,7 +286,8 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
 
       try {
-        const base64 = await fileToBase64(file);
+        const raw = await fileToBase64(file);
+        const base64 = await compressImageForAI(raw);
         const res = await extractDocument(base64, 'dniAuto');
 
         if (!res.success || !res.extraction) {
@@ -442,39 +474,56 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
     const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
 
+    // Step 1: validate + get previews + compress all files in parallel
+    type ValidFile = { file: File; id: string; preview: string; base64: string; width?: number; height?: number };
+    const validFiles: ValidFile[] = [];
+
     await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
-
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
         return;
       }
-
       const preview = await fileToPreview(file);
+      const raw = await fileToBase64(file);
+      const base64 = await compressImageForAI(raw);
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
+      validFiles.push({ file, id, preview, base64, width: check.width, height: check.height });
+    }));
 
-      try {
-        const base64 = await fileToBase64(file);
-        const res = await extractDocument(base64, 'electricity');
+    if (validFiles.length === 0) return;
 
-        if (!res.success || !res.extraction) {
-          setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar la factura.' } : p));
-          return;
-        }
+    // Step 2: send ALL valid images in a single AI call
+    try {
+      const res = await extractDocumentBatch(validFiles.map(f => f.base64), 'electricity');
 
-        const photo = createUploadedPhoto(file, preview, check.width, check.height);
-        const extraction: AIExtraction = {
-          ...res.extraction,
-          needsManualReview: res.needsManualReview ?? false,
-          confirmedByUser: true,
-        };
+      if (!res.success || !res.extraction) {
+        const errMsg = res.message || 'No se pudo procesar la factura.';
+        setPendingItems(prev => prev.map(p =>
+          validFiles.find(f => f.id === p.id) ? { ...p, status: 'failed' as const, error: errMsg } : p
+        ));
+        return;
+      }
+
+      const extraction: AIExtraction = {
+        ...res.extraction,
+        needsManualReview: res.needsManualReview ?? false,
+        confirmedByUser: true,
+      };
+
+      // Add each page (all share the merged extraction)
+      for (const { file, id, preview, width, height } of validFiles) {
+        const photo = createUploadedPhoto(file, preview, width, height);
         onAddPage(photo, extraction);
         setPendingItems(prev => prev.filter(p => p.id !== id));
-      } catch {
-        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p));
       }
-    }));
+    } catch {
+      const errMsg = 'Error de conexión. Inténtalo de nuevo.';
+      setPendingItems(prev => prev.map(p =>
+        validFiles.find(f => f.id === p.id) ? { ...p, status: 'failed' as const, error: errMsg } : p
+      ));
+    }
   }, [onAddPage]);
 
   const dismissError = (id: string) => {

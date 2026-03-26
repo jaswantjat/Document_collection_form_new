@@ -951,6 +951,123 @@ app.post('/api/extract', async (req, res) => {
   }
 });
 
+// ── Batch extraction (multiple images → single AI call) ───────────────────────────────
+app.post('/api/extract-batch', async (req, res) => {
+  const { imagesBase64, documentType } = req.body;
+  if (!Array.isArray(imagesBase64) || imagesBase64.length === 0 || !documentType) {
+    return res.status(400).json({ success: false, message: 'Faltan imagesBase64 o documentType.' });
+  }
+
+  const prompt = PROMPTS[documentType];
+  if (!prompt) return res.status(400).json({ success: false, message: `Tipo de documento no soportado: ${documentType}` });
+
+  const openRouterApiKey = getOpenRouterApiKey();
+  if (!openRouterApiKey) {
+    return res.status(503).json({ success: false, needsManualReview: true, reason: 'temporary-error', message: 'Servicio de extracción no configurado. Contacta al administrador.' });
+  }
+
+  const imageCount = imagesBase64.length;
+  const batchNote = imageCount > 1
+    ? `\n\nIMPORTANT: You are receiving ${imageCount} images — they are ALL pages of the SAME document. Extract and MERGE all data found across ALL pages into a single JSON response. Fields found on any page must be included in the merged result.`
+    : '';
+
+  const imageContent = imagesBase64.map(img => ({
+    type: 'image_url',
+    image_url: { url: img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}` }
+  }));
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openRouterApiKey}` },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt + batchNote },
+            ...imageContent
+          ]
+        }],
+        max_tokens: 1000,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[extract-batch] OpenRouter error:', response.status, errText.slice(0, 200));
+      let userMessage = 'No se pudo analizar automáticamente.';
+      if (response.status === 401) userMessage = 'API key de OpenRouter inválida o no configurada.';
+      else if (response.status === 402) userMessage = 'Créditos de OpenRouter agotados.';
+      else if (response.status === 429) userMessage = 'Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.';
+      return res.json({ success: false, needsManualReview: true, reason: 'temporary-error', message: userMessage });
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    console.log(`[extract-batch:${documentType}] AI response (${imageCount} img):`, content.slice(0, 300));
+
+    let extraction;
+    try {
+      const m = content.match(/\{[\s\S]*\}/);
+      extraction = m ? JSON.parse(m[0]) : null;
+    } catch (e) {
+      console.error('[extract-batch] JSON parse error:', e.message);
+      extraction = null;
+    }
+
+    if (!extraction) return res.json({ success: false, isUnreadable: true, reason: 'unreadable', message: 'No se pudo analizar las imágenes. Asegúrate de que los documentos estén bien iluminados y enfocados.' });
+
+    if (extraction.isReadable === false) {
+      return res.json({ success: false, isUnreadable: true, reason: 'unreadable', message: 'Las imágenes no son lo suficientemente claras. Asegúrate de buena iluminación, sin reflejos, y texto perfectamente enfocado.' });
+    }
+
+    if (!extraction.isCorrectDocument) {
+      return res.json({ success: false, isWrongDocument: true, reason: 'wrong-document', message: `Documento incorrecto. Por favor sube ${documentType === 'electricity' ? 'la factura de electricidad' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'el documento correcto'}.` });
+    }
+
+    if (extraction.extractedData && typeof extraction.extractedData === 'object') {
+      for (const [key, value] of Object.entries(extraction.extractedData)) {
+        if (typeof value === 'string') {
+          extraction.extractedData[key] = value.replace(/\s+/g, ' ').trim() || null;
+        }
+      }
+    }
+
+    if (documentType === 'electricity' && extraction.extractedData?.cups) {
+      const cups = String(extraction.extractedData.cups).replace(/\s+/g, '').toUpperCase();
+      extraction.extractedData.cups = cups;
+      if (!cups.startsWith('ES') || cups.length < 20 || cups.length > 22)
+        extraction.extractedData.cupsWarning = 'El CUPS no tiene el formato esperado.';
+    }
+
+    if (documentType === 'ibi' && extraction.extractedData?.referenciaCatastral) {
+      const rc = String(extraction.extractedData.referenciaCatastral).replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      extraction.extractedData.referenciaCatastral = rc || null;
+      if (rc && rc.length !== 20)
+        extraction.extractedData.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+    }
+
+    if (documentType === 'ibi' && extraction.extractedData?.direccion) {
+      const sitMatch = String(extraction.extractedData.direccion).match(/\bSIT(?:UACION)?[:\s-]*([^()]+)/i);
+      if (sitMatch?.[1]) extraction.extractedData.direccion = sitMatch[1].trim();
+    }
+
+    res.json({
+      success: true,
+      extraction: {
+        ...extraction,
+        needsManualReview: extraction.confidence < 0.75,
+      },
+      needsManualReview: extraction.confidence < 0.75,
+    });
+  } catch (err) {
+    console.error('[extract-batch] Unexpected error:', err);
+    res.json({ success: false, needsManualReview: true, reason: 'temporary-error', message: 'Error interno. Inténtalo de nuevo en unos segundos.' });
+  }
+});
+
 // ── PDF Generation ───────────────────────────────────────────────────────────────────
 
 // Coordinates from RepresentationSection.tsx

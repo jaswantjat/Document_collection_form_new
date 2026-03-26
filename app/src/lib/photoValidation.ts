@@ -126,3 +126,27 @@ export function fileToBase64(file: File): Promise<string> {
 export function fileToPreview(file: File): Promise<string> {
   return fileToBase64(file);
 }
+
+// Compress and resize an image to max 1600px (longest side), JPEG quality 0.82
+// This dramatically reduces payload size for large phone photos before sending to AI
+export function compressImageForAI(dataUrl: string, maxPx = 1600, quality = 0.82): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { naturalWidth: w, naturalHeight: h } = img;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round((h / w) * maxPx); w = maxPx; }
+        else { w = Math.round((w / h) * maxPx); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(dataUrl); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
