@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test Render</title></head>
+<body style="background:#888;padding:20px;">
+<canvas id="c" style="max-width:100%;border:1px solid #ccc;"></canvas>
+<script>
+const PAGE = { width: 1357, height: 1920 };
+const FIELDS = {
+  nom: [146, 255, 977, 292],
+  dni: [982, 255, 1295, 292],
+  checkboxTitular: [147, 327, 172, 353],
+  checkboxRepresentant: [459, 327, 484, 353],
+  signatura: [147, 1389, 1295, 1492],
+};
+
+function scaledX(x, rw, aw) { return (x / rw) * aw; }
+function scaledY(y, rh, ah) { return (y / rh) * ah; }
+
+function drawRect(ctx, box, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  const x = scaledX(box[0], PAGE.width, ctx.canvas.width);
+  const y = scaledY(box[1], PAGE.height, ctx.canvas.height);
+  const w = scaledX(box[2] - box[0], PAGE.width, ctx.canvas.width);
+  const h = scaledY(box[3] - box[1], PAGE.height, ctx.canvas.height);
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawBoxText(ctx, text, box, sizePct, align = 'left') {
+  if (!text) return;
+  const x = scaledX(box[0], PAGE.width, ctx.canvas.width);
+  const y = scaledY(box[1], PAGE.height, ctx.canvas.height);
+  const fontSize = ctx.canvas.width * (sizePct / 100);
+  ctx.font = `600 ${fontSize}px Helvetica, Arial, sans-serif`;
+  ctx.fillStyle = '#1e3a8a';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = align;
+  const drawX = align === 'center' ? x + scaledX(box[2] - box[0], PAGE.width, ctx.canvas.width) / 2 : x;
+  ctx.fillText(text, drawX, y);
+}
+
+const img = new Image();
+img.onload = () => {
+  const canvas = document.getElementById('c');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  // Draw text
+  drawBoxText(ctx, 'GARCÍA LÓPEZ MARÍA', FIELDS.nom, 1.7);
+  drawBoxText(ctx, '12345678A', FIELDS.dni, 1.7);
+  drawBoxText(ctx, 'X', FIELDS.checkboxTitular, 1.7, 'center');
+
+  // Draw field boundaries in red for debugging
+  drawRect(ctx, FIELDS.nom, 'red');
+  drawRect(ctx, FIELDS.dni, 'red');
+  drawRect(ctx, FIELDS.checkboxTitular, 'lime');
+  drawRect(ctx, FIELDS.checkboxRepresentant, 'lime');
+  drawRect(ctx, FIELDS.signatura, 'blue');
+
+  document.body.appendChild(document.createElement('p')).textContent = 
+    `Canvas: ${canvas.width}x${canvas.height}`;
+};
+img.src = '/generalitat-declaration.png';
+</script>
+</body>
+</html>
