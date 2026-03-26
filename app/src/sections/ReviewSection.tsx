@@ -69,8 +69,9 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
   useEffect(() => {
     if (hasFiredSubmit.current) return;
     if (hasBlockingDocumentProcessing) return;
-    hasFiredSubmit.current = true;
     const timer = setTimeout(() => {
+      if (hasFiredSubmit.current) return;
+      hasFiredSubmit.current = true;
       submitRef.current();
     }, 600);
     return () => clearTimeout(timer);
