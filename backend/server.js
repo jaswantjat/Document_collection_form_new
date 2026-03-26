@@ -11,6 +11,7 @@ const AdmZip = require('adm-zip');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
+const LEGACY_COMPAT_PORT = Number(process.env.LEGACY_COMPAT_PORT) || 3001;
 
 const ENV_PATHS = [
   path.join(__dirname, '.env'),
@@ -1555,3 +1556,12 @@ app.listen(PORT, () => {
     });
   }
 });
+
+if (isProduction && PORT !== LEGACY_COMPAT_PORT) {
+  const compatServer = app.listen(LEGACY_COMPAT_PORT, () => {
+    console.log(`✅ Legacy compatibility listener active on http://localhost:${LEGACY_COMPAT_PORT}`);
+  });
+  compatServer.on('error', (error) => {
+    console.warn(`⚠️  Failed to bind legacy compatibility port ${LEGACY_COMPAT_PORT}: ${error.message}`);
+  });
+}
