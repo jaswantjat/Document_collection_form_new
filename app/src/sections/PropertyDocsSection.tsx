@@ -77,6 +77,7 @@ const ELECTRICITY_FIELDS = [
 
 interface PendingItem {
   id: string;
+  file: File;
   preview: string | null;
   status: 'validating' | 'extracting' | 'failed';
   error?: string;
@@ -195,7 +196,7 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
     onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
 
     if (file.type === 'application/pdf') {
-      // Convert PDF → images, use first page
+      // Convert all PDF pages → images, then send them all to AI together
       onProcessingChange(slotKey, { status: 'extracting', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
       try {
         const pages = await pdfToImageFiles(file);
@@ -208,7 +209,30 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
           });
           return;
         }
-        await processImageFile(pages[0], hadAcceptedDocument);
+        // Use first page as the stored preview/photo; send all pages to AI
+        const firstPage = pages[0];
+        const preview = await fileToPreview(firstPage);
+        onProcessingChange(slotKey, { status: 'extracting', errorCode: undefined, errorMessage: undefined, pendingPreview: preview });
+        const allBase64 = await Promise.all(
+          pages.slice(0, 5).map(async (p) => {
+            const raw = await fileToBase64(p);
+            return compressImageForAI(raw);
+          })
+        );
+        const res = await extractDocument(pages.length > 1 ? allBase64 : allBase64[0], slotKey as 'ibi');
+        if (!res.success || !res.extraction) {
+          onProcessingChange(slotKey, {
+            status: hadAcceptedDocument ? 'accepted' : 'rejected',
+            errorCode: res.reason || (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error'),
+            errorMessage: res.message || 'No se pudo procesar el documento.',
+            pendingPreview: hadAcceptedDocument ? null : preview,
+          });
+          return;
+        }
+        const check = await validatePhoto(firstPage, { skipBlurCheck: true });
+        onPhotoChange(createUploadedPhoto(firstPage, preview, check.width ?? 0, check.height ?? 0));
+        onExtractionChange({ ...res.extraction, needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false, confirmedByUser: true });
+        onProcessingChange(slotKey, { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
       } catch {
         onProcessingChange(slotKey, {
           status: hadAcceptedDocument ? 'accepted' : 'rejected',
@@ -221,7 +245,7 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
     }
 
     await processImageFile(file, hadAcceptedDocument);
-  }, [data.photo, processImageFile, onProcessingChange, slotKey]);
+  }, [data.photo, processImageFile, onPhotoChange, onExtractionChange, onProcessingChange, slotKey]);
 
   const reset = useCallback(() => {
     onPhotoChange(null);
@@ -232,7 +256,10 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
   const extractedData = data.extraction?.extractedData || {};
   const accepted = !!data.photo;
   const isBusy = processing.status === 'validating' || processing.status === 'extracting';
-  const showError = !!processing.errorMessage && (!isBusy || accepted);
+  // Only show red error when there is NO accepted doc (fresh failure, not a replacement failure)
+  const showError = !!processing.errorMessage && !isBusy && !accepted;
+  // Show amber note inside accepted card when a replacement attempt failed
+  const showReplacementNote = !!processing.errorMessage && !isBusy && accepted;
 
   return (
     <div className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
@@ -270,6 +297,12 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
       {accepted && (
         <div className="space-y-3">
           {data.photo?.preview && <img src={data.photo.preview} alt={title} className="w-full h-28 object-cover rounded-xl opacity-80" />}
+          {showReplacementNote && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700">El nuevo documento no pudo procesarse — se mantiene el anterior. Inténtalo de nuevo si quieres sustituirlo.</p>
+            </div>
+          )}
           <div className="space-y-1.5">
             {IBI_FIELDS.map(({ key, label }) => {
               const value = data.extraction?.manualCorrections?.[key] ?? extractedData[key];
@@ -319,16 +352,18 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
   const processFiles = useCallback(async (files: File[]) => {
-    const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
+    const newItems: PendingItem[] = files.map(file => ({ id: genId(), file, preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
 
-    await Promise.all(files.map(async (file, i) => {
+    // Process sequentially so duplicate-side detection is accurate
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const id = newItems[i].id;
 
       const check = await validatePhoto(file);
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
-        return;
+        continue;
       }
 
       const preview = await fileToPreview(file);
@@ -341,7 +376,7 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
 
         if (!res.success || !res.extraction) {
           setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar el DNI.' } : p));
-          return;
+          continue;
         }
 
         const photo = createUploadedPhoto(file, preview, check.width, check.height);
@@ -352,9 +387,25 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
         };
 
         if (res.side === 'back') {
+          // Check if back slot is already filled (duplicate-side detection)
+          if (back.photo) {
+            setPendingItems(prev => prev.map(p => p.id === id ? {
+              ...p, status: 'failed' as const,
+              error: 'El sistema detectó que esta imagen también es la cara trasera. Sube la cara frontal del DNI (el lado con la foto y el número).'
+            } : p));
+            return;
+          }
           onBackPhotoChange(photo);
           onBackExtractionChange(extraction);
         } else {
+          // Check if front slot is already filled (duplicate-side detection)
+          if (front.photo) {
+            setPendingItems(prev => prev.map(p => p.id === id ? {
+              ...p, status: 'failed' as const,
+              error: 'El sistema detectó que esta imagen también es la cara frontal. Sube la cara trasera del DNI (el lado con la dirección).'
+            } : p));
+            return;
+          }
           onFrontPhotoChange(photo);
           onFrontExtractionChange(extraction);
         }
@@ -363,8 +414,8 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
       } catch {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p));
       }
-    }));
-  }, [onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange]);
+    }
+  }, [front.photo, back.photo, onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange]);
 
   const dismissError = (id: string) => {
     setPendingItems(prev => prev.filter(p => p.id !== id));
@@ -461,11 +512,20 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
         <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
           {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-16 object-cover rounded-lg opacity-70" />}
           {item.status === 'failed' ? (
-            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 flex-1">{item.error}</p>
-              <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
-                <X className="w-3.5 h-3.5" />
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 flex-1">{item.error}</p>
+                <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => { dismissError(item.id); processFiles([item.file]); }}
+                className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+              >
+                Reintentar
               </button>
             </div>
           ) : (
@@ -520,7 +580,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
   const processFiles = useCallback(async (files: File[], skipBlurCheck = false) => {
-    const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
+    const newItems: PendingItem[] = files.map(file => ({ id: genId(), file, preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
 
     // Step 1: validate + get previews + compress all files in parallel
@@ -670,11 +730,20 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
           {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
           {item.status === 'failed' ? (
-            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 flex-1">{item.error}</p>
-              <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
-                <X className="w-3.5 h-3.5" />
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 flex-1">{item.error}</p>
+                <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => { dismissError(item.id); processFiles([item.file]); }}
+                className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+              >
+                Reintentar
               </button>
             </div>
           ) : (

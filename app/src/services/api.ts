@@ -92,7 +92,7 @@ export async function submitForm(
 }
 
 export async function extractDocument(
-  imageBase64: string,
+  imageBase64: string | string[],
   documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto'
 ): Promise<{
   success: boolean;
@@ -104,10 +104,13 @@ export async function extractDocument(
   reason?: 'unreadable' | 'wrong-document' | 'wrong-side' | 'temporary-error';
   message?: string;
 }> {
+  const body = Array.isArray(imageBase64)
+    ? { imagesBase64: imageBase64, documentType }
+    : { imageBase64, documentType };
   const res = await fetch(`${API_BASE}/extract`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, documentType }),
+    body: JSON.stringify(body),
   });
   return res.json();
 }

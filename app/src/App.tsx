@@ -61,6 +61,14 @@ function getInitialSection(project: ProjectData | null, urlCode: string | null):
   return 'property-docs';
 }
 
+// ── Token persistence: survives page refresh after phone lookup ───────────────
+function getStoredToken(code: string): string | null {
+  try { return sessionStorage.getItem(`project_token_${code}`); } catch { return null; }
+}
+function storeToken(code: string, token: string) {
+  try { sessionStorage.setItem(`project_token_${code}`, token); } catch { /* ignore */ }
+}
+
 // ── Main Form App ─────────────────────────────────────────────────────────────
 function FormApp() {
   const [searchParams] = useSearchParams();
@@ -69,22 +77,28 @@ function FormApp() {
   const urlCode = searchParams.get('code') || searchParams.get('project');
   const urlToken = searchParams.get('token');
 
+  // Resolve token: URL param → sessionStorage fallback
+  const resolvedToken = urlToken ?? (urlCode ? getStoredToken(urlCode) : null);
+
   const [project, setProject] = useState<ProjectData | null>(null);
-  const [projectToken, setProjectToken] = useState<string | null>(urlToken);
+  const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
 
   // If URL has a code, load it on mount
   useEffect(() => {
     if (!urlCode) return;
+    const token = urlToken ?? getStoredToken(urlCode);
     setLoading(true);
-    fetchProject(urlCode, urlToken)
+    fetchProject(urlCode, token)
       .then(res => {
         if (res.success && res.project) {
           setProject(res.project);
-          // Capture token from project if not already in URL
-          if (!urlToken && res.project.accessToken) {
-            setProjectToken(res.project.accessToken);
+          // Persist whichever token we have so refreshes keep working
+          const activeToken = token ?? res.project.accessToken ?? null;
+          if (activeToken) {
+            setProjectToken(activeToken);
+            storeToken(urlCode, activeToken);
           }
         } else {
           setLoadError(res.error || 'PROJECT_NOT_FOUND');
@@ -127,6 +141,8 @@ function FormApp() {
     setProject(foundProject);
     const token = foundProject.accessToken || null;
     setProjectToken(token);
+    // Persist so page refresh after phone lookup doesn't hit FORBIDDEN
+    if (token) storeToken(foundProject.code, token);
     navigate(`/?code=${foundProject.code}`, { replace: true });
     goTo('property-docs');
   };

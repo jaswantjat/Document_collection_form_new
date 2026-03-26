@@ -44,6 +44,19 @@ Default projects seeded in db.json:
 - `ELT20250002` — Juan Pérez Martínez (aerothermal)
 - `ELT20250003` — Laura Fernández Ruiz (solar)
 
+## Changes (2026-03-26, Session 4 — UX Bug Fixes)
+
+### 8 Priority UX Bugs Fixed
+
+- **F-1 — Page refresh after phone lookup → FORBIDDEN**: Project access token is now persisted to `sessionStorage` (keyed by project code) after phone lookup and after URL-based load. On mount, if no `?token=` param is in the URL, the stored token is read from `sessionStorage`. No more 403 on refresh.
+- **A-1 — "Send incomplete" has no confirmation**: Clicking "Enviar igualmente (incompleto)" now shows an amber warning panel with "Cancel / Sí, enviar incompleto" two-step confirmation before the submission fires.
+- **F-2 — Wrong-doc error + green checkmark simultaneously**: Fixed `showError` logic in the IBI DocCard — red error banner only shows when the slot has no accepted document. When a replacement attempt fails and the old doc is kept, an amber in-card note ("El nuevo documento no pudo procesarse — se mantiene el anterior.") is shown instead.
+- **D-1 — IBI PDF only reads page 1**: Backend `/api/extract` now accepts an optional `imagesBase64` array and sends all images as separate parts in one AI call (capped at 5 pages). Frontend IBI PDF path converts all pages and sends them together, using page 1 as the stored preview photo.
+- **F-3 — Both DNI sides misclassified → no explanation**: DNI upload processing is now sequential (not parallel). If the AI classifies the second image as the same side that's already filled, the item fails with an explicit message ("El sistema detectó que esta imagen también es la cara frontal/trasera — sube la otra cara.").
+- **M-1 — Province auto-confirms in 350ms**: Removed the 350ms auto-confirm `useEffect` (and the stale-closure refs). Province selection now requires an explicit "Confirmar" button tap — no involuntary auto-confirmation.
+- **M-4 — No retry button for failed items**: `PendingItem` now stores the original `File`. Failed DNI and electricity upload items show a "Reintentar" button that dismisses the error and re-queues the file through the same processing pipeline.
+- **S-2 — Signature warning lacks consequences**: Updated the signature warning text in ReviewSection to state that without signatures, "tu asesor no podrá tramitar el expediente ni solicitar las subvenciones correspondientes."
+
 ## Changes (2026-03-26, Session 3)
 
 ### Speed & UX Improvements

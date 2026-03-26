@@ -931,8 +931,12 @@ Respond ONLY with this exact JSON (no markdown, no extra text).`
 
 
 app.post('/api/extract', async (req, res) => {
-  const { imageBase64, documentType } = req.body;
-  if (!imageBase64 || !documentType) return res.status(400).json({ success: false, message: 'Faltan imageBase64 o documentType.' });
+  const { imageBase64, imagesBase64, documentType } = req.body;
+  // Accept either a single image or an array of images (multi-page PDFs)
+  const imagesToSend = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0
+    ? imagesBase64
+    : imageBase64 ? [imageBase64] : null;
+  if (!imagesToSend || !documentType) return res.status(400).json({ success: false, message: 'Faltan imageBase64 o documentType.' });
 
   const prompt = PROMPTS[documentType];
   if (!prompt) return res.status(400).json({ success: false, message: `Tipo de documento no soportado: ${documentType}` });
@@ -941,6 +945,12 @@ app.post('/api/extract', async (req, res) => {
   if (!openRouterApiKey) {
     return res.status(503).json({ success: false, isUnreadable: false, needsManualReview: true, reason: 'temporary-error', message: 'Servicio de extracción no configurado. Contacta al administrador.' });
   }
+
+  // Build content parts: text prompt + one image part per page (capped at 5 pages)
+  const imageContent = imagesToSend.slice(0, 5).map(img => ({
+    type: 'image_url',
+    image_url: { url: img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}` }
+  }));
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -951,8 +961,8 @@ app.post('/api/extract', async (req, res) => {
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` } }
+            { type: 'text', text: imagesToSend.length > 1 ? `${prompt}\n\nNota: el documento tiene ${imagesToSend.length} páginas, todas adjuntas. Analiza el conjunto para extraer los datos.` : prompt },
+            ...imageContent
           ]
         }],
         max_tokens: 800,

@@ -29,6 +29,7 @@ function hasRequiredSignatures(formData: FormData): boolean {
 export function ReviewSection({ project, formData, source, hasBlockingDocumentProcessing, onEdit, onSuccess, projectToken, onBack }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
   const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
@@ -221,7 +222,7 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
         {!hasBlockingDocumentProcessing && !signaturesOk && (
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>Aún no has firmado los documentos de representación. Puedes enviar igualmente.</span>
+            <span>Faltan las firmas de los documentos de representación. Sin ellas, tu asesor <strong>no podrá tramitar el expediente</strong> ni solicitar las subvenciones correspondientes.</span>
           </div>
         )}
 
@@ -253,10 +254,34 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
               >
                 <Send className="w-5 h-5" /> Enviar documentación
               </button>
+            ) : confirmingIncomplete ? (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-300 rounded-xl text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Faltan documentos. Tu asesor puede no poder continuar sin ellos. ¿Confirmas el envío incompleto?</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingIncomplete(false)}
+                    className="flex-1 border-2 border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm transition-colors hover:border-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={hasBlockingDocumentProcessing}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-40"
+                  >
+                    Sí, enviar incompleto
+                  </button>
+                </div>
+              </div>
             ) : (
               <button
                 type="button"
-                onClick={submit}
+                onClick={() => setConfirmingIncomplete(true)}
                 disabled={hasBlockingDocumentProcessing}
                 className="w-full border-2 border-gray-200 text-gray-500 font-medium py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors hover:border-gray-300 disabled:opacity-40"
               >
