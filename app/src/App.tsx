@@ -196,7 +196,8 @@ function FormApp() {
           />
         );
 
-      case 'review':
+      case 'review': {
+        const reviewLoc = formData.location ?? formData.representation?.location ?? null;
         return (
           <ReviewSection
             project={project}
@@ -207,8 +208,10 @@ function FormApp() {
             onEdit={(s) => goTo(s as Section)}
             onSuccess={() => goTo('success')}
             projectToken={projectToken}
+            onBack={() => goTo(reviewLoc === 'other' ? 'province-selection' : 'representation')}
           />
         );
+      }
 
       case 'success':
         return <SuccessSection project={project} />;

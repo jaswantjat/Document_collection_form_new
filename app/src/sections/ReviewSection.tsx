@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, Circle, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, Circle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft } from 'lucide-react';
 import type { FormData, ProjectData } from '@/types';
 import { submitForm } from '@/services/api';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
@@ -13,9 +13,10 @@ interface Props {
   onEdit: (section: string) => void;
   onSuccess: () => void;
   projectToken?: string | null;
+  onBack?: () => void;
 }
 
-export function ReviewSection({ project, formData, source, hasBlockingDocumentProcessing, onEdit, onSuccess, projectToken }: Props) {
+export function ReviewSection({ project, formData, source, hasBlockingDocumentProcessing, onEdit, onSuccess, projectToken, onBack }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -51,8 +52,6 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
     setSubmitError('');
     try {
       const renderedFormData = await ensureRenderedDocuments(formData);
-      // Strip rendered document images from the payload to reduce upload size.
-      // The dashboard can re-render them on demand from the stored signature data.
       const submitPayload = stripRenderedImages(renderedFormData);
       const res = await submitForm(project.code, submitPayload, source, projectToken);
       if (res.success) onSuccess();
@@ -79,22 +78,6 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
       representation: { ...fd.representation, renderedDocuments: stripped as typeof docs },
     };
   }
-
-  const submitRef = useRef(submit);
-  submitRef.current = submit;
-
-  const hasFiredSubmit = useRef(false);
-
-  useEffect(() => {
-    if (hasFiredSubmit.current) return;
-    if (hasBlockingDocumentProcessing) return;
-    const timer = setTimeout(() => {
-      if (hasFiredSubmit.current) return;
-      hasFiredSubmit.current = true;
-      submitRef.current();
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [hasBlockingDocumentProcessing]);
 
   return (
     <div className="min-h-screen bg-white p-5 pb-10">
@@ -134,13 +117,19 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           ))}
         </div>
 
-        {/* Waiting / submitting indicator */}
-        {(submitting || (hasBlockingDocumentProcessing && !submitError)) && (
+        {/* Submitting indicator */}
+        {submitting && (
           <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
             <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
-            <p className="text-sm font-medium text-eltex-blue">
-              {submitting ? 'Enviando documentación...' : 'Preparando documentos...'}
-            </p>
+            <p className="text-sm font-medium text-eltex-blue">Enviando documentación...</p>
+          </div>
+        )}
+
+        {/* Processing indicator */}
+        {hasBlockingDocumentProcessing && !submitting && (
+          <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
+            <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
+            <p className="text-sm font-medium text-eltex-blue">Preparando documentos...</p>
           </div>
         )}
 
@@ -165,6 +154,31 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
             Puedes enviar aunque falten algunos documentos.
           </p>
         )}
+
+        {/* Navigation */}
+        {!submitting && !submitError && (
+          <div className="flex gap-3 pt-2">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="btn-secondary flex items-center gap-1.5 px-5"
+                disabled={hasBlockingDocumentProcessing}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={hasBlockingDocumentProcessing}
+              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Enviar documentación <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );

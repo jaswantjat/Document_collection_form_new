@@ -433,6 +433,7 @@ Transforms raw project data into typed dashboard display objects:
 
 ### March 26, 2026 (Session 4)
 
+- **Fixed auto-submit bug in ReviewSection:** Removed the `useEffect` that auto-fired `submit()` 600ms after landing on the review screen (triggered every time the component mounted). Replaced with an explicit "Enviar documentación" button. Added `onBack` prop with proper routing (→ `province-selection` for `other`, → `representation` for all other locations).
 - **Fixed B1/B6 — `other` province dead-end:** `hasRepresentationDone` now returns `true` for `other`; `ProvinceSelectionSection.onContinue` skips to `review` for `other`; `RepresentationSection` shows a friendly message + continue button when `docs[]` is empty; `validateRepresentation` skips signature checks for `other`
 - **Fixed B2/B7 — Dashboard popup blockers:** Replaced all `window.open()` calls with anchor element click pattern (works in Replit iframes); applies to `openDataUrlInNewTab`, `viewPDFInNewTab`, and thumbnail `onClick` in `DocumentTableCell` and `ElectricityTableCell`
 - **Fixed B4 — Electricity duplicate detection:** `ElectricityCard` now checks `pages.some(p => p.photo?.preview === photo.preview)` before calling `onAddPage` — duplicate uploads silently ignored
