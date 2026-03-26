@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { CheckCircle, Circle, Send, Loader2, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, Circle, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
 import type { FormData, ProjectData } from '@/types';
 import { submitForm } from '@/services/api';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
@@ -24,8 +24,13 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
   const ebUploaded = ebPages.filter(p => !!p.photo).length;
 
   const allItems = [
-    { label: 'DNI — cara frontal', done: !!dni.front.photo, section: 'property-docs' },
-    { label: 'DNI — cara trasera', done: !!dni.back.photo, section: 'property-docs' },
+    {
+      label: (!!dni.front.photo && !!dni.back.photo) ? 'DNI / NIE — ambas caras' :
+        !!dni.front.photo ? 'DNI / NIE — cara frontal' :
+        !!dni.back.photo ? 'DNI / NIE — cara trasera' : 'DNI / NIE',
+      done: !!dni.front.photo || !!dni.back.photo,
+      section: 'property-docs',
+    },
     { label: 'IBI o escritura', done: !!ibi.photo, section: 'property-docs' },
     {
       label: ebUploaded > 0
@@ -38,25 +43,36 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
 
   const pendingItems = allItems.filter(i => !i.done);
   const doneCount = allItems.filter(i => i.done).length;
-
-  // Show only pending items if some are incomplete; show all if everything is done
   const visibleItems = pendingItems.length > 0 ? pendingItems : allItems;
 
   const submit = async () => {
-    if (hasBlockingDocumentProcessing) {
-      setSubmitError('Hay documentos aún en proceso o pendientes de corregir.');
-      return;
-    }
-
-    setSubmitting(true); setSubmitError('');
+    if (submitting || hasBlockingDocumentProcessing) return;
+    setSubmitting(true);
+    setSubmitError('');
     try {
       const renderedFormData = await ensureRenderedDocuments(formData);
       const res = await submitForm(project.code, renderedFormData, source, projectToken);
       if (res.success) onSuccess();
       else setSubmitError('Error al enviar. Inténtalo de nuevo.');
-    } catch { setSubmitError('Sin conexión. Inténtalo de nuevo.'); }
-    finally { setSubmitting(false); }
+    } catch {
+      setSubmitError('Sin conexión. Inténtalo de nuevo.');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+
+  const hasStartedSubmit = useRef(false);
+  useEffect(() => {
+    if (hasStartedSubmit.current) return;
+    hasStartedSubmit.current = true;
+    const timer = setTimeout(() => {
+      submitRef.current();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="min-h-screen bg-white p-5 pb-10">
@@ -65,20 +81,23 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Resumen</h1>
           <p className="text-gray-400 text-sm mt-1">
-            {pendingItems.length > 0
-              ? `${pendingItems.length} elemento${pendingItems.length !== 1 ? 's' : ''} pendiente${pendingItems.length !== 1 ? 's' : ''}`
-              : `${doneCount} de ${allItems.length} elementos completados`}
+            {submitting
+              ? 'Enviando tu documentación...'
+              : pendingItems.length > 0
+                ? `${pendingItems.length} elemento${pendingItems.length !== 1 ? 's' : ''} pendiente${pendingItems.length !== 1 ? 's' : ''}`
+                : `${doneCount} de ${allItems.length} elementos completados`}
           </p>
         </div>
 
-        {/* Checklist — only pending items (or all if everything done) */}
+        {/* Checklist */}
         <div className="divide-y divide-gray-100">
           {visibleItems.map(item => (
             <button
               key={item.label}
               type="button"
-              onClick={() => onEdit(item.section)}
+              onClick={() => !submitting && onEdit(item.section)}
               className="w-full flex items-center gap-3 py-3 text-left"
+              disabled={submitting}
             >
               {item.done
                 ? <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
@@ -86,31 +105,40 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
               <span className={`text-sm flex-1 ${item.done ? 'text-gray-500' : 'text-gray-900 font-medium'}`}>
                 {item.label}
               </span>
-              <span className="text-xs text-gray-400">{item.done ? '✓' : 'Añadir →'}</span>
+              {!submitting && <span className="text-xs text-gray-400">{item.done ? '✓' : 'Añadir →'}</span>}
             </button>
           ))}
         </div>
 
-        {submitError && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl text-sm text-red-600">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {submitError}
+        {/* Submitting indicator */}
+        {submitting && (
+          <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
+            <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
+            <p className="text-sm font-medium text-eltex-blue">Enviando documentación...</p>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={submit}
-          disabled={submitting || hasBlockingDocumentProcessing}
-          className="btn-primary flex items-center justify-center gap-2 text-base py-3.5"
-        >
-          {submitting
-            ? <><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>
-            : <><Send className="w-5 h-5" /> Enviar documentación</>}
-        </button>
+        {/* Error + retry */}
+        {submitError && !submitting && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl text-sm text-red-600">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {submitError}
+            </div>
+            <button
+              type="button"
+              onClick={submit}
+              className="btn-primary flex items-center justify-center gap-2 text-base py-3.5"
+            >
+              <RotateCcw className="w-5 h-5" /> Reintentar envío
+            </button>
+          </div>
+        )}
 
-        <p className="text-xs text-center text-gray-400">
-          Puedes enviar aunque falten algunos documentos, pero no mientras alguno siga en verificación o extracción.
-        </p>
+        {!submitting && !submitError && (
+          <p className="text-xs text-center text-gray-400">
+            Puedes enviar aunque falten algunos documentos.
+          </p>
+        )}
       </div>
     </div>
   );

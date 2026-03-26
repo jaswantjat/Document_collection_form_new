@@ -32,7 +32,7 @@ function DashboardApp() {
 // ── Helpers for smart section routing ─────────────────────────────────────────
 function hasPropertyDocsDone(formData: FormData | null): boolean {
   if (!formData) return false;
-  return !!(formData.dni?.front?.photo && formData.dni?.back?.photo && formData.ibi?.photo);
+  return !!(formData.dni?.front?.photo || formData.dni?.back?.photo);
 }
 
 function hasRepresentationDone(formData: FormData | null, location: string | null): boolean {
@@ -105,11 +105,11 @@ function FormApp() {
   }, [project, urlCode]);
 
   const {
-    formData, errors, documentProcessing, electricityProcessing, hasBlockingDocumentProcessing,
+    formData, errors, documentProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
     setIBIPhoto, setIBIExtraction,
-    addElectricityPage, removeElectricityPage, setElectricityPageProcessing,
+    addElectricityPage, removeElectricityPage,
     setLocation,
     setRepresentation,
     setDocumentProcessingState,
@@ -153,7 +153,6 @@ function FormApp() {
             electricityBill={formData.electricityBill}
             errors={errors}
             documentProcessing={documentProcessing}
-            electricityProcessing={electricityProcessing}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             onDNIFrontPhotoChange={setDNIFrontPhoto}
             onDNIFrontExtractionChange={setDNIFrontExtraction}
@@ -163,7 +162,6 @@ function FormApp() {
             onIBIExtractionChange={setIBIExtraction}
             onAddElectricityPage={addElectricityPage}
             onRemoveElectricityPage={removeElectricityPage}
-            onElectricityPageProcessingChange={setElectricityPageProcessing}
             onDocumentProcessingChange={setDocumentProcessingState}
             onBack={() => goTo('phone')}
             onContinue={() => {

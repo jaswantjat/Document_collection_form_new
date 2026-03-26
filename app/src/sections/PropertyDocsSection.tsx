@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard } from 'lucide-react';
 import type {
   IBIData,
   ElectricityBillData,
@@ -20,7 +20,6 @@ interface Props {
   electricityBill: ElectricityBillData;
   errors: FormErrors;
   documentProcessing: Record<DocumentSlotKey, DocumentProcessingState>;
-  electricityProcessing: DocumentProcessingState[];
   hasBlockingDocumentProcessing: boolean;
   customerPhone?: string;
   onDNIFrontPhotoChange: (photo: UploadedPhoto | null) => void;
@@ -31,7 +30,6 @@ interface Props {
   onIBIExtractionChange: (extraction: AIExtraction | null) => void;
   onAddElectricityPage: (photo: UploadedPhoto, extraction: AIExtraction) => void;
   onRemoveElectricityPage: (index: number) => void;
-  onElectricityPageProcessingChange: (index: number, state: DocumentProcessingState) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -48,33 +46,17 @@ interface DocCardProps {
   onProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
 }
 
-const FIELDS: Record<DocumentSlotKey, Array<{ key: string; label: string }>> = {
-  dniFront: [
-    { key: 'fullName', label: 'Nombre' },
-    { key: 'dniNumber', label: 'DNI / NIE' },
-    { key: 'dateOfBirth', label: 'Nacimiento' },
-    { key: 'expiryDate', label: 'Válido hasta' },
-    { key: 'sex', label: 'Sexo' },
-    { key: 'nationality', label: 'Nacionalidad' },
-  ],
-  dniBack: [
-    { key: 'address', label: 'Domicilio' },
-    { key: 'municipality', label: 'Municipio' },
-    { key: 'province', label: 'Provincia' },
-    { key: 'placeOfBirth', label: 'Lugar nacimiento' },
-  ],
-  ibi: [
-    { key: 'referenciaCatastral', label: 'Ref. Catastral' },
-    { key: 'titular', label: 'Titular' },
-    { key: 'titularNif', label: 'NIF titular' },
-    { key: 'direccion', label: 'Dirección' },
-    { key: 'codigoPostal', label: 'Código postal' },
-    { key: 'municipio', label: 'Municipio' },
-    { key: 'provincia', label: 'Provincia' },
-    { key: 'ejercicio', label: 'Ejercicio' },
-    { key: 'importe', label: 'Importe' },
-  ],
-};
+const IBI_FIELDS = [
+  { key: 'referenciaCatastral', label: 'Ref. Catastral' },
+  { key: 'titular', label: 'Titular' },
+  { key: 'titularNif', label: 'NIF titular' },
+  { key: 'direccion', label: 'Dirección' },
+  { key: 'codigoPostal', label: 'Código postal' },
+  { key: 'municipio', label: 'Municipio' },
+  { key: 'provincia', label: 'Provincia' },
+  { key: 'ejercicio', label: 'Ejercicio' },
+  { key: 'importe', label: 'Importe' },
+];
 
 const ELECTRICITY_FIELDS = [
   { key: 'titular', label: 'Titular' },
@@ -92,37 +74,18 @@ const ELECTRICITY_FIELDS = [
   { key: 'importe', label: 'Importe' },
 ];
 
-function uploadTarget(hint: string, onFile: (file: File) => void) {
-  return (
-    <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
-      <input
-        type="file"
-        accept="image/jpeg,image/png"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onFile(file);
-          event.target.value = '';
-        }}
-      />
-      <Camera className="w-7 h-7 text-gray-300" />
-      <span className="text-sm font-medium text-gray-500">Toca para añadir foto</span>
-      <span className="text-xs text-gray-400 text-center px-4">{hint}</span>
-    </label>
-  );
+interface PendingItem {
+  id: string;
+  preview: string | null;
+  status: 'validating' | 'extracting' | 'failed';
+  error?: string;
 }
 
-function processFromPicker(onFile: (file: File) => void) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/jpeg,image/png';
-  input.onchange = () => {
-    const file = input.files?.[0];
-    if (file) onFile(file);
-  };
-  input.click();
+function genId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// ── IBI DocCard ────────────────────────────────────────────────────────────────
 function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtractionChange, onProcessingChange }: DocCardProps) {
   const process = useCallback(async (file: File) => {
     const hadAcceptedDocument = !!data.photo;
@@ -149,7 +112,7 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
 
     try {
       const base64 = await fileToBase64(file);
-      const res = await extractDocument(base64, slotKey);
+      const res = await extractDocument(base64, slotKey as 'ibi');
 
       if (!res.success || !res.extraction) {
         onProcessingChange(slotKey, {
@@ -185,7 +148,6 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
     onProcessingChange(slotKey, { status: 'idle', pendingPreview: null });
   }, [onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
 
-  const fields = FIELDS[slotKey];
   const extractedData = data.extraction?.extractedData || {};
   const accepted = !!data.photo;
   const isBusy = processing.status === 'validating' || processing.status === 'extracting';
@@ -198,18 +160,21 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         {accepted && <CheckCircle className="w-5 h-5 text-green-500" />}
       </div>
 
-      {!accepted && !isBusy && uploadTarget(hint, process)}
+      {!accepted && !isBusy && (
+        <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
+          <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
+          <Camera className="w-7 h-7 text-gray-300" />
+          <span className="text-sm font-medium text-gray-500">Toca para añadir foto</span>
+          <span className="text-xs text-gray-400 text-center px-4">{hint}</span>
+        </label>
+      )}
 
       {isBusy && (
         <div className="space-y-3">
-          {processing.pendingPreview && (
-            <img src={processing.pendingPreview} alt={`${title} en proceso`} className="w-full h-28 object-cover rounded-xl opacity-80" />
-          )}
+          {processing.pendingPreview && <img src={processing.pendingPreview} alt={`${title} en proceso`} className="w-full h-28 object-cover rounded-xl opacity-80" />}
           <div className="flex items-center gap-3 py-1">
             <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-            <p className="text-sm text-gray-500">
-              {processing.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}
-            </p>
+            <p className="text-sm text-gray-500">{processing.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}</p>
           </div>
         </div>
       )}
@@ -223,14 +188,11 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
 
       {accepted && (
         <div className="space-y-3">
-          {data.photo?.preview && (
-            <img src={data.photo.preview} alt={title} className="w-full h-28 object-cover rounded-xl opacity-80" />
-          )}
+          {data.photo?.preview && <img src={data.photo.preview} alt={title} className="w-full h-28 object-cover rounded-xl opacity-80" />}
           <div className="space-y-1.5">
-            {fields.map(({ key, label }) => {
+            {IBI_FIELDS.map(({ key, label }) => {
               const value = data.extraction?.manualCorrections?.[key] ?? extractedData[key];
               if (!value) return null;
-
               return (
                 <div key={key} className="flex gap-2 text-sm">
                   <span className="text-gray-400 shrink-0 w-28">{label}</span>
@@ -239,20 +201,12 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
               );
             })}
           </div>
-
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => processFromPicker(process)}
-              className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center"
-            >
+            <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
+              <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
               <Camera className="w-3.5 h-3.5" /> Sustituir foto
-            </button>
-            <button
-              type="button"
-              onClick={reset}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center"
-            >
+            </label>
+            <button type="button" onClick={reset} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center">
               <RotateCcw className="w-3.5 h-3.5" /> Quitar
             </button>
           </div>
@@ -262,61 +216,311 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
   );
 }
 
-interface ElectricityCardProps {
-  pages: ElectricityBillData['pages'];
-  processing: DocumentProcessingState[];
-  onAddPage: (photo: UploadedPhoto, extraction: AIExtraction) => void;
-  onRemovePage: (index: number) => void;
-  onPageProcessingChange: (index: number, state: DocumentProcessingState) => void;
+// ── DNI Combined Card ──────────────────────────────────────────────────────────
+interface DNICardProps {
+  front: DocSlot;
+  back: DocSlot;
+  onFrontPhotoChange: (p: UploadedPhoto | null) => void;
+  onFrontExtractionChange: (e: AIExtraction | null) => void;
+  onBackPhotoChange: (p: UploadedPhoto | null) => void;
+  onBackExtractionChange: (e: AIExtraction | null) => void;
+  onBusyChange: (busy: boolean) => void;
 }
 
-function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPageProcessingChange }: ElectricityCardProps) {
-  const [pendingState, setPendingState] = useState<DocumentProcessingState>({ status: 'idle', pendingPreview: null });
-  const [pendingError, setPendingError] = useState<string | null>(null);
+function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange, onBusyChange }: DNICardProps) {
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
-  const processNewPage = useCallback(async (file: File) => {
-    setPendingError(null);
-    setPendingState({ status: 'validating', pendingPreview: null });
+  const processFiles = useCallback(async (files: File[]) => {
+    const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
+    setPendingItems(prev => {
+      const next = [...prev, ...newItems];
+      onBusyChange(next.some(p => p.status !== 'failed'));
+      return next;
+    });
 
-    const check = await validatePhoto(file);
-    if (!check.valid) {
-      setPendingState({ status: 'rejected', errorCode: 'validation', errorMessage: check.error || 'Imagen no válida.', pendingPreview: null });
-      setPendingError(check.error || 'Imagen no válida.');
-      return;
-    }
+    await Promise.all(files.map(async (file, i) => {
+      const id = newItems[i].id;
 
-    const preview = await fileToPreview(file);
-    setPendingState({ status: 'extracting', pendingPreview: preview });
-
-    try {
-      const base64 = await fileToBase64(file);
-      const res = await extractDocument(base64, 'electricity');
-
-      if (!res.success || !res.extraction) {
-        const msg = res.message || 'No se pudo procesar el documento.';
-        setPendingState({ status: 'rejected', errorCode: 'temporary-error', errorMessage: msg, pendingPreview: preview });
-        setPendingError(msg);
+      const check = await validatePhoto(file);
+      if (!check.valid) {
+        setPendingItems(prev => {
+          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
         return;
       }
 
-      const photo = createUploadedPhoto(file, preview, check.width, check.height);
-      const extraction: AIExtraction = {
-        ...res.extraction,
-        needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
-        confirmedByUser: true,
-      };
-      onAddPage(photo, extraction);
-      setPendingState({ status: 'idle', pendingPreview: null });
-      setPendingError(null);
-    } catch (err) {
-      console.error('extractDocument error:', err);
-      const msg = 'Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.';
-      setPendingState({ status: 'rejected', errorCode: 'temporary-error', errorMessage: msg, pendingPreview: preview });
-      setPendingError(msg);
-    }
-  }, [onAddPage]);
+      const preview = await fileToPreview(file);
+      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
 
-  const isBusy = pendingState.status === 'validating' || pendingState.status === 'extracting';
+      try {
+        const base64 = await fileToBase64(file);
+        const res = await extractDocument(base64, 'dniAuto');
+
+        if (!res.success || !res.extraction) {
+          setPendingItems(prev => {
+            const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar el DNI.' } : p);
+            onBusyChange(next.some(p => p.status !== 'failed'));
+            return next;
+          });
+          return;
+        }
+
+        const photo = createUploadedPhoto(file, preview, check.width, check.height);
+        const extraction: AIExtraction = {
+          ...res.extraction,
+          needsManualReview: res.needsManualReview ?? false,
+          confirmedByUser: true,
+        };
+
+        if (res.side === 'back') {
+          onBackPhotoChange(photo);
+          onBackExtractionChange(extraction);
+        } else {
+          onFrontPhotoChange(photo);
+          onFrontExtractionChange(extraction);
+        }
+
+        setPendingItems(prev => {
+          const next = prev.filter(p => p.id !== id);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
+      } catch {
+        setPendingItems(prev => {
+          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
+      }
+    }));
+  }, [onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange, onBusyChange]);
+
+  const dismissError = (id: string) => {
+    setPendingItems(prev => {
+      const next = prev.filter(p => p.id !== id);
+      onBusyChange(next.some(p => p.status !== 'failed'));
+      return next;
+    });
+  };
+
+  const hasFront = !!front.photo;
+  const hasBack = !!back.photo;
+  const hasAny = hasFront || hasBack;
+  const isBusy = pendingItems.some(p => p.status !== 'failed');
+
+  return (
+    <div className={`rounded-2xl border-2 transition-colors ${hasAny ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CreditCard className="w-5 h-5 text-gray-400" />
+          <p className={`font-semibold ${hasAny ? 'text-gray-500' : 'text-gray-900'}`}>DNI / NIE</p>
+        </div>
+        {hasFront && hasBack && <CheckCircle className="w-5 h-5 text-green-500" />}
+        {hasAny && !(hasFront && hasBack) && (
+          <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
+            {hasFront ? 'Falta la trasera' : 'Falta la frontal'}
+          </span>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-500">
+        Sube las fotos de tu DNI — el sistema detecta automáticamente la cara frontal y trasera.
+      </p>
+
+      {/* Front + Back slots */}
+      {hasAny && (
+        <div className="grid grid-cols-2 gap-3">
+          {/* Front */}
+          <div className={`rounded-xl border overflow-hidden ${hasFront ? 'border-green-200 bg-white' : 'border-dashed border-gray-200 bg-gray-50/60'}`}>
+            {hasFront && front.photo?.preview ? (
+              <>
+                <div className="relative">
+                  <img src={front.photo.preview} alt="DNI frontal" className="w-full h-24 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { onFrontPhotoChange(null); onFrontExtractionChange(null); }}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-1.5 left-1.5 bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">FRONTAL</span>
+                </div>
+                <div className="px-2 py-1.5 space-y-0.5">
+                  {['fullName', 'dniNumber'].map(k => {
+                    const v = front.extraction?.extractedData?.[k];
+                    if (!v) return null;
+                    return <p key={k} className="text-[10px] text-gray-700 font-medium truncate">{String(v)}</p>;
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
+                <p className="text-[10px] text-gray-400 text-center">Cara frontal</p>
+                <p className="text-[9px] text-gray-300 text-center mt-1">Foto + número DNI</p>
+              </div>
+            )}
+          </div>
+
+          {/* Back */}
+          <div className={`rounded-xl border overflow-hidden ${hasBack ? 'border-green-200 bg-white' : 'border-dashed border-gray-200 bg-gray-50/60'}`}>
+            {hasBack && back.photo?.preview ? (
+              <>
+                <div className="relative">
+                  <img src={back.photo.preview} alt="DNI trasera" className="w-full h-24 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { onBackPhotoChange(null); onBackExtractionChange(null); }}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-1.5 left-1.5 bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">TRASERA</span>
+                </div>
+                <div className="px-2 py-1.5 space-y-0.5">
+                  {['address', 'municipality'].map(k => {
+                    const v = back.extraction?.extractedData?.[k];
+                    if (!v) return null;
+                    return <p key={k} className="text-[10px] text-gray-700 font-medium truncate">{String(v)}</p>;
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
+                <p className="text-[10px] text-gray-400 text-center">Cara trasera</p>
+                <p className="text-[9px] text-gray-300 text-center mt-1">Dirección domicilio</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pending items */}
+      {pendingItems.map(item => (
+        <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
+          {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-16 object-cover rounded-lg opacity-70" />}
+          {item.status === 'failed' ? (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 flex-1">{item.error}</p>
+              <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-eltex-blue animate-spin" />
+              <p className="text-xs text-gray-500">{item.status === 'validating' ? 'Verificando calidad...' : 'Detectando cara y extrayendo datos...'}</p>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Upload button */}
+      {!isBusy && (
+        <label className={`flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+          hasAny ? 'border-gray-200 hover:border-eltex-blue hover:bg-blue-50/20 text-gray-400 hover:text-eltex-blue' : 'border-gray-200 hover:border-eltex-blue hover:bg-blue-50/30 text-gray-500'
+        }`}>
+          <input
+            type="file"
+            accept="image/jpeg,image/png"
+            multiple
+            className="hidden"
+            onChange={e => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (files.length) processFiles(files);
+            }}
+          />
+          <Plus className="w-5 h-5" />
+          <span className="text-sm font-medium">{hasAny ? 'Añadir más fotos del DNI' : 'Añadir fotos del DNI'}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+// ── Electricity Card (parallel processing) ────────────────────────────────────
+interface ElectricityCardProps {
+  pages: ElectricityBillData['pages'];
+  onAddPage: (photo: UploadedPhoto, extraction: AIExtraction) => void;
+  onRemovePage: (index: number) => void;
+  onBusyChange: (busy: boolean) => void;
+}
+
+function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: ElectricityCardProps) {
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+
+  const processFiles = useCallback(async (files: File[]) => {
+    const newItems: PendingItem[] = files.map(() => ({ id: genId(), preview: null, status: 'validating' }));
+    setPendingItems(prev => {
+      const next = [...prev, ...newItems];
+      onBusyChange(next.some(p => p.status !== 'failed'));
+      return next;
+    });
+
+    await Promise.all(files.map(async (file, i) => {
+      const id = newItems[i].id;
+
+      const check = await validatePhoto(file);
+      if (!check.valid) {
+        setPendingItems(prev => {
+          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
+        return;
+      }
+
+      const preview = await fileToPreview(file);
+      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
+
+      try {
+        const base64 = await fileToBase64(file);
+        const res = await extractDocument(base64, 'electricity');
+
+        if (!res.success || !res.extraction) {
+          setPendingItems(prev => {
+            const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar la factura.' } : p);
+            onBusyChange(next.some(p => p.status !== 'failed'));
+            return next;
+          });
+          return;
+        }
+
+        const photo = createUploadedPhoto(file, preview, check.width, check.height);
+        const extraction: AIExtraction = {
+          ...res.extraction,
+          needsManualReview: res.needsManualReview ?? false,
+          confirmedByUser: true,
+        };
+        onAddPage(photo, extraction);
+
+        setPendingItems(prev => {
+          const next = prev.filter(p => p.id !== id);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
+      } catch {
+        setPendingItems(prev => {
+          const next = prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p);
+          onBusyChange(next.some(p => p.status !== 'failed'));
+          return next;
+        });
+      }
+    }));
+  }, [onAddPage, onBusyChange]);
+
+  const dismissError = (id: string) => {
+    setPendingItems(prev => {
+      const next = prev.filter(p => p.id !== id);
+      onBusyChange(next.some(p => p.status !== 'failed'));
+      return next;
+    });
+  };
+
+  const isBusy = pendingItems.some(p => p.status !== 'failed');
   const hasPages = pages.length > 0;
 
   return (
@@ -332,7 +536,7 @@ function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPagePro
       </div>
 
       <p className="text-xs text-gray-500">
-        Sube todas las páginas de tu factura de luz — puedes añadir tantas imágenes como necesites.
+        Sube todas las páginas de tu factura de luz — puedes seleccionar varias imágenes a la vez.
       </p>
 
       {/* Uploaded pages grid */}
@@ -345,22 +549,15 @@ function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPagePro
               <div key={index} className="rounded-xl border border-green-200 bg-white overflow-hidden">
                 {page.photo?.preview && (
                   <div className="relative">
-                    <img
-                      src={page.photo.preview}
-                      alt={`Página ${index + 1}`}
-                      className="w-full h-24 object-cover"
-                    />
+                    <img src={page.photo.preview} alt={`Página ${index + 1}`} className="w-full h-24 object-cover" />
                     <button
                       type="button"
                       onClick={() => onRemovePage(index)}
                       className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                      title="Quitar imagen"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
-                    <span className="absolute bottom-1.5 left-1.5 bg-black/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                      Pág. {index + 1}
-                    </span>
+                    <span className="absolute bottom-1.5 left-1.5 bg-black/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">Pág. {index + 1}</span>
                   </div>
                 )}
                 {keyFields.length > 0 && (
@@ -371,9 +568,7 @@ function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPagePro
                         <span className="font-medium text-gray-700 truncate">{String(pageData[key])}</span>
                       </div>
                     ))}
-                    {keyFields.length > 4 && (
-                      <p className="text-[10px] text-gray-400">+{keyFields.length - 4} más</p>
-                    )}
+                    {keyFields.length > 4 && <p className="text-[10px] text-gray-400">+{keyFields.length - 4} más</p>}
                   </div>
                 )}
               </div>
@@ -382,30 +577,30 @@ function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPagePro
         </div>
       )}
 
-      {/* Pending upload state */}
-      {isBusy && (
-        <div className="rounded-xl border border-dashed border-eltex-blue/30 bg-white p-4 space-y-3">
-          {pendingState.pendingPreview && (
-            <img src={pendingState.pendingPreview} alt="Procesando" className="w-full h-24 object-cover rounded-lg opacity-70" />
+      {/* Pending items (parallel) */}
+      {pendingItems.map(item => (
+        <div key={item.id} className="rounded-xl border border-dashed border-eltex-blue/30 bg-white p-3 space-y-2">
+          {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
+          {item.status === 'failed' ? (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 flex-1">{item.error}</p>
+              <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+              <p className="text-sm text-gray-500">
+                {item.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}
+              </p>
+            </div>
           )}
-          <div className="flex items-center gap-3">
-            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-            <p className="text-sm text-gray-500">
-              {pendingState.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}
-            </p>
-          </div>
         </div>
-      )}
+      ))}
 
-      {/* Error state */}
-      {pendingError && !isBusy && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{pendingError}</p>
-        </div>
-      )}
-
-      {/* Add page button */}
+      {/* Add images button */}
       {!isBusy && (
         <label className={`flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
           hasPages
@@ -417,31 +612,27 @@ function ElectricityCard({ pages, processing, onAddPage, onRemovePage, onPagePro
             accept="image/jpeg,image/png"
             multiple
             className="hidden"
-            onChange={async (event) => {
-              const files = Array.from(event.target.files || []);
-              event.target.value = '';
-              for (const file of files) {
-                await processNewPage(file);
-              }
+            onChange={e => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (files.length) processFiles(files);
             }}
           />
           <Plus className="w-5 h-5" />
-          <span className="text-sm font-medium">
-            {hasPages ? 'Añadir más páginas' : 'Añadir imágenes'}
-          </span>
+          <span className="text-sm font-medium">{hasPages ? 'Añadir más páginas' : 'Añadir imágenes'}</span>
         </label>
       )}
     </div>
   );
 }
 
+// ── Main Section ───────────────────────────────────────────────────────────────
 export function PropertyDocsSection({
   dni,
   ibi,
   electricityBill,
   errors,
   documentProcessing,
-  electricityProcessing,
   hasBlockingDocumentProcessing,
   onDNIFrontPhotoChange,
   onDNIFrontExtractionChange,
@@ -451,11 +642,15 @@ export function PropertyDocsSection({
   onIBIExtractionChange,
   onAddElectricityPage,
   onRemoveElectricityPage,
-  onElectricityPageProcessingChange,
   onDocumentProcessingChange,
   onBack,
   onContinue,
 }: Props) {
+  const [dniIsBusy, setDniIsBusy] = useState(false);
+  const [electricityIsBusy, setElectricityIsBusy] = useState(false);
+
+  const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy;
+
   return (
     <div className="min-h-screen bg-white p-5 pb-28">
       <div className="max-w-sm mx-auto space-y-5">
@@ -466,26 +661,16 @@ export function PropertyDocsSection({
           </p>
         </div>
 
-        <DocCard
-          title="DNI — cara frontal"
-          hint="La cara con tu foto y número de DNI. Texto perfectamente legible."
-          data={dni.front}
-          slotKey="dniFront"
-          processing={documentProcessing.dniFront}
-          onPhotoChange={onDNIFrontPhotoChange}
-          onExtractionChange={onDNIFrontExtractionChange}
-          onProcessingChange={onDocumentProcessingChange}
+        <DNICard
+          front={dni.front}
+          back={dni.back}
+          onFrontPhotoChange={onDNIFrontPhotoChange}
+          onFrontExtractionChange={onDNIFrontExtractionChange}
+          onBackPhotoChange={onDNIBackPhotoChange}
+          onBackExtractionChange={onDNIBackExtractionChange}
+          onBusyChange={setDniIsBusy}
         />
-        <DocCard
-          title="DNI — cara trasera"
-          hint="La cara con tu dirección de domicilio."
-          data={dni.back}
-          slotKey="dniBack"
-          processing={documentProcessing.dniBack}
-          onPhotoChange={onDNIBackPhotoChange}
-          onExtractionChange={onDNIBackExtractionChange}
-          onProcessingChange={onDocumentProcessingChange}
-        />
+
         <DocCard
           title="IBI o escritura"
           hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
@@ -499,10 +684,9 @@ export function PropertyDocsSection({
 
         <ElectricityCard
           pages={electricityBill.pages}
-          processing={electricityProcessing}
           onAddPage={onAddElectricityPage}
           onRemovePage={onRemoveElectricityPage}
-          onPageProcessingChange={onElectricityPageProcessingChange}
+          onBusyChange={setElectricityIsBusy}
         />
 
         <p className="text-xs text-gray-400 text-center pt-1">
@@ -523,7 +707,7 @@ export function PropertyDocsSection({
           <button
             type="button"
             onClick={onContinue}
-            disabled={hasBlockingDocumentProcessing}
+            disabled={isAnyBusy}
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Continuar <ArrowRight className="w-4 h-4" />

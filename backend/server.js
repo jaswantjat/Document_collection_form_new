@@ -225,8 +225,8 @@ function getProjectSnapshot(formData) {
     dniNumber: dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
     address: eb.direccionSuministro || dniBack.address || ibi.direccion || '',
     municipality: eb.municipio || dniBack.municipality || ibi.municipio || '',
-    // Province: electricity bill first, then IBI, then DNI as last resort
-    province: eb.provincia || ibi.provincia || dniBack.province || dniBack.provincia || '',
+    // Province: electricity bill first, then IBI only (DNI province excluded by design)
+    province: eb.provincia || ibi.provincia || '',
     postalCode: eb.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }
@@ -700,7 +700,29 @@ Extract:
 Only set isCorrectDocument: false if the image is clearly NOT an electricity bill (e.g., DNI, IBI, passport, bank statement, unrelated document).
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
-{"isCorrectDocument":true,"documentTypeDetected":"electricity bill","isReadable":true,"extractedData":{"titular":"string or null","nifTitular":"string or null","direccionSuministro":"string or null","codigoPostal":"string or null","municipio":"string or null","provincia":"string or null","cups":"string or null","potenciaContratada":"string or null","tipoFase":"monofasica or trifasica or null","tarifaAcceso":"string or null","comercializadora":"string or null","distribuidora":"string or null","fechaFactura":"string or null","periodoFacturacion":"string or null","importe":"string or null"},"confidence":0.95,"notes":"string"}`
+{"isCorrectDocument":true,"documentTypeDetected":"electricity bill","isReadable":true,"extractedData":{"titular":"string or null","nifTitular":"string or null","direccionSuministro":"string or null","codigoPostal":"string or null","municipio":"string or null","provincia":"string or null","cups":"string or null","potenciaContratada":"string or null","tipoFase":"monofasica or trifasica or null","tarifaAcceso":"string or null","comercializadora":"string or null","distribuidora":"string or null","fechaFactura":"string or null","periodoFacturacion":"string or null","importe":"string or null"},"confidence":0.95,"notes":"string"}`,
+
+  dniAuto: `You are a document data extractor for Spanish government documents.
+
+Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
+
+You are analyzing a Spanish DNI (Documento Nacional de Identidad) or NIE (Número de Identidad de Extranjero) — any side.
+
+STEP 1: Determine the side:
+- FRONT (anverso): Has a person's PHOTO, full name, DNI/NIE number, date of birth (fecha de nacimiento), expiry date (válido hasta), sex (M/F), nationality
+- BACK (reverso): Has home address (domicilio), municipality (municipio), province (provincia), place of birth (lugar de nacimiento), and usually an MRZ strip at the bottom
+
+STEP 2: Set "side" to "front" or "back" and extract the appropriate fields. Fields not present on that side must be null.
+
+If this is NOT a DNI/NIE at all, set isCorrectDocument: false.
+
+For the FRONT, respond with:
+{"side":"front","isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":null,"municipality":null,"province":null,"placeOfBirth":null},"confidence":0.95,"notes":"string"}
+
+For the BACK, respond with:
+{"side":"back","isCorrectDocument":true,"documentTypeDetected":"DNI back","isReadable":true,"extractedData":{"fullName":null,"dniNumber":null,"dateOfBirth":null,"expiryDate":null,"sex":null,"nationality":null,"address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
+
+Respond ONLY with this exact JSON (no markdown, no extra text).`
 };
 
 
@@ -812,6 +834,7 @@ app.post('/api/extract', async (req, res) => {
 
     res.json({
       success: true,
+      side: documentType === 'dniAuto' ? (extraction.side || null) : undefined,
       extraction: {
         ...extraction,
         needsManualReview: extraction.confidence < 0.75,

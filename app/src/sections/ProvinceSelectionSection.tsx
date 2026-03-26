@@ -25,8 +25,16 @@ export function ProvinceSelectionSection({
   const [showManual, setShowManual] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationRegion | null>(existingLocation);
 
-  const province = formData.dni?.back?.extraction?.extractedData?.province;
-  const locationInfo = getLocationInfo(province);
+  // Province comes only from electricity bill or IBI — never from DNI
+  function getAutoProvince(): string | null {
+    for (const page of formData.electricityBill?.pages ?? []) {
+      const prov = page.extraction?.extractedData?.provincia;
+      if (prov) return prov;
+    }
+    return formData.ibi?.extraction?.extractedData?.provincia ?? null;
+  }
+  const province = getAutoProvince();
+  const locationInfo = province ? getLocationInfo(province) : null;
 
   const data = representationData;
   const update = (patch: Partial<RepresentationData>) => onRepresentationChange(patch);
@@ -62,15 +70,15 @@ export function ProvinceSelectionSection({
                 <MapPin className="w-5 h-5 text-green-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500">Detectada desde tu DNI</p>
-                <p className="text-lg font-semibold text-gray-900">{locationInfo.label}</p>
+                <p className="text-xs text-gray-500">Detectada automáticamente</p>
+                <p className="text-lg font-semibold text-gray-900">{locationInfo?.label}</p>
               </div>
               <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => confirmLocation(locationInfo.id)}
+                onClick={() => locationInfo && confirmLocation(locationInfo.id)}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" /> Confirmar
