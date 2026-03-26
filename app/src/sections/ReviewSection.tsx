@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, Circle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft } from 'lucide-react';
+import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
 import type { FormData, ProjectData, LocationRegion } from '@/types';
 import { submitForm } from '@/services/api';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
@@ -37,25 +37,45 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
 
   const allItems = [
     {
-      label: (!!dni.front.photo && !!dni.back.photo) ? 'DNI / NIE — ambas caras' :
-        !!dni.front.photo ? 'DNI / NIE — cara frontal' :
-        !!dni.back.photo ? 'DNI / NIE — cara trasera' : 'DNI / NIE',
+      id: 'dni',
+      label: 'DNI / NIE',
+      doneLabel: (!!dni.front.photo && !!dni.back.photo)
+        ? 'DNI / NIE — ambas caras'
+        : !!dni.front.photo ? 'DNI / NIE — cara frontal'
+        : 'DNI / NIE — cara trasera',
+      description: 'Foto de tu DNI o NIE por ambas caras',
+      hint: 'Asegúrate de que los datos sean legibles',
+      icon: Camera,
       done: !!dni.front.photo || !!dni.back.photo,
       section: 'property-docs',
     },
-    { label: 'IBI o escritura', done: !!ibi.photo, section: 'property-docs' },
     {
-      label: ebUploaded > 0
-        ? `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`
-        : 'Factura de luz',
+      id: 'ibi',
+      label: 'IBI o escritura',
+      doneLabel: 'IBI o escritura',
+      description: 'Recibo del IBI o escritura de la propiedad',
+      hint: 'Puede ser una foto o un PDF',
+      icon: FileText,
+      done: !!ibi.photo,
+      section: 'property-docs',
+    },
+    {
+      id: 'electricity',
+      label: 'Factura de luz',
+      doneLabel: `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`,
+      description: 'Última factura de la luz',
+      hint: 'Foto o PDF — si tiene varias páginas, súbelas todas',
+      icon: Zap,
       done: ebUploaded > 0,
       section: 'property-docs',
     },
   ];
 
   const pendingItems = allItems.filter(i => !i.done);
-  const doneCount = allItems.filter(i => i.done).length;
-  const visibleItems = pendingItems.length > 0 ? pendingItems : allItems;
+  const doneItems = allItems.filter(i => i.done);
+  const allDone = pendingItems.length === 0;
+  const progress = doneItems.length;
+  const total = allItems.length;
 
   const submit = async () => {
     if (submitting) return;
@@ -90,62 +110,123 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
     };
   }
 
+  if (submitting) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 gap-4">
+        <Loader2 className="w-10 h-10 text-eltex-blue animate-spin" />
+        <p className="text-base font-medium text-gray-700">Enviando tu documentación...</p>
+        <p className="text-sm text-gray-400 text-center">Esto puede tardar unos segundos.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-white p-5 pb-10">
-      <div className="max-w-sm mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-50">
 
-        <div className="pt-2 pb-2">
-          <h1 className="text-2xl font-bold text-gray-900">Resumen</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {submitting
-              ? 'Enviando tu documentación...'
-              : hasBlockingDocumentProcessing
-                ? 'Procesando documentos...'
-                : pendingItems.length > 0
-                  ? `${pendingItems.length} elemento${pendingItems.length !== 1 ? 's' : ''} pendiente${pendingItems.length !== 1 ? 's' : ''}`
-                  : `${doneCount} de ${allItems.length} elementos completados`}
+      {/* Header */}
+      <div className="bg-white px-5 pt-6 pb-5 border-b border-gray-100">
+        <div className="max-w-sm mx-auto">
+          <img src="/eltex-logo.png" alt="Eltex" className="h-7 object-contain mb-4" />
+          <h1 className="text-xl font-bold text-gray-900">
+            {allDone ? '¡Todo listo para enviar!' : 'Completa tu expediente'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {allDone
+              ? 'Hemos recibido todos tus documentos. Revisa y envía cuando quieras.'
+              : `Faltan ${pendingItems.length} documento${pendingItems.length !== 1 ? 's' : ''} — toca cada uno para subirlo`}
           </p>
-        </div>
 
-        {/* Checklist */}
-        <div className="divide-y divide-gray-100">
-          {visibleItems.map(item => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => !submitting && onEdit(item.section)}
-              className="w-full flex items-center gap-3 py-3 text-left"
-              disabled={submitting}
-            >
-              {item.done
-                ? <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                : <Circle className="w-5 h-5 text-gray-200 shrink-0" />}
-              <span className={`text-sm flex-1 ${item.done ? 'text-gray-500' : 'text-gray-900 font-medium'}`}>
-                {item.label}
-              </span>
-              {!submitting && <span className="text-xs text-gray-400">{item.done ? '✓' : 'Añadir →'}</span>}
-            </button>
-          ))}
+          {/* Progress bar */}
+          <div className="mt-4 space-y-1.5">
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>{progress} de {total} documentos</span>
+              <span>{Math.round((progress / total) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-eltex-blue rounded-full transition-all duration-500"
+                style={{ width: `${(progress / total) * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Submitting indicator */}
-        {submitting && (
-          <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
-            <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
-            <p className="text-sm font-medium text-eltex-blue">Enviando documentación...</p>
+      <div className="max-w-sm mx-auto px-5 py-5 space-y-4">
+
+        {/* Pending items — big action cards */}
+        {pendingItems.length > 0 && (
+          <div className="space-y-3">
+            {pendingItems.map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onEdit(item.section)}
+                  disabled={hasBlockingDocumentProcessing}
+                  className="w-full bg-white rounded-2xl border-2 border-eltex-blue p-4 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                      <Icon className="w-5 h-5 text-eltex-blue" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm">{item.description}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{item.hint}</p>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1 bg-eltex-blue text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
+                      Subir <ArrowRight className="w-3 h-3" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Processing indicator */}
-        {hasBlockingDocumentProcessing && !submitting && (
-          <div className="flex items-center justify-center gap-3 py-6 bg-blue-50 rounded-2xl border border-blue-100">
-            <Loader2 className="w-6 h-6 text-eltex-blue animate-spin" />
-            <p className="text-sm font-medium text-eltex-blue">Preparando documentos...</p>
+        {/* Completed items — compact */}
+        {doneItems.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            {doneItems.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onEdit(item.section)}
+                  disabled={hasBlockingDocumentProcessing}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${idx > 0 ? 'border-t border-gray-100' : ''}`}
+                >
+                  <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-600">{item.doneLabel}</p>
+                  </div>
+                  <Icon className="w-4 h-4 text-gray-300 shrink-0" />
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Error + retry */}
-        {submitError && !submitting && (
+        {/* Processing */}
+        {hasBlockingDocumentProcessing && (
+          <div className="flex items-center justify-center gap-3 py-4 bg-blue-50 rounded-2xl border border-blue-100">
+            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin" />
+            <p className="text-sm font-medium text-eltex-blue">Procesando documentos...</p>
+          </div>
+        )}
+
+        {/* Signature warning */}
+        {!hasBlockingDocumentProcessing && !signaturesOk && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Aún no has firmado los documentos de representación. Puedes enviar igualmente.</span>
+          </div>
+        )}
+
+        {/* Error */}
+        {submitError && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl text-sm text-red-600">
               <AlertTriangle className="w-4 h-4 shrink-0" /> {submitError}
@@ -160,40 +241,39 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
           </div>
         )}
 
-        {!submitting && !submitError && !hasBlockingDocumentProcessing && !signaturesOk && (
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>Aún no has firmado los documentos de representación. Puedes enviar igualmente, pero se recomienda completar la firma.</span>
-          </div>
-        )}
+        {/* Bottom nav */}
+        {!submitError && (
+          <div className="pt-2 space-y-3">
+            {allDone ? (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={hasBlockingDocumentProcessing}
+                className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition-colors disabled:opacity-40 shadow-sm"
+              >
+                <Send className="w-5 h-5" /> Enviar documentación
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={hasBlockingDocumentProcessing}
+                className="w-full border-2 border-gray-200 text-gray-500 font-medium py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors hover:border-gray-300 disabled:opacity-40"
+              >
+                Enviar igualmente (incompleto)
+              </button>
+            )}
 
-        {!submitting && !submitError && !hasBlockingDocumentProcessing && signaturesOk && (
-          <p className="text-xs text-center text-gray-400">
-            Puedes enviar aunque falten algunos documentos.
-          </p>
-        )}
-
-        {/* Navigation */}
-        {!submitting && !submitError && (
-          <div className="flex gap-3 pt-2">
             {onBack && (
               <button
                 type="button"
                 onClick={onBack}
-                className="btn-secondary flex items-center gap-1.5 px-5"
                 disabled={hasBlockingDocumentProcessing}
+                className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 py-1 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4" /> Volver
               </button>
             )}
-            <button
-              type="button"
-              onClick={submit}
-              disabled={hasBlockingDocumentProcessing}
-              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Enviar documentación <ArrowRight className="w-4 h-4" />
-            </button>
           </div>
         )}
 
