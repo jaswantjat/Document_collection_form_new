@@ -580,6 +580,57 @@ app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
   res.send('\uFEFF' + csv); // BOM for Excel
 });
 
+// ── Download all project files as a ZIP ───────────────────────────────────────
+app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND' });
+
+  const fd = project.formData;
+  const zip = new AdmZip();
+
+  const addBase64File = (label, dataUrl, folder) => {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
+    const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
+    if (!mimeMatch) return;
+    const mime = mimeMatch[1];
+    const ext = mime === 'application/pdf' ? 'pdf' : mime.split('/')[1]?.split('+')[0] || 'jpg';
+    const base64Data = dataUrl.slice(mimeMatch[0].length);
+    const buffer = Buffer.from(base64Data, 'base64');
+    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    zip.addFile(`${folder}/${safeName}.${ext}`, buffer);
+  };
+
+  if (fd) {
+    addBase64File('DNI_frontal', fd.dni?.front?.photo?.preview, '1_documentos');
+    addBase64File('DNI_trasera', fd.dni?.back?.photo?.preview, '1_documentos');
+    addBase64File('IBI', fd.ibi?.photo?.preview, '1_documentos');
+
+    const getElecPages = (formData) => {
+      const eb = formData.electricityBill;
+      if (Array.isArray(eb?.pages)) return eb.pages;
+      if (Array.isArray(eb)) return eb;
+      return [];
+    };
+    getElecPages(fd).forEach((page, i) => {
+      addBase64File(`Factura_luz_${i + 1}`, page?.photo?.preview, '1_documentos');
+    });
+
+    (fd.electricalPanel?.photos || []).forEach((p, i) => addBase64File(`Cuadro_electrico_${i + 1}`, p?.preview, '2_fotos_instalacion'));
+    (fd.roof?.photos || []).forEach((p, i) => addBase64File(`Tejado_${i + 1}`, p?.preview, '2_fotos_instalacion'));
+    (fd.installationSpace?.photos || []).forEach((p, i) => addBase64File(`Espacio_instalacion_${i + 1}`, p?.preview, '2_fotos_instalacion'));
+    (fd.radiators?.photos || []).forEach((p, i) => addBase64File(`Radiadores_${i + 1}`, p?.preview, '2_fotos_instalacion'));
+  }
+
+  const zipBuffer = zip.toBuffer();
+  const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `${project.code}_${safeName}.zip`;
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', zipBuffer.length);
+  res.send(zipBuffer);
+});
+
 // ── Download all images for a project as a ZIP-like JSON bundle ────────────────
 // (Returns a JSON manifest so the front-end can trigger downloads)
 app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res) => {

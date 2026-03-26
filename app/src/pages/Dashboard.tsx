@@ -155,46 +155,21 @@ async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem)
   return () => generateImagePDF(overlay, item.filename);
 }
 
-async function downloadProjectFiles(project: any, token: string) {
-  try {
-    const response = await fetch(`/api/project/${project.code}/download-manifest`, {
-      headers: { 'x-dashboard-token': token },
-    });
-    const manifest = await response.json();
-
-    if (!manifest.success) {
-      throw new Error(manifest.message || 'Manifest download failed');
-    }
-
-    const rawFiles = Array.isArray(manifest.files) ? manifest.files : [];
-    const signedDocs = getDashboardProjectSummary(project).signedDocuments.filter((item) => item.present);
-
-    if (rawFiles.length === 0 && signedDocs.length === 0) {
-      alert('Este expediente no tiene archivos descargables aún.');
-      return;
-    }
-
-    for (const file of rawFiles) {
-      const asset: DashboardAssetItem = {
-        key: file.label,
-        label: file.label,
-        dataUrl: file.dataUrl,
-        mimeType: file.mimeType,
-      };
-      downloadDataUrlAsset(asset, project.code);
-      await sleep(180);
-    }
-
-    for (const item of signedDocs) {
-      const pdfFactory = await buildSignedPdfFactory(project, item);
-      const blob = await pdfFactory();
-      downloadBlob(blob, item.filename);
-      await sleep(220);
-    }
-  } catch (err) {
-    console.error('Bulk download failed:', err);
-    alert('Error al descargar los archivos del expediente.');
+async function downloadProjectZip(project: any, token: string) {
+  const response = await fetch(`/api/project/${project.code}/download-zip`, {
+    headers: { 'x-dashboard-token': token },
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `HTTP ${response.status}`);
   }
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    alert('Este expediente no tiene archivos descargables aún.');
+    return;
+  }
+  const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
+  downloadBlob(blob, `${project.code}_${safeName}.zip`);
 }
 
 function ProductBadge({ type }: { type: string }) {
@@ -600,12 +575,14 @@ function ProjectTableRow({
             disabled={downloading}
             onClick={async () => {
               setDownloading(true);
-              try { await downloadProjectFiles(project, token); }
+              try { await downloadProjectZip(project, token); }
+              catch { alert('Error al descargar los archivos del expediente.'); }
               finally { setDownloading(false); }
             }}
-            className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
-            {downloading ? 'Descargando...' : 'Descargar todo'}
+            <Download className="w-3 h-3" />
+            {downloading ? 'Descargando...' : 'Descargar ZIP'}
           </button>
         </div>
       </td>
@@ -986,15 +963,14 @@ function ProjectDetailPanel({
               disabled={downloading}
               onClick={async () => {
                 setDownloading(true);
-                try {
-                  await downloadProjectFiles(project, token);
-                } finally {
-                  setDownloading(false);
-                }
+                try { await downloadProjectZip(project, token); }
+                catch { alert('Error al descargar los archivos del expediente.'); }
+                finally { setDownloading(false); }
               }}
-              className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-1.5"
             >
-              {downloading ? 'Descargando...' : 'Descargar todo'}
+              <Download className="w-3 h-3" />
+              {downloading ? 'Descargando...' : 'Descargar ZIP'}
             </button>
           </div>
         </div>
