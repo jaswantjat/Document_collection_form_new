@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type {
   IBIData,
@@ -84,6 +84,55 @@ interface PendingItem {
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// ── Compact accepted row (frictionless resume) ─────────────────────────────────
+function CompactRow({ icon, title, subtitle, onExpand }: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  onExpand: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      className="w-full flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-100 rounded-2xl hover:bg-green-100 transition-colors text-left"
+    >
+      <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-green-800">{title}</p>
+        {subtitle && <p className="text-xs text-green-500 truncate">{subtitle}</p>}
+      </div>
+      <div className="flex items-center gap-1 text-xs text-green-400 shrink-0">
+        {icon}
+        <ChevronDown className="w-3.5 h-3.5" />
+      </div>
+    </button>
+  );
+}
+
+// ── Cross-document validation warnings ────────────────────────────────────────
+function computeValidationWarnings(
+  dni: DNIData,
+  electricityBill: ElectricityBillData
+): string[] {
+  const warnings: string[] = [];
+
+  const dniName: string | null = dni.front.extraction?.extractedData?.fullName ?? null;
+  const ebTitular: string | null = electricityBill.pages[0]?.extraction?.extractedData?.titular ?? null;
+
+  if (dniName && ebTitular) {
+    const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+    const dniWords = dniName.split(/\s+/).filter(w => w.length > 2).map(normalize);
+    const ebWords = ebTitular.split(/\s+/).filter(w => w.length > 2).map(normalize);
+    const hasCommonWord = dniWords.some(w => ebWords.includes(w));
+    if (!hasCommonWord) {
+      warnings.push(`El nombre del DNI («${dniName}») no coincide con el titular de la factura de luz («${ebTitular}»). Comprueba que el documento pertenezca al mismo titular.`);
+    }
+  }
+
+  return warnings;
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
@@ -711,7 +760,39 @@ export function PropertyDocsSection({
   const [dniIsBusy, setDniIsBusy] = useState(false);
   const [electricityIsBusy, setElectricityIsBusy] = useState(false);
 
+  // Frictionless resume: detect which docs were already done on first mount
+  const initialDni = useRef(!!(dni.front.photo || dni.back.photo));
+  const initialIbi = useRef(!!ibi.photo);
+  const initialElectricity = useRef(electricityBill.pages.length > 0);
+  const isResuming = initialDni.current || initialIbi.current || initialElectricity.current;
+
+  // Track which compact rows have been expanded by the user
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const expand = (key: string) => setExpanded(prev => ({ ...prev, [key]: true }));
+
   const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy;
+
+  // Validation warnings (only shown when at least one doc exists)
+  const hasAnyDoc = !!(dni.front.photo || ibi.photo || electricityBill.pages.length > 0);
+  const validationWarnings = hasAnyDoc ? computeValidationWarnings(dni, electricityBill) : [];
+
+  // Whether each card should show compact
+  const dniDone = !!(dni.front.photo || dni.back.photo);
+  const ibiDone = !!ibi.photo;
+  const elecDone = electricityBill.pages.length > 0;
+
+  const showDniCompact = isResuming && dniDone && !expanded.dni;
+  const showIbiCompact = isResuming && ibiDone && !expanded.ibi;
+  const showElecCompact = isResuming && elecDone && !expanded.electricity;
+
+  // Summary subtitle for compact rows
+  const dniSubtitle = dni.front.extraction?.extractedData?.fullName ?? undefined;
+  const ibiSubtitle = ibi.extraction?.extractedData?.referenciaCatastral ?? ibi.extraction?.extractedData?.titular ?? undefined;
+  const elecSubtitle = electricityBill.pages[0]?.extraction?.extractedData?.cups
+    ?? electricityBill.pages[0]?.extraction?.extractedData?.titular
+    ?? `${electricityBill.pages.length} imagen${electricityBill.pages.length !== 1 ? 'es' : ''}`;
+
+  const missingCount = [!dniDone, !ibiDone, !elecDone].filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-white p-5 pb-28">
@@ -719,40 +800,80 @@ export function PropertyDocsSection({
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Documentos</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Sube cada documento con buena luz. Solo se guarda cuando la verificación y la extracción terminan correctamente.
+            {isResuming && missingCount > 0
+              ? `Falta${missingCount > 1 ? 'n' : ''} ${missingCount} documento${missingCount > 1 ? 's' : ''} por completar.`
+              : 'Sube cada documento con buena luz. Solo se guarda cuando la verificación termina correctamente.'}
           </p>
         </div>
 
-        <DNICard
-          front={dni.front}
-          back={dni.back}
-          onFrontPhotoChange={onDNIFrontPhotoChange}
-          onFrontExtractionChange={onDNIFrontExtractionChange}
-          onBackPhotoChange={onDNIBackPhotoChange}
-          onBackExtractionChange={onDNIBackExtractionChange}
-          onBusyChange={setDniIsBusy}
-        />
+        {/* DNI card or compact row */}
+        {showDniCompact ? (
+          <CompactRow
+            icon={<CreditCard className="w-3.5 h-3.5" />}
+            title="DNI / NIE"
+            subtitle={dniSubtitle}
+            onExpand={() => expand('dni')}
+          />
+        ) : (
+          <DNICard
+            front={dni.front}
+            back={dni.back}
+            onFrontPhotoChange={onDNIFrontPhotoChange}
+            onFrontExtractionChange={onDNIFrontExtractionChange}
+            onBackPhotoChange={onDNIBackPhotoChange}
+            onBackExtractionChange={onDNIBackExtractionChange}
+            onBusyChange={setDniIsBusy}
+          />
+        )}
 
-        <DocCard
-          title="IBI o escritura"
-          hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
-          data={{ photo: ibi.photo, extraction: ibi.extraction }}
-          slotKey="ibi"
-          processing={documentProcessing.ibi}
-          onPhotoChange={onIBIPhotoChange}
-          onExtractionChange={onIBIExtractionChange}
-          onProcessingChange={onDocumentProcessingChange}
-        />
+        {/* IBI card or compact row */}
+        {showIbiCompact ? (
+          <CompactRow
+            icon={<Camera className="w-3.5 h-3.5" />}
+            title="IBI o escritura"
+            subtitle={ibiSubtitle}
+            onExpand={() => expand('ibi')}
+          />
+        ) : (
+          <DocCard
+            title="IBI o escritura"
+            hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
+            data={{ photo: ibi.photo, extraction: ibi.extraction }}
+            slotKey="ibi"
+            processing={documentProcessing.ibi}
+            onPhotoChange={onIBIPhotoChange}
+            onExtractionChange={onIBIExtractionChange}
+            onProcessingChange={onDocumentProcessingChange}
+          />
+        )}
 
-        <ElectricityCard
-          pages={electricityBill.pages}
-          onAddPage={onAddElectricityPage}
-          onRemovePage={onRemoveElectricityPage}
-          onBusyChange={setElectricityIsBusy}
-        />
+        {/* Electricity card or compact row */}
+        {showElecCompact ? (
+          <CompactRow
+            icon={<Zap className="w-3.5 h-3.5" />}
+            title="Factura de luz"
+            subtitle={elecSubtitle}
+            onExpand={() => expand('electricity')}
+          />
+        ) : (
+          <ElectricityCard
+            pages={electricityBill.pages}
+            onAddPage={onAddElectricityPage}
+            onRemovePage={onRemoveElectricityPage}
+            onBusyChange={setElectricityIsBusy}
+          />
+        )}
+
+        {/* Cross-document validation warnings */}
+        {validationWarnings.map((warning, i) => (
+          <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">{warning}</p>
+          </div>
+        ))}
 
         <p className="text-xs text-gray-400 text-center pt-1">
-          Puedes continuar sin tenerlos todos, pero no mientras haya una verificación o extracción en curso.
+          Puedes continuar sin tenerlos todos, pero no mientras haya una verificación en curso.
         </p>
 
         {errors['propertyDocs.blocking'] && (

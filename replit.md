@@ -44,6 +44,17 @@ Default projects seeded in db.json:
 - `ELT20250002` — Juan Pérez Martínez (aerothermal)
 - `ELT20250003` — Laura Fernández Ruiz (solar)
 
+## Changes (2026-03-26, Session 3)
+
+### Speed & UX Improvements
+- **Batch AI extraction**: Electricity bill pages now sent in ONE AI call (all images bundled) instead of one call per image → faster extraction. New `/api/extract-batch` backend endpoint.
+- **Image compression**: All images compressed to max 1600px / JPEG 82% before sending to AI — 10-20× smaller payload, much faster upload.
+- **IBI PDF upload**: DocCard now accepts PDFs — converts first page via Stirling-PDF then extracts as normal.
+- **Province auto-confirm**: When province is detected from electricity bill and maps to a known region, the province-selection screen auto-confirms with a 350ms animation — no button click needed.
+- **Minimal success screen**: SuccessSection redesigned as a warm, minimal thank-you message ("Gracias, [nombre].") with smooth fade-in. No buttons.
+- **Frictionless resume**: When reopening the link with docs already uploaded, completed docs appear as compact green rows (tap to expand). Only missing docs show full upload cards. Title adapts to show "Faltan X documentos".
+- **Cross-document validation**: Name mismatch between DNI and electricity bill `titular` triggers an amber warning banner in PropertyDocsSection.
+
 ## Changes (2026-03-25, Session 2)
 
 ### UI: Carousel + Single Signature

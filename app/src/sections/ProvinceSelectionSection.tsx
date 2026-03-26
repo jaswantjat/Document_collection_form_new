@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle, MapPin, Building2, User } from 'lucide-react';
 import type { FormData, RepresentationData } from '@/types';
 import { getLocationInfo, AVAILABLE_LOCATIONS, type LocationRegion } from '@/lib/provinceMapping';
@@ -45,6 +45,17 @@ export function ProvinceSelectionSection({
     setLocationConfirmed(true);
     setShowManual(false);
   };
+
+  // Auto-confirm when province is detected and maps to a known region
+  useEffect(() => {
+    if (locationConfirmed || showManual || !province) return;
+    const locInfo = getLocationInfo(province);
+    if (locInfo.id === 'other') return;
+    // Brief delay so user sees "Detected" before it auto-confirms
+    const timer = setTimeout(() => confirmLocation(locInfo.id), 350);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canContinue =
     locationConfirmed &&
