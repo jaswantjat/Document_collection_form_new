@@ -8,9 +8,34 @@ interface Props {
   onContinue: () => void;
 }
 
+/**
+ * Normalise and validate a Spanish phone number.
+ * Accepts: 9-digit numbers starting with 6/7/8/9, optionally prefixed with +34 or 0034.
+ * Returns the normalised digits (9 chars) or null if invalid.
+ */
+function parseSpanishPhone(raw: string): string | null {
+  // Strip spaces, dashes, dots, parentheses
+  let clean = raw.replace(/[\s\-.()+]/g, '');
+  // Remove country prefix (0034 or 34 when followed by 9 digits)
+  if (clean.startsWith('0034')) clean = clean.slice(4);
+  else if (clean.startsWith('34') && clean.length === 11) clean = clean.slice(2);
+  // Must be exactly 9 digits
+  if (!/^\d{9}$/.test(clean)) return null;
+  // Must start with 6, 7, 8, or 9 (valid Spanish number)
+  if (!/^[6-9]/.test(clean)) return null;
+  return clean;
+}
+
+function getPhoneError(val: string): string | null {
+  if (!val.trim()) return 'El teléfono es obligatorio.';
+  if (!parseSpanishPhone(val)) return 'Introduce un teléfono español válido (9 dígitos, empieza por 6, 7, 8 o 9).';
+  return null;
+}
+
 export function PhoneSection({ onPhoneConfirmed }: Props) {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
+  const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -20,9 +45,14 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Live validation once the field has been touched
+  const liveError = touched ? getPhoneError(phone) : null;
+
   const lookup = async () => {
+    setTouched(true);
     const val = phone.trim();
-    if (val.replace(/\s/g, '').length < 9) { setError('Introduce un teléfono válido'); return; }
+    const phoneError = getPhoneError(val);
+    if (phoneError) { setError(phoneError); return; }
     setLoading(true); setError('');
     try {
       const res = await lookupByPhone(val);
@@ -33,8 +63,10 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
   };
 
   const create = async () => {
+    setTouched(true);
     const val = phone.trim();
-    if (val.replace(/\s/g, '').length < 9) { setError('Introduce un teléfono válido'); return; }
+    const phoneError = getPhoneError(val);
+    if (phoneError) { setError(phoneError); return; }
     setLoading(true); setError('');
     try {
       const res = await createProject({
@@ -70,13 +102,16 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                 ref={inputRef}
                 type="tel"
                 value={phone}
-                onChange={e => { setPhone(e.target.value); setError(''); }}
+                onChange={e => { setPhone(e.target.value); setError(''); setTouched(true); }}
                 onKeyDown={e => e.key === 'Enter' && lookup()}
                 placeholder="+34 600 000 000"
                 autoComplete="tel"
-                className={`form-input text-lg ${error ? 'error' : ''}`}
+                maxLength={16}
+                className={`form-input text-lg ${(liveError || error) ? 'error' : ''}`}
               />
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              {(liveError || error) && (
+                <p className="text-sm text-red-500">{liveError || error}</p>
+              )}
               <button
                 type="button"
                 onClick={lookup}
