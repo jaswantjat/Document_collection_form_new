@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useDeferredValue, useEffect, useEffectEvent, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Archive,
@@ -15,6 +16,7 @@ import {
   FileText,
   Image as ImageIcon,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Mail,
   MapPin,
@@ -26,9 +28,11 @@ import {
   Thermometer,
   User,
   Users,
+  X,
+  Upload,
   Zap,
 } from 'lucide-react';
-import { dashboardLogout, fetchDashboard, generateImagePDF } from '@/services/api';
+import { dashboardLogout, fetchDashboard, generateImagePDF, extractDocument, adminUpdateFormData } from '@/services/api';
 import {
   getDashboardProjectSummary,
   getDashboardElectricityPages,
@@ -114,27 +118,39 @@ function openDataUrlInNewTab(dataUrl: string) {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const blob = new Blob([bytes], { type: mime });
     const url = URL.createObjectURL(blob);
-    const w = window.open(url, '_blank', 'noopener,noreferrer');
-    if (w) setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch {
-    window.open(dataUrl, '_blank', 'noopener,noreferrer');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 }
 
 async function viewPDFInNewTab(pdfFactory: () => Promise<Blob>) {
-  const previewWindow = window.open('', '_blank', 'noopener,noreferrer');
-
   try {
     const blob = await pdfFactory();
     const url = URL.createObjectURL(blob);
-    if (previewWindow) {
-      previewWindow.location.href = url;
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {
     console.error('View PDF failed:', err);
-    if (previewWindow) previewWindow.close();
     alert('Error al visualizar el PDF.');
   }
 }
@@ -408,7 +424,7 @@ function DocumentTableCell({
         src={item.dataUrl}
         alt={item.label}
         className="w-12 h-14 rounded object-cover border border-gray-200 cursor-zoom-in hover:opacity-80 transition-opacity"
-        onClick={() => window.open(item.dataUrl!, '_blank')}
+        onClick={() => openDataUrlInNewTab(item.dataUrl!)}
       />
       {item.needsManualReview && (
         <div className="flex items-center gap-1 text-[10px] text-orange-600 font-medium">
@@ -496,7 +512,7 @@ function ElectricityTableCell({ pages }: { project: any; pages: DashboardDocumen
           src={page.dataUrl}
           alt={page.label}
           className="w-12 h-14 rounded object-cover border border-gray-200 cursor-zoom-in hover:opacity-80 transition-opacity"
-          onClick={() => window.open(page.dataUrl!, '_blank')}
+          onClick={() => openDataUrlInNewTab(page.dataUrl!)}
           title={page.label}
         />
       ))}
@@ -504,20 +520,208 @@ function ElectricityTableCell({ pages }: { project: any; pages: DashboardDocumen
   );
 }
 
-function ProjectTableRow({
+type AdminDocType = 'dni-front' | 'dni-back' | 'ibi' | 'electricity-bill';
+
+const ADMIN_DOC_TABS: { key: AdminDocType; label: string }[] = [
+  { key: 'dni-front', label: 'DNI frontal' },
+  { key: 'dni-back', label: 'DNI trasera' },
+  { key: 'ibi', label: 'IBI / Escritura' },
+  { key: 'electricity-bill', label: 'Factura luz' },
+];
+
+function AdminUploadModal({
   project,
   token,
+  onClose,
+  onRefresh,
 }: {
   project: any;
   token: string;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<AdminDocType>('dni-front');
+  const [status, setStatus] = useState<'idle' | 'extracting' | 'uploading' | 'done' | 'error'>('idle');
+  const [statusMsg, setStatusMsg] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file: File) => {
+    setStatus('extracting');
+    setStatusMsg('Extrayendo datos con IA...');
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const docTypeMap: Record<AdminDocType, Parameters<typeof extractDocument>[1]> = {
+        'dni-front': 'dniFront',
+        'dni-back': 'dniBack',
+        'ibi': 'ibi',
+        'electricity-bill': 'electricity',
+      };
+
+      const res = await extractDocument(dataUrl, docTypeMap[activeTab]);
+      if (!res.success || !res.extraction) {
+        setStatus('error');
+        setStatusMsg(res.message || 'No se pudo extraer el documento.');
+        return;
+      }
+
+      const photo = {
+        id: `admin-${Date.now()}`,
+        preview: dataUrl,
+        timestamp: Date.now(),
+        sizeBytes: file.size,
+      };
+
+      let formDataPatch: any;
+      if (activeTab === 'dni-front') {
+        formDataPatch = { dni: { front: { photo, extraction: res.extraction } } };
+      } else if (activeTab === 'dni-back') {
+        formDataPatch = { dni: { back: { photo, extraction: res.extraction } } };
+      } else if (activeTab === 'ibi') {
+        formDataPatch = { ibi: { photo, extraction: res.extraction } };
+      } else {
+        const existingPages = project.formData?.electricityBill?.pages ?? [];
+        formDataPatch = {
+          electricityBill: {
+            pages: [...existingPages, { photo, extraction: res.extraction }],
+          },
+        };
+      }
+
+      setStatus('uploading');
+      setStatusMsg('Guardando en el expediente...');
+
+      const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
+      if (!saveRes.success) {
+        setStatus('error');
+        setStatusMsg(saveRes.message || 'Error al guardar.');
+        return;
+      }
+
+      setStatus('done');
+      setStatusMsg('Documento guardado correctamente.');
+      onRefresh();
+    } catch (err) {
+      console.error('Admin upload failed:', err);
+      setStatus('error');
+      setStatusMsg('Error inesperado. Inténtalo de nuevo.');
+    }
+  };
+
+  const reset = () => {
+    setStatus('idle');
+    setStatusMsg('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Subir documento — {project.code}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex gap-1.5 flex-wrap">
+            {ADMIN_DOC_TABS.map(tab => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => { setActiveTab(tab.key); reset(); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  activeTab === tab.key
+                    ? 'bg-eltex-blue text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {status === 'idle' && (
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-8 cursor-pointer hover:border-eltex-blue hover:bg-blue-50 transition-colors">
+              <Upload className="w-6 h-6 text-gray-400" />
+              <span className="text-sm text-gray-500">Haz clic para seleccionar imagen o PDF</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                }}
+              />
+            </label>
+          )}
+
+          {(status === 'extracting' || status === 'uploading') && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+              <span className="text-sm text-blue-800">{statusMsg}</span>
+            </div>
+          )}
+
+          {status === 'done' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span className="text-sm text-emerald-800">{statusMsg}</span>
+              </div>
+              <button type="button" onClick={reset} className="btn-secondary w-full text-sm">
+                Subir otro
+              </button>
+            </div>
+          )}
+
+          {status === 'error' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+                <span className="text-sm text-red-800">{statusMsg}</span>
+              </div>
+              <button type="button" onClick={reset} className="btn-secondary w-full text-sm">
+                Reintentar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectTableRow({
+  project,
+  token,
+  onRefresh,
+}: {
+  project: any;
+  token: string;
+  onRefresh: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const summary = getDashboardProjectSummary(project);
   const documents = summary.documents;
   const byKey = new Map(documents.map((item) => [item.key, item]));
   const allDocs = [...documents, ...summary.electricityPages];
 
   return (
+    <>
     <tr className="bg-white hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="space-y-1 text-sm">
@@ -579,6 +783,14 @@ function ProjectTableRow({
           </a>
           <button
             type="button"
+            onClick={() => setShowUpload(true)}
+            className="px-3 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1.5"
+          >
+            <Upload className="w-3 h-3" />
+            Subir docs
+          </button>
+          <button
+            type="button"
             disabled={downloading}
             onClick={async () => {
               setDownloading(true);
@@ -594,6 +806,16 @@ function ProjectTableRow({
         </div>
       </td>
     </tr>
+    {showUpload && createPortal(
+      <AdminUploadModal
+        project={project}
+        token={token}
+        onClose={() => setShowUpload(false)}
+        onRefresh={onRefresh}
+      />,
+      document.body
+    )}
+    </>
   );
 }
 
@@ -1279,6 +1501,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                           key={project.code}
                           project={project}
                           token={token}
+                          onRefresh={load}
                         />
                       ))}
                     </tbody>

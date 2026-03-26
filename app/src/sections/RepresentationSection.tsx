@@ -92,8 +92,8 @@ function SignedDocumentPreview({
 
 export function RepresentationSection({ formData, location, onChange, onBack, onContinue }: Props) {
   const data = formData.representation;
-
   const docs = getDocsForLocation(location);
+
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const [sharedSignature, setSharedSignature] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -172,6 +172,27 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       setApplying(false);
     }
   };
+
+  if (docs.length === 0) {
+    return (
+      <div className="min-h-screen bg-white p-5 pb-10">
+        <div className="max-w-sm mx-auto space-y-5 pt-8">
+          <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
+          <p className="text-gray-500 text-sm">
+            No se requieren documentos de representación para su provincia.
+          </p>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onBack} className="btn-secondary flex items-center gap-1.5 px-5">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={onContinue} className="btn-primary flex-1 flex items-center justify-center gap-2">
+              Continuar <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white p-5 pb-10">

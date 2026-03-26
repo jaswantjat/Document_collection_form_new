@@ -431,7 +431,14 @@ Transforms raw project data into typed dashboard display objects:
 
 ## 9. Completed Work (Changelog)
 
-### March 26, 2026
+### March 26, 2026 (Session 4)
+
+- **Fixed B1/B6 — `other` province dead-end:** `hasRepresentationDone` now returns `true` for `other`; `ProvinceSelectionSection.onContinue` skips to `review` for `other`; `RepresentationSection` shows a friendly message + continue button when `docs[]` is empty; `validateRepresentation` skips signature checks for `other`
+- **Fixed B2/B7 — Dashboard popup blockers:** Replaced all `window.open()` calls with anchor element click pattern (works in Replit iframes); applies to `openDataUrlInNewTab`, `viewPDFInNewTab`, and thumbnail `onClick` in `DocumentTableCell` and `ElectricityTableCell`
+- **Fixed B4 — Electricity duplicate detection:** `ElectricityCard` now checks `pages.some(p => p.photo?.preview === photo.preview)` before calling `onAddPage` — duplicate uploads silently ignored
+- **Dashboard admin document upload:** `AdminUploadModal` added — upload any document type (DNI front/back, IBI, electricity page) directly from the dashboard; uses AI extraction + `PUT /api/project/:code/admin-formdata`; rendered via React `createPortal`; "Subir docs" button added to each project row's actions column
+
+### March 26, 2026 (Session 3)
 
 - **Signature alignment fix:** `signaturaPersonaInteressada` box restored to `[76, 1552, 575, 1685]` in Representació document (was accidentally changed)
 - **Template version bumped** to `2026-03-26.3`
@@ -453,18 +460,18 @@ Transforms raw project data into typed dashboard display objects:
 
 | # | Bug | File | Status |
 |---|-----|------|--------|
-| B1 | `other` location creates dead-end in Representation step — `hasRepresentationDone` returns `false` for `other`; `docs[]` is empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Pending fix** |
-| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — uses `window.open()` which is blocked by popup blockers | `Dashboard.tsx` | **Pending fix** |
+| B1 | `other` location creates dead-end in Representation step — `hasRepresentationDone` returns `false` for `other`; `docs[]` is empty so user can't sign or continue | `App.tsx`, `RepresentationSection.tsx` | **Fixed 2026-03-26** |
+| B2 | Preview (`openDataUrlInNewTab`, `viewPDFInNewTab`) blocked in Replit iframe — uses `window.open()` which is blocked by popup blockers | `Dashboard.tsx` | **Fixed 2026-03-26** |
 | B3 | `buildSignedPdfFactory` — `imageDataUrl` is now always `undefined` (stripped from upload); relies entirely on `renderSignedDocumentOverlay` fallback | `Dashboard.tsx` | Working (fallback works, but adds latency) |
 
 ### Medium
 
 | # | Bug | File | Status |
 |---|-----|------|--------|
-| B4 | Electricity bill pages: no duplicate detection — user can upload the same page multiple times | `PropertyDocsSection.tsx` | Pending |
+| B4 | Electricity bill pages: no duplicate detection — user can upload the same page multiple times | `PropertyDocsSection.tsx` | **Fixed 2026-03-26** |
 | B5 | Company data change clears ALL signed artifacts — even fixing a typo forces full re-sign | `useFormState.ts` | Known limitation |
-| B6 | `getInitialSection` returns `representation` for `other` province — user is sent to Representation but no docs exist | `App.tsx` | **Pending fix (same as B1)** |
-| B7 | `DocumentTableCell` and `ElectricityTableCell` use `window.open()` for thumbnail preview — same popup blocker issue | `Dashboard.tsx` | **Pending fix** |
+| B6 | `getInitialSection` returns `representation` for `other` province — user is sent to Representation but no docs exist | `App.tsx` | **Fixed 2026-03-26** |
+| B7 | `DocumentTableCell` and `ElectricityTableCell` use `window.open()` for thumbnail preview — same popup blocker issue | `Dashboard.tsx` | **Fixed 2026-03-26** |
 
 ### Low / Security
 
@@ -479,7 +486,7 @@ Transforms raw project data into typed dashboard display objects:
 
 ### High Priority
 
-#### FIX — `other` province navigation (B1, B6)
+#### ~~FIX — `other` province navigation (B1, B6)~~ ✅ DONE (2026-03-26)
 
 **Files:** `App.tsx`, `RepresentationSection.tsx`, `useFormState.ts`
 
@@ -509,7 +516,7 @@ Transforms raw project data into typed dashboard display objects:
 
 ---
 
-#### FIX — Dashboard preview (B2, B7)
+#### ~~FIX — Dashboard preview (B2, B7)~~ ✅ DONE (2026-03-26)
 
 **File:** `Dashboard.tsx`
 
@@ -539,7 +546,7 @@ For thumbnail `onClick` in `DocumentTableCell` and `ElectricityTableCell`, repla
 
 ---
 
-#### FEATURE — Dashboard document upload (admin)
+#### ~~FEATURE — Dashboard document upload (admin)~~ ✅ DONE (2026-03-26)
 
 **Backend:** `PUT /api/project/:code/admin-formdata` — **already implemented**
 
@@ -567,7 +574,7 @@ Also update `DNIDisplay`, `IBIDisplay`, `ElectricityDisplay` to show even when n
 
 ### Medium Priority
 
-#### FIX — Electricity duplicate detection
+#### ~~FIX — Electricity duplicate detection~~ ✅ DONE (2026-03-26)
 
 **File:** `PropertyDocsSection.tsx`
 

@@ -37,6 +37,7 @@ function hasPropertyDocsDone(formData: FormData | null): boolean {
 
 function hasRepresentationDone(formData: FormData | null, location: string | null): boolean {
   if (!formData || !location) return false;
+  if (location === 'other') return true;
   const rep = formData.representation;
   if (!rep) return false;
   if (location === 'cataluna') {
@@ -177,7 +178,10 @@ function FormApp() {
             onLocationSelect={setLocation}
             onRepresentationChange={(patch) => setRepresentation({ ...formData.representation, ...patch })}
             onBack={() => goTo('property-docs')}
-            onContinue={() => goTo('representation')}
+            onContinue={() => {
+              const loc = formData.location ?? formData.representation?.location ?? null;
+              goTo(loc === 'other' ? 'review' : 'representation');
+            }}
           />
         );
 

@@ -561,10 +561,13 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         confirmedByUser: true,
       };
 
-      // Add each page (all share the merged extraction)
+      // Add each page (all share the merged extraction), skipping duplicates
       for (const { file, id, preview, width, height } of validFiles) {
         const photo = createUploadedPhoto(file, preview, width, height);
-        onAddPage(photo, extraction);
+        const isDuplicate = pages.some(p => p.photo?.preview === photo.preview);
+        if (!isDuplicate) {
+          onAddPage(photo, extraction);
+        }
         setPendingItems(prev => prev.filter(p => p.id !== id));
       }
     } catch {

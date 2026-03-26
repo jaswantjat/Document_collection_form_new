@@ -401,14 +401,16 @@ export const useFormState = (projectCode: string | null, productType: ProductTyp
       if (!formData.representation.companyName.trim()) e['representation.companyName'] = 'Nombre de empresa obligatorio';
       if (!formData.representation.companyNIF.trim()) e['representation.companyNIF'] = 'NIF obligatorio';
     }
-    if (effectiveLocation === 'cataluna') {
-      if (!formData.representation.ivaCertificateSignature) e['representation.ivaSignature'] = 'Firma del certificado IVA obligatoria';
-      if (!formData.representation.representacioSignature) e['representation.representacioSignature'] = 'Firma de l\'autorització de representació obligatòria';
-      if (!formData.representation.generalitatSignature) e['representation.generalitatSignature'] = 'Firma de la declaració Generalitat obligatòria';
-    }
-    if (effectiveLocation === 'madrid' || effectiveLocation === 'valencia') {
-      if (!formData.representation.ivaCertificateEsSignature) e['representation.ivaCertificateEsSignature'] = 'Firma del certificado IVA obligatoria';
-      if (!formData.representation.poderRepresentacioSignature) e['representation.poderRepresentacioSignature'] = 'Firma del poder de representación obligatoria';
+    if (effectiveLocation !== 'other') {
+      if (effectiveLocation === 'cataluna') {
+        if (!formData.representation.ivaCertificateSignature) e['representation.ivaSignature'] = 'Firma del certificado IVA obligatoria';
+        if (!formData.representation.representacioSignature) e['representation.representacioSignature'] = 'Firma de l\'autorització de representació obligatòria';
+        if (!formData.representation.generalitatSignature) e['representation.generalitatSignature'] = 'Firma de la declaració Generalitat obligatòria';
+      }
+      if (effectiveLocation === 'madrid' || effectiveLocation === 'valencia') {
+        if (!formData.representation.ivaCertificateEsSignature) e['representation.ivaCertificateEsSignature'] = 'Firma del certificado IVA obligatoria';
+        if (!formData.representation.poderRepresentacioSignature) e['representation.poderRepresentacioSignature'] = 'Firma del poder de representación obligatoria';
+      }
     }
     setErrors(e);
     return Object.keys(e).length === 0;

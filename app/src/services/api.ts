@@ -132,6 +132,19 @@ export async function extractDocumentBatch(
   return res.json();
 }
 
+export async function adminUpdateFormData(
+  code: string,
+  formDataPatch: any,
+  dashboardToken: string
+): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/admin-formdata`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
+    body: JSON.stringify({ formDataPatch }),
+  });
+  return res.json();
+}
+
 export async function generateImagePDF(imageDataUrl: string, filename?: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}/generate-image-pdf`, {
     method: 'POST',
