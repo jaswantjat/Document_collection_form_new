@@ -38,6 +38,11 @@ export interface DashboardAssetGroup {
   items: DashboardAssetItem[];
 }
 
+export interface DashboardWarning {
+  key: string;
+  message: string;
+}
+
 export interface DashboardProjectSummary {
   location: string | null;
   lastUpdated: string | null;
@@ -49,6 +54,7 @@ export interface DashboardProjectSummary {
   finalSignatures: DashboardAssetItem[];
   photoGroups: DashboardAssetGroup[];
   downloadGroups: DashboardAssetGroup[];
+  warnings: DashboardWarning[];
   counts: {
     documentsPresent: number;
     documentsTotal: number;
@@ -326,6 +332,34 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
   ].filter((group) => group.items.length > 0);
 }
 
+function normalizeNamePart(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+}
+
+function computeDashboardWarnings(project: any): DashboardWarning[] {
+  const warnings: DashboardWarning[] = [];
+  const formData = project?.formData;
+  if (!formData) return warnings;
+
+  const dniName: string | null = formData?.dni?.front?.extraction?.extractedData?.fullName ?? null;
+  const ebPages: any[] = getElectricityPages(formData);
+  const ebTitular: string | null = ebPages[0]?.extraction?.extractedData?.titular ?? null;
+
+  if (dniName && ebTitular) {
+    const dniWords = dniName.split(/\s+/).filter((w: string) => w.length > 2).map(normalizeNamePart);
+    const ebWords = ebTitular.split(/\s+/).filter((w: string) => w.length > 2).map(normalizeNamePart);
+    const hasCommonWord = dniWords.some((w: string) => ebWords.includes(w));
+    if (!hasCommonWord) {
+      warnings.push({
+        key: 'titular-mismatch',
+        message: `El nombre del DNI («${dniName}») no coincide con el titular de la factura de luz («${ebTitular}»). Comprueba que el documento pertenezca al mismo titular.`,
+      });
+    }
+  }
+
+  return warnings;
+}
+
 function buildCounts(
   project: any,
   documents: DashboardDocumentItem[],
@@ -375,6 +409,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const downloadGroups = getDashboardDownloadGroups(project);
   const snapshot = getSnapshot(project);
   const counts = buildCounts(project, documents, electricityPages, signedDocuments, finalSignatures);
+  const warnings = computeDashboardWarnings(project);
 
   return {
     location: getLocation(project),
@@ -392,6 +427,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     finalSignatures,
     photoGroups,
     downloadGroups,
+    warnings,
     counts,
   };
 }

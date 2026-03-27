@@ -400,13 +400,21 @@ function SignedPdfButtons({
 
 function DocumentTableCell({
   item,
+  projectCode,
 }: {
   project: any;
   item: DashboardDocumentItem;
+  projectCode: string;
 }) {
   if (!item?.present || !item?.dataUrl) {
     return <span className="text-sm text-gray-300">—</span>;
   }
+  const asset: DashboardAssetItem = {
+    key: item.key,
+    label: item.label,
+    dataUrl: item.dataUrl,
+    mimeType: item.mimeType,
+  };
   return (
     <div className="space-y-1">
       <img
@@ -415,11 +423,21 @@ function DocumentTableCell({
         className="w-12 h-14 rounded object-cover border border-gray-200 cursor-zoom-in hover:opacity-80 transition-opacity"
         onClick={() => openDataUrlInNewTab(item.dataUrl!)}
       />
-      {item.needsManualReview && (
-        <div className="flex items-center gap-1 text-[10px] text-orange-600 font-medium">
-          <AlertTriangle className="w-3 h-3" /> Revisar
-        </div>
-      )}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => downloadDataUrlAsset(asset, projectCode)}
+          className="h-6 w-6 inline-flex items-center justify-center rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+          title={`Descargar ${item.label}`}
+        >
+          <Download className="w-3 h-3" />
+        </button>
+        {item.needsManualReview && (
+          <div className="flex items-center gap-1 text-[10px] text-orange-600 font-medium">
+            <AlertTriangle className="w-3 h-3" /> Revisar
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -456,15 +474,17 @@ function SignedPdfsTableCell({
 function StatusCell({
   allDocs,
   submissionCount,
+  warnings,
 }: {
   allDocs: DashboardDocumentItem[];
   submissionCount: number;
+  warnings: import('@/lib/dashboardProject').DashboardWarning[];
 }) {
   const pending = allDocs.filter(d => !d.present);
   const allDone = pending.length === 0;
 
   return (
-    <div className="space-y-1.5 min-w-[140px]">
+    <div className="space-y-1.5 min-w-[160px]">
       {allDone ? (
         <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
           <CheckCircle className="w-3.5 h-3.5" /> Completo
@@ -484,26 +504,45 @@ function StatusCell({
           <CheckCircle className="w-3 h-3" /> {submissionCount} envío{submissionCount !== 1 ? 's' : ''}
         </div>
       )}
+      {warnings.length > 0 && (
+        <ul className="space-y-1">
+          {warnings.map(w => (
+            <li key={w.key} className="flex items-start gap-1 text-[10px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 leading-snug">
+              <AlertTriangle className="w-3 h-3 shrink-0 mt-px text-red-500" />
+              <span>{w.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function ElectricityTableCell({ pages }: { project: any; pages: DashboardDocumentItem[] }) {
+function ElectricityTableCell({ pages, projectCode }: { project: any; pages: DashboardDocumentItem[]; projectCode: string }) {
   const uploaded = pages.filter(p => p.present);
   if (uploaded.length === 0) {
     return <span className="text-sm text-gray-300">—</span>;
   }
   return (
-    <div className="flex gap-1.5 flex-wrap">
+    <div className="flex gap-2 flex-wrap">
       {uploaded.map((page) => page.dataUrl && (
-        <img
-          key={page.key}
-          src={page.dataUrl}
-          alt={page.label}
-          className="w-12 h-14 rounded object-cover border border-gray-200 cursor-zoom-in hover:opacity-80 transition-opacity"
-          onClick={() => openDataUrlInNewTab(page.dataUrl!)}
-          title={page.label}
-        />
+        <div key={page.key} className="space-y-1">
+          <img
+            src={page.dataUrl}
+            alt={page.label}
+            className="w-12 h-14 rounded object-cover border border-gray-200 cursor-zoom-in hover:opacity-80 transition-opacity"
+            onClick={() => openDataUrlInNewTab(page.dataUrl!)}
+            title={page.label}
+          />
+          <button
+            type="button"
+            onClick={() => downloadDataUrlAsset({ key: page.key, label: page.label, dataUrl: page.dataUrl!, mimeType: page.mimeType }, projectCode)}
+            className="w-full h-6 inline-flex items-center justify-center rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+            title={`Descargar ${page.label}`}
+          >
+            <Download className="w-3 h-3" />
+          </button>
+        </div>
       ))}
     </div>
   );
@@ -745,11 +784,11 @@ function ProjectTableRow({
         <p className="text-sm text-gray-800 leading-relaxed">{summary.address || '—'}</p>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('dniFront') as DashboardDocumentItem} /></td>
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('dniBack') as DashboardDocumentItem} /></td>
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('ibi') as DashboardDocumentItem} /></td>
+      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('dniFront') as DashboardDocumentItem} projectCode={project.code} /></td>
+      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('dniBack') as DashboardDocumentItem} projectCode={project.code} /></td>
+      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell project={project} item={byKey.get('ibi') as DashboardDocumentItem} projectCode={project.code} /></td>
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <ElectricityTableCell project={project} pages={summary.electricityPages} />
+        <ElectricityTableCell project={project} pages={summary.electricityPages} projectCode={project.code} />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
@@ -757,7 +796,7 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <StatusCell allDocs={allDocs} submissionCount={project.submissionCount} />
+        <StatusCell allDocs={allDocs} submissionCount={project.submissionCount} warnings={summary.warnings} />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
