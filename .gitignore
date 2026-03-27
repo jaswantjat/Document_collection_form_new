@@ -16,11 +16,20 @@ build
 # Legacy platform config
 .replit
 replit.md
+.agents/
+.claude/
+.orchids/
+CLAUDE.md
+IMPLEMENTATION_PLAN.md
+attached_assets/
 
 # Uploads and temporary files
 backend/uploads/
 backend/db.json
+backend/output-poder.pdf
 *.log
+*.bak
+*.backup
 
 # OS files
 .DS_Store
