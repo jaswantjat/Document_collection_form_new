@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
 import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
 import { submitForm } from '@/services/api';
+import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
 
 interface Props {
@@ -46,19 +47,17 @@ export function ReviewSection({
   const { dni, ibi, electricityBill } = formData;
   const ebPages = electricityBill.pages ?? [];
   const ebUploaded = ebPages.filter(p => !!p.photo).length;
+  const dniDone = isIdentityDocumentComplete(dni);
 
   const allItems = [
     {
       id: 'dni',
       label: 'DNI / NIE',
-      doneLabel: (dni.front.photo && dni.back.photo)
-        ? 'DNI / NIE — ambas caras'
-        : dni.front.photo ? 'DNI / NIE — cara frontal'
-        : 'DNI / NIE — cara trasera',
-      description: 'Foto de tu DNI o NIE por ambas caras',
-      hint: 'Asegúrate de que los datos sean legibles',
+      doneLabel: getIdentityDocumentDoneLabel(dni),
+      description: 'Documento de identidad del titular',
+      hint: 'DNI por ambas caras o NIE válido',
       icon: Camera,
-      done: !!dni.front.photo && !!dni.back.photo,
+      done: dniDone,
       section: 'property-docs',
     },
     {

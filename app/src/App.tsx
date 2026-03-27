@@ -7,6 +7,7 @@ import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
+import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
@@ -38,8 +39,7 @@ function DashboardApp() {
 function hasPropertyDocsDone(formData: FormData | null): boolean {
   if (!formData) return false;
   return !!(
-    formData.dni?.front?.photo
-    && formData.dni?.back?.photo
+    isIdentityDocumentComplete(formData.dni)
     && (formData.ibi?.photo || formData.ibi?.pages?.length)
     && formData.electricityBill?.pages?.length
   );

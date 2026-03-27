@@ -937,21 +937,28 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
 
-You are analyzing a Spanish DNI (Documento Nacional de Identidad) or NIE (Número de Identidad de Extranjero) — any side.
+You are analyzing a Spanish identity document. Supported variants:
+- DNI plastic card
+- NIE green card / EU citizen registration card
+- One-page NIE certificate on paper
 
-STEP 1: Determine the side:
-- FRONT (anverso): Has a person's PHOTO, full name, DNI/NIE number, date of birth (fecha de nacimiento), expiry date (válido hasta), sex (M/F), nationality
-- BACK (reverso): Has home address (domicilio), municipality (municipio), province (provincia), place of birth (lugar de nacimiento), and usually an MRZ strip at the bottom
+First classify identityDocumentKind as:
+- "dni-card"
+- "nie-card"
+- "nie-certificate"
 
-STEP 2: Set "side" to "front" or "back" and extract the appropriate fields. Fields not present on that side must be null.
+Then determine side:
+- "front": the page/side with the holder identity details (full name, DNI/NIE number, nationality, birth date, expiry date) OR the main page of a one-page NIE certificate
+- "back": the reverse/legal-text side of a DNI/NIE card, even if it contains mostly legal text and little or no personal data
 
-If this is NOT a DNI/NIE at all, set isCorrectDocument: false.
+Important rules:
+- A green NIE card with holder data and address is still the FRONT, even if address appears there.
+- The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-card", side: "back", and return null for fields that are not visible there.
+- A one-page NIE certificate is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-certificate", side: "front".
+- If this is NOT a DNI/NIE at all, set isCorrectDocument: false.
 
-For the FRONT, respond with:
-{"side":"front","isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":null,"municipality":null,"province":null,"placeOfBirth":null},"confidence":0.95,"notes":"string"}
-
-  For the BACK, respond with:
-{"side":"back","isCorrectDocument":true,"documentTypeDetected":"DNI back","isReadable":true,"extractedData":{"fullName":null,"dniNumber":null,"dateOfBirth":null,"expiryDate":null,"sex":null,"nationality":null,"address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
+Respond ONLY with this exact JSON (no markdown, no extra text):
+{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
 
 Respond ONLY with this exact JSON (no markdown, no extra text).`
 ,
@@ -960,43 +967,98 @@ Respond ONLY with this exact JSON (no markdown, no extra text).`
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.
 
-You are analyzing multiple Spanish DNI/NIE images in one request.
+You are analyzing multiple Spanish DNI/NIE images in one request. Supported variants:
+- DNI plastic card
+- NIE green card / EU citizen registration card
+- One-page NIE certificate on paper
 
 For EACH attached image, in the SAME ORDER as received:
-1. Determine whether it is the FRONT or BACK of a Spanish DNI/NIE
-2. If it is not a DNI/NIE, set isCorrectDocument: false
-3. If it is unreadable, set isReadable: false
-4. Extract the fields for that side only and set the fields that are not present on that side to null
+1. Determine identityDocumentKind: "dni-card", "nie-card", or "nie-certificate"
+2. Determine side: "front" or "back"
+3. If it is not a DNI/NIE, set isCorrectDocument: false
+4. If it is unreadable, set isReadable: false
+5. Extract the visible fields and set fields not present on that page to null
 
-FRONT fields:
-- fullName
-- dniNumber
-- dateOfBirth
-- expiryDate
-- sex
-- nationality
-- address: null
-- municipality: null
-- province: null
-- placeOfBirth: null
-
-BACK fields:
-- fullName: null
-- dniNumber: null
-- dateOfBirth: null
-- expiryDate: null
-- sex: null
-- nationality: null
-- address
-- municipality
-- province
-- placeOfBirth
+Important rules:
+- A green NIE card side with holder data is the FRONT, even if it also shows address.
+- The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as identityDocumentKind: "nie-card", side: "back", even if it has little or no personal data.
+- A one-page NIE certificate is STILL a correct document. Mark it as identityDocumentKind: "nie-certificate", side: "front".
 
 Respond ONLY with this exact JSON shape (no markdown, no extra text):
-{"results":[{"side":"front or back","isCorrectDocument":true,"documentTypeDetected":"DNI front or DNI back","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
+{"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
 
 Return exactly one result object per image, preserving the same order as the input images.`
 };
+
+const IDENTITY_DOCUMENT_KINDS = new Set(['dni-card', 'nie-card', 'nie-certificate']);
+
+function normalizeExtractedStringFields(extractedData) {
+  if (!extractedData || typeof extractedData !== 'object') return extractedData;
+  const normalized = { ...extractedData };
+  for (const [key, value] of Object.entries(normalized)) {
+    if (typeof value === 'string') {
+      normalized[key] = value.replace(/\s+/g, ' ').trim() || null;
+    }
+  }
+  return normalized;
+}
+
+function normalizeIdentityExtraction(item) {
+  if (!item || typeof item !== 'object') return item;
+
+  const normalized = { ...item };
+  normalized.extractedData = normalizeExtractedStringFields(normalized.extractedData) || {};
+
+  const extractedData = normalized.extractedData;
+  const detectedText = `${normalized.documentTypeDetected || ''} ${normalized.notes || ''}`.toLowerCase();
+  const hasIdentityCore = Boolean(
+    extractedData.fullName
+    || extractedData.dniNumber
+    || extractedData.dateOfBirth
+    || extractedData.expiryDate
+    || extractedData.sex
+    || extractedData.nationality
+  );
+  const hasAddressData = Boolean(
+    extractedData.address
+    || extractedData.municipality
+    || extractedData.province
+    || extractedData.placeOfBirth
+  );
+
+  let identityDocumentKind = IDENTITY_DOCUMENT_KINDS.has(normalized.identityDocumentKind)
+    ? normalized.identityDocumentKind
+    : null;
+
+  if (!identityDocumentKind) {
+    const dniNumber = String(extractedData.dniNumber || '').toUpperCase();
+    if (detectedText.includes('nie-certificate') || detectedText.includes('nie certificate') || detectedText.includes('certificado') || detectedText.includes('certificat')) {
+      identityDocumentKind = 'nie-certificate';
+    } else if (detectedText.includes('nie') || /^[XYZT]/.test(dniNumber)) {
+      identityDocumentKind = 'nie-card';
+    } else {
+      identityDocumentKind = 'dni-card';
+    }
+  }
+
+  let side = normalized.side === 'front' || normalized.side === 'back'
+    ? normalized.side
+    : null;
+
+  if (identityDocumentKind === 'nie-certificate') {
+    side = 'front';
+  } else if (hasIdentityCore) {
+    side = 'front';
+  } else if (hasAddressData) {
+    side = 'back';
+  } else if (!side && identityDocumentKind === 'nie-card') {
+    side = 'back';
+  }
+
+  normalized.identityDocumentKind = identityDocumentKind;
+  normalized.side = side;
+  return normalized;
+}
 
 
 app.post('/api/extract', async (req, res) => {
@@ -1083,13 +1145,10 @@ app.post('/api/extract', async (req, res) => {
       });
     }
 
-    if (extraction.extractedData && typeof extraction.extractedData === 'object') {
-      for (const [key, value] of Object.entries(extraction.extractedData)) {
-        if (typeof value === 'string') {
-          const normalized = value.replace(/\s+/g, ' ').trim();
-          extraction.extractedData[key] = normalized || null;
-        }
-      }
+    if (documentType === 'dniAuto') {
+      extraction = normalizeIdentityExtraction(extraction);
+    } else if (extraction.extractedData && typeof extraction.extractedData === 'object') {
+      extraction.extractedData = normalizeExtractedStringFields(extraction.extractedData);
     }
 
     // CUPS validation
@@ -1320,26 +1379,20 @@ app.post('/api/extract-dni-batch', async (req, res) => {
         };
       }
 
-      if (item.extractedData && typeof item.extractedData === 'object') {
-        for (const [key, value] of Object.entries(item.extractedData)) {
-          if (typeof value === 'string') {
-            item.extractedData[key] = value.replace(/\s+/g, ' ').trim() || null;
-          }
-        }
-      }
+      const normalizedItem = normalizeIdentityExtraction(item);
 
-      if (item.isReadable === false) {
+      if (normalizedItem.isReadable === false) {
         return {
-          side: item.side || null,
+          side: normalizedItem.side || null,
           isUnreadable: true,
           reason: 'unreadable',
           message: 'La imagen no es lo suficientemente clara. Por favor, vuelve a hacer la foto con buena iluminación y texto enfocado.'
         };
       }
 
-      if (!item.isCorrectDocument) {
+      if (!normalizedItem.isCorrectDocument) {
         return {
-          side: item.side || null,
+          side: normalizedItem.side || null,
           isWrongDocument: true,
           reason: 'wrong-document',
           message: 'Documento incorrecto. Por favor sube el DNI/NIE.'
@@ -1347,12 +1400,12 @@ app.post('/api/extract-dni-batch', async (req, res) => {
       }
 
       return {
-        side: item.side || null,
+        side: normalizedItem.side || null,
         extraction: {
-          ...item,
-          needsManualReview: item.confidence < 0.75,
+          ...normalizedItem,
+          needsManualReview: normalizedItem.confidence < 0.75,
         },
-        needsManualReview: item.confidence < 0.75,
+        needsManualReview: normalizedItem.confidence < 0.75,
       };
     });
 

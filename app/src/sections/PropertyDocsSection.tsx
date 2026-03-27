@@ -12,6 +12,7 @@ import type {
   DocumentSlotKey,
   DocumentProcessingState,
 } from '@/types';
+import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
@@ -380,6 +381,8 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
   const hasFront = !!front.photo;
   const hasBack = !!back.photo;
   const hasAny = hasFront || hasBack;
+  const isComplete = isIdentityDocumentComplete({ front, back });
+  const pendingLabel = getIdentityDocumentPendingLabel(front, back);
   const isBusy = pendingItems.some(p => p.status !== 'failed');
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
@@ -474,7 +477,7 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
             setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
               ...p,
               status: 'failed' as const,
-              error: 'El sistema detectó que esta imagen también es la cara trasera. Sube la cara frontal del DNI (el lado con la foto y el número).'
+              error: 'El sistema detectó que esta imagen también corresponde a la página complementaria. Sube la página principal del DNI/NIE con los datos del titular.'
             } : p));
             return;
           }
@@ -486,7 +489,7 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
             setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
               ...p,
               status: 'failed' as const,
-              error: 'El sistema detectó que esta imagen también es la cara frontal. Sube la cara trasera del DNI (el lado con la dirección).'
+              error: 'El sistema detectó que esta imagen también corresponde a la página principal. Si tu documento tiene reverso útil, sube ahora la otra cara.'
             } : p));
             return;
           }
@@ -517,16 +520,16 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
           <CreditCard className="w-5 h-5 text-gray-400" />
           <p className={`font-semibold ${hasAny ? 'text-gray-500' : 'text-gray-900'}`}>DNI / NIE</p>
         </div>
-        {hasFront && hasBack && <CheckCircle className="w-5 h-5 text-green-500" />}
-        {hasAny && !(hasFront && hasBack) && (
+        {isComplete && <CheckCircle className="w-5 h-5 text-green-500" />}
+        {hasAny && !isComplete && pendingLabel && (
           <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
-            {hasFront ? 'Falta la trasera' : 'Falta la frontal'}
+            {pendingLabel}
           </span>
         )}
       </div>
 
       <p className="text-xs text-gray-500">
-        Sube las fotos de tu DNI — el sistema detecta automáticamente la cara frontal y trasera.
+        Sube tu DNI o NIE. El sistema detecta el tipo de documento y algunos NIE válidos se aceptan con una sola página útil.
       </p>
 
       {/* Front + Back slots */}
@@ -557,8 +560,8 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
               </>
             ) : (
               <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
-                <p className="text-[10px] text-gray-400 text-center">Cara frontal</p>
-                <p className="text-[9px] text-gray-300 text-center mt-1">Foto + número DNI</p>
+                <p className="text-[10px] text-gray-400 text-center">Página principal</p>
+                <p className="text-[9px] text-gray-300 text-center mt-1">Datos identificativos</p>
               </div>
             )}
           </div>
@@ -588,8 +591,8 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
               </>
             ) : (
               <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
-                <p className="text-[10px] text-gray-400 text-center">Cara trasera</p>
-                <p className="text-[9px] text-gray-300 text-center mt-1">Dirección domicilio</p>
+                <p className="text-[10px] text-gray-400 text-center">Página complementaria</p>
+                <p className="text-[9px] text-gray-300 text-center mt-1">Reverso o datos adicionales</p>
               </div>
             )}
           </div>
@@ -927,7 +930,7 @@ export function PropertyDocsSection({
 
   // Frictionless resume: detect which docs were already done on first mount
   const [resumeSnapshot] = useState(() => ({
-    dni: !!(dni.front.photo && dni.back.photo),
+    dni: isIdentityDocumentComplete(dni),
     ibi: !!ibi.photo,
     electricity: electricityBill.pages.length > 0,
   }));
@@ -944,7 +947,7 @@ export function PropertyDocsSection({
   const validationWarnings = hasAnyDoc ? computeValidationWarnings(dni, electricityBill) : [];
 
   // Whether each card should show compact
-  const dniDone = !!(dni.front.photo && dni.back.photo);
+  const dniDone = isIdentityDocumentComplete(dni);
   const ibiDone = !!ibi.photo;
   const elecDone = electricityBill.pages.length > 0;
 
