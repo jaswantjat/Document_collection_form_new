@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-26.3';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-27.1';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -68,7 +68,7 @@ const PODER_ES_FIELDS = {
   persona_juridica_representante_legal_municipio: { x: 233, y: 620, stopX: 950 },
   lugar: { x: 139, y: 1719, stopX: 310 },
   fecha: { x: 842, y: 1722, stopX: 1145 },
-  firma_persona_interesada_safe_box: [175, 1737, 600, 1820] as Box,
+  firma_persona_interesada_safe_box: [100, 1855, 620, 1975] as Box,
 } as const;
 
 function getSourceFormData(source: any): FormData {
