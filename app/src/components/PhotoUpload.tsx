@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Upload, X, AlertCircle, Check, Eye, Camera, RotateCcw } from 'lucide-react';
 import type { UploadedPhoto } from '@/types';
-import { validatePhoto, createUploadedPhoto, fileToPreview } from '@/lib/photoValidation';
+import { validatePhoto, createUploadedPhoto, fileToPreview, expandUploadFiles } from '@/lib/photoValidation';
 
 interface PhotoUploadProps {
   label: string;
@@ -34,32 +34,49 @@ export function PhotoUpload({
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback(async (file: File) => {
+  const handleFiles = useCallback(async (selectedFiles: File[]) => {
     setValidationError(null);
+    const remaining = maxPhotos - photos.length;
+    const { files: expandedFiles, errors } = await expandUploadFiles(selectedFiles);
+    const nextFiles = expandedFiles.slice(0, remaining);
+    const nextPhotos: UploadedPhoto[] = [];
+    let nextError = errors[0]?.message || null;
 
-    const result = await validatePhoto(file);
-    if (!result.valid) {
-      setValidationError(result.error || 'Archivo no válido');
+    for (const { file, skipBlurCheck } of nextFiles) {
+      const result = await validatePhoto(file, { skipBlurCheck });
+      if (!result.valid) {
+        nextError ||= result.error || 'Archivo no válido';
+        continue;
+      }
+
+      const preview = await fileToPreview(file);
+      nextPhotos.push(createUploadedPhoto(file, preview, result.width, result.height));
+    }
+
+    if (!nextError && expandedFiles.length > remaining) {
+      nextError = `Solo se han añadido ${remaining} archivo${remaining === 1 ? '' : 's'} porque este bloque admite un máximo de ${maxPhotos}.`;
+    }
+
+    setValidationError(nextError);
+    if (nextPhotos.length === 0) {
       return;
     }
 
-    const preview = await fileToPreview(file);
-    const photo = createUploadedPhoto(file, preview, result.width, result.height);
-    onPhotosChange([...photos, photo]);
-  }, [photos, onPhotosChange]);
+    onPhotosChange([...photos, ...nextPhotos]);
+  }, [maxPhotos, onPhotosChange, photos]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) handleFiles(files);
+  }, [handleFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-  }, [handleFile]);
+    if (files.length) handleFiles(files);
+  }, [handleFiles]);
 
   const removePhoto = useCallback((id: string) => {
     onPhotosChange(photos.filter(p => p.id !== id));
@@ -146,6 +163,7 @@ export function PhotoUpload({
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,application/pdf"
+            multiple
             className="hidden"
             onChange={handleFileInput}
           />
@@ -159,9 +177,9 @@ export function PhotoUpload({
             <>
               <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">
-                Arrastra una foto aquí o <span className="text-eltex-blue font-medium">pulsa para seleccionar</span>
+                Arrastra imágenes o PDF aquí o <span className="text-eltex-blue font-medium">pulsa para seleccionar</span>
               </p>
-              <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF · Mín. 1MB · Mín. 1200x900px</p>
+              <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF · Puedes seleccionar varios archivos</p>
             </>
           )}
         </div>

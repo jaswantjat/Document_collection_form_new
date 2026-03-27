@@ -12,7 +12,7 @@ import type {
   DocumentSlotKey,
   DocumentProcessingState,
 } from '@/types';
-import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI } from '@/lib/photoValidation';
+import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch } from '@/services/api';
 
 interface Props {
@@ -138,42 +138,84 @@ function computeValidationWarnings(
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
 function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtractionChange, onProcessingChange }: DocCardProps) {
-  const processImageFile = useCallback(async (file: File, hadAcceptedDocument: boolean) => {
-    const check = await validatePhoto(file, { skipBlurCheck: false });
-    if (!check.valid) {
-      onProcessingChange(slotKey, {
-        status: hadAcceptedDocument ? 'accepted' : 'rejected',
-        errorCode: 'validation',
-        errorMessage: check.error || 'Imagen no válida.',
-        pendingPreview: null,
-      });
-      return;
-    }
-
-    const preview = await fileToPreview(file);
-    onProcessingChange(slotKey, {
-      status: 'extracting',
-      errorCode: undefined,
-      errorMessage: undefined,
-      pendingPreview: preview,
-    });
+  const processFiles = useCallback(async (files: File[]) => {
+    const hadAcceptedDocument = !!data.photo;
+    onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
 
     try {
-      const raw = await fileToBase64(file);
-      const base64 = await compressImageForAI(raw);
-      const res = await extractDocument(base64, slotKey as 'ibi');
-
-      if (!res.success || !res.extraction) {
+      const { files: expandedFiles, errors } = await expandUploadFiles(files);
+      if (errors.length > 0) {
         onProcessingChange(slotKey, {
           status: hadAcceptedDocument ? 'accepted' : 'rejected',
-          errorCode: res.reason || (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error'),
-          errorMessage: res.message || 'No se pudo procesar el documento.',
-          pendingPreview: hadAcceptedDocument ? null : preview,
+          errorCode: 'temporary-error',
+          errorMessage: errors[0].message,
+          pendingPreview: null,
         });
         return;
       }
 
-      onPhotoChange(createUploadedPhoto(file, preview, check.width, check.height));
+      if (expandedFiles.length === 0) {
+        onProcessingChange(slotKey, {
+          status: hadAcceptedDocument ? 'accepted' : 'rejected',
+          errorCode: 'validation',
+          errorMessage: 'No se encontró ninguna imagen utilizable.',
+          pendingPreview: null,
+        });
+        return;
+      }
+
+      const preparedPages: Array<{ file: File; preview: string; base64: string; width?: number; height?: number }> = [];
+      for (const { file, skipBlurCheck } of expandedFiles) {
+        const check = await validatePhoto(file, { skipBlurCheck });
+        if (!check.valid) {
+          onProcessingChange(slotKey, {
+            status: hadAcceptedDocument ? 'accepted' : 'rejected',
+            errorCode: 'validation',
+            errorMessage: check.error || 'Imagen no válida.',
+            pendingPreview: null,
+          });
+          return;
+        }
+
+        const preview = await fileToPreview(file);
+        preparedPages.push({
+          file,
+          preview,
+          base64: await compressImageForAI(await fileToBase64(file)),
+          width: check.width,
+          height: check.height,
+        });
+      }
+
+      const firstPage = preparedPages[0];
+      onProcessingChange(slotKey, {
+        status: 'extracting',
+        errorCode: undefined,
+        errorMessage: undefined,
+        pendingPreview: firstPage.preview,
+      });
+
+      const res = preparedPages.length > 1
+        ? await extractDocumentBatch(preparedPages.map((page) => page.base64), 'ibi')
+        : await extractDocument(firstPage.base64, slotKey as 'ibi');
+
+      if (!res.success || !res.extraction) {
+        const errorCode = res.reason === 'unreadable'
+          || res.reason === 'wrong-document'
+          || res.reason === 'wrong-side'
+          || res.reason === 'temporary-error'
+          ? res.reason
+          : (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error');
+        onProcessingChange(slotKey, {
+          status: hadAcceptedDocument ? 'accepted' : 'rejected',
+          errorCode,
+          errorMessage: res.message || 'No se pudo procesar el documento.',
+          pendingPreview: hadAcceptedDocument ? null : firstPage.preview,
+        });
+        return;
+      }
+
+      onPhotoChange(createUploadedPhoto(firstPage.file, firstPage.preview, firstPage.width, firstPage.height));
       onExtractionChange({
         ...res.extraction,
         needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
@@ -189,66 +231,7 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         pendingPreview: null,
       });
     }
-  }, [onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
-
-  const process = useCallback(async (file: File) => {
-    const hadAcceptedDocument = !!data.photo;
-    onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
-
-    if (file.type === 'application/pdf') {
-      // Convert all PDF pages → images, then send them all to AI together
-      onProcessingChange(slotKey, { status: 'extracting', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
-      try {
-        const pages = await pdfToImageFiles(file);
-        if (pages.length === 0) {
-          onProcessingChange(slotKey, {
-            status: hadAcceptedDocument ? 'accepted' : 'rejected',
-            errorCode: 'validation',
-            errorMessage: 'El PDF no tiene páginas legibles. Prueba a exportarlo de nuevo.',
-            pendingPreview: null,
-          });
-          return;
-        }
-        // Use first page as the stored preview/photo; send all pages to AI
-        const firstPage = pages[0];
-        const preview = await fileToPreview(firstPage);
-        onProcessingChange(slotKey, { status: 'extracting', errorCode: undefined, errorMessage: undefined, pendingPreview: preview });
-        const allBase64 = await Promise.all(
-          pages.slice(0, 5).map(async (p) => {
-            const raw = await fileToBase64(p);
-            return compressImageForAI(raw);
-          })
-        );
-        const res = await extractDocument(pages.length > 1 ? allBase64 : allBase64[0], slotKey as 'ibi');
-        if (!res.success || !res.extraction) {
-          onProcessingChange(slotKey, {
-            status: hadAcceptedDocument ? 'accepted' : 'rejected',
-            errorCode: res.reason || (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error'),
-            errorMessage: res.message || 'No se pudo procesar el documento.',
-            pendingPreview: hadAcceptedDocument ? null : preview,
-          });
-          return;
-        }
-        const check = await validatePhoto(firstPage, { skipBlurCheck: true });
-        onPhotoChange(createUploadedPhoto(firstPage, preview, check.width ?? 0, check.height ?? 0));
-        onExtractionChange({ ...res.extraction, needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false, confirmedByUser: true });
-        onProcessingChange(slotKey, { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
-      } catch (err) {
-        const message = err instanceof Error && err.message
-          ? err.message
-          : 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña.';
-        onProcessingChange(slotKey, {
-          status: hadAcceptedDocument ? 'accepted' : 'rejected',
-          errorCode: 'temporary-error',
-          errorMessage: message,
-          pendingPreview: null,
-        });
-      }
-      return;
-    }
-
-    await processImageFile(file, hadAcceptedDocument);
-  }, [data.photo, processImageFile, onPhotoChange, onExtractionChange, onProcessingChange, slotKey]);
+  }, [data.photo, onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
 
   const reset = useCallback(() => {
     onPhotoChange(null);
@@ -273,9 +256,19 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
 
       {!accepted && !isBusy && (
         <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
-          <input type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
+          <input
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (files.length) processFiles(files);
+            }}
+          />
           <Camera className="w-7 h-7 text-gray-300" />
-          <span className="text-sm font-medium text-gray-500">Foto o PDF</span>
+          <span className="text-sm font-medium text-gray-500">Fotos o PDF</span>
           <span className="text-xs text-gray-400 text-center px-4">{hint}</span>
         </label>
       )}
@@ -320,7 +313,17 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
           </div>
           <div className="flex gap-2">
             <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
-              <input type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); e.target.value = ''; }} />
+              <input
+                type="file"
+                accept="image/jpeg,image/png,application/pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (files.length) processFiles(files);
+                }}
+              />
               <Camera className="w-3.5 h-3.5" /> Sustituir
             </label>
             <button type="button" onClick={reset} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center">
@@ -355,15 +358,33 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
   const processFiles = useCallback(async (files: File[]) => {
-    const newItems: PendingItem[] = files.map(file => ({ id: genId(), file, preview: null, status: 'validating' }));
+    const { files: expandedFiles, errors } = await expandUploadFiles(files);
+    if (errors.length > 0) {
+      setPendingItems(prev => [
+        ...prev,
+        ...errors.map(({ file, message }) => ({
+          id: genId(),
+          file,
+          preview: null,
+          status: 'failed' as const,
+          error: message,
+        })),
+      ]);
+    }
+
+    if (expandedFiles.length === 0) return;
+
+    const newItems: PendingItem[] = expandedFiles.map(({ file }) => ({ id: genId(), file, preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
+    let assignedFront = !!front.photo;
+    let assignedBack = !!back.photo;
 
     // Process sequentially so duplicate-side detection is accurate
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < expandedFiles.length; i++) {
+      const { file, skipBlurCheck } = expandedFiles[i];
       const id = newItems[i].id;
 
-      const check = await validatePhoto(file);
+      const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
         continue;
@@ -391,24 +412,26 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
 
         if (res.side === 'back') {
           // Check if back slot is already filled (duplicate-side detection)
-          if (back.photo) {
+          if (assignedBack) {
             setPendingItems(prev => prev.map(p => p.id === id ? {
               ...p, status: 'failed' as const,
               error: 'El sistema detectó que esta imagen también es la cara trasera. Sube la cara frontal del DNI (el lado con la foto y el número).'
             } : p));
             return;
           }
+          assignedBack = true;
           onBackPhotoChange(photo);
           onBackExtractionChange(extraction);
         } else {
           // Check if front slot is already filled (duplicate-side detection)
-          if (front.photo) {
+          if (assignedFront) {
             setPendingItems(prev => prev.map(p => p.id === id ? {
               ...p, status: 'failed' as const,
               error: 'El sistema detectó que esta imagen también es la cara frontal. Sube la cara trasera del DNI (el lado con la dirección).'
             } : p));
             return;
           }
+          assignedFront = true;
           onFrontPhotoChange(photo);
           onFrontExtractionChange(extraction);
         }
@@ -547,7 +570,7 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
         }`}>
           <input
             type="file"
-            accept="image/jpeg,image/png"
+            accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
             onChange={e => {

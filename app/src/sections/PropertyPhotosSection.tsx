@@ -1,16 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
 import { ArrowRight, ArrowLeft, Camera, Zap, Home, Sun, Thermometer, Plus, X, AlertTriangle } from 'lucide-react';
 import type { FormData, UploadedPhoto, ProductType, FormErrors } from '@/types';
-import { validatePhoto, createUploadedPhoto, fileToPreview } from '@/lib/photoValidation';
+import { validatePhoto, createUploadedPhoto, fileToPreview, expandUploadFiles } from '@/lib/photoValidation';
 
 interface Props {
   productType: ProductType;
   formData: FormData;
   errors: FormErrors;
   setElectricalPanelPhotos: (photos: UploadedPhoto[]) => void;
-  updateInstallationSpace: (field: string, value: any) => void;
-  updateRoof: (field: string, value: any) => void;
-  updateRadiators: (field: string, value: any) => void;
+  updateInstallationSpace: (field: string, value: unknown) => void;
+  updateRoof: (field: string, value: unknown) => void;
+  updateRadiators: (field: string, value: unknown) => void;
   onBack: () => void;
   onContinue: () => void;
 }
@@ -34,25 +34,34 @@ function MultiPhotoUploader({ photos, maxPhotos = 6, label, hint, onChange, erro
 
   const handleFiles = useCallback(async (files: FileList) => {
     setValidationError('');
-    const remaining = maxPhotos - photos.length;
-    const toProcess = Array.from(files).slice(0, remaining);
-
     setUploading(true);
-    const newPhotos: UploadedPhoto[] = [];
+    try {
+      const remaining = maxPhotos - photos.length;
+      const { files: expandedFiles, errors } = await expandUploadFiles(Array.from(files));
+      const toProcess = expandedFiles.slice(0, remaining);
+      const newPhotos: UploadedPhoto[] = [];
+      let nextError = errors[0]?.message || '';
 
-    for (const file of toProcess) {
-      const result = await validatePhoto(file);
-      if (!result.valid) {
-        setValidationError(result.error || 'Archivo no válido');
-        continue;
+      for (const { file, skipBlurCheck } of toProcess) {
+        const result = await validatePhoto(file, { skipBlurCheck });
+        if (!result.valid) {
+          nextError ||= result.error || 'Archivo no válido';
+          continue;
+        }
+        const preview = await fileToPreview(file);
+        newPhotos.push(createUploadedPhoto(file, preview, result.width, result.height));
       }
-      const preview = await fileToPreview(file);
-      newPhotos.push(createUploadedPhoto(file, preview, result.width, result.height));
-    }
 
-    setUploading(false);
-    if (newPhotos.length > 0) {
-      onChange([...photos, ...newPhotos]);
+      if (!nextError && expandedFiles.length > remaining) {
+        nextError = `Solo se han añadido ${remaining} archivo${remaining === 1 ? '' : 's'} porque este bloque admite un máximo de ${maxPhotos}.`;
+      }
+
+      setValidationError(nextError);
+      if (newPhotos.length > 0) {
+        onChange([...photos, ...newPhotos]);
+      }
+    } finally {
+      setUploading(false);
     }
   }, [photos, maxPhotos, onChange]);
 
@@ -104,10 +113,14 @@ function MultiPhotoUploader({ photos, maxPhotos = 6, label, hint, onChange, erro
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png"
+            accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
-            onChange={e => e.target.files && handleFiles(e.target.files)}
+            onChange={e => {
+              const nextFiles = e.target.files;
+              e.target.value = '';
+              if (nextFiles) handleFiles(nextFiles);
+            }}
           />
           {uploading ? (
             <div className="w-5 h-5 border-2 border-eltex-blue border-t-transparent rounded-full animate-spin" />
@@ -119,7 +132,7 @@ function MultiPhotoUploader({ photos, maxPhotos = 6, label, hint, onChange, erro
               <p className="text-sm text-gray-600">
                 {photos.length === 0 ? 'Añadir fotos' : 'Añadir más'}
               </p>
-              <p className="text-xs text-gray-400 mt-1">JPG o PNG · Máx. 20MB</p>
+              <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF · Máx. 20MB</p>
             </>
           )}
         </label>

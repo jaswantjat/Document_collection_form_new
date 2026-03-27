@@ -1,4 +1,5 @@
 import type { PhotoValidationResult, UploadedPhoto } from '@/types';
+import { pdfToImageFiles } from '@/lib/pdfToImages';
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 // Laplacian variance threshold — below this = blurry and rejected
@@ -47,6 +48,56 @@ export async function validatePhoto(file: File, options?: { skipBlurCheck?: bool
   } catch {
     return { valid: true, sizeBytes: file.size };
   }
+}
+
+export interface ExpandedUploadFile {
+  file: File;
+  skipBlurCheck: boolean;
+}
+
+export interface ExpandedUploadError {
+  file: File;
+  message: string;
+}
+
+export async function expandUploadFiles(files: File[]): Promise<{
+  files: ExpandedUploadFile[];
+  errors: ExpandedUploadError[];
+}> {
+  const expandedFiles: ExpandedUploadFile[] = [];
+  const errors: ExpandedUploadError[] = [];
+
+  for (const file of files) {
+    if (file.type !== 'application/pdf') {
+      expandedFiles.push({ file, skipBlurCheck: false });
+      continue;
+    }
+
+    try {
+      const pages = await pdfToImageFiles(file);
+      if (pages.length === 0) {
+        errors.push({
+          file,
+          message: `El PDF "${file.name}" no contenía páginas utilizables.`,
+        });
+        continue;
+      }
+
+      expandedFiles.push(
+        ...pages.map((page) => ({
+          file: page,
+          skipBlurCheck: true,
+        }))
+      );
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : `No se pudo leer el PDF "${file.name}".`;
+      errors.push({ file, message });
+    }
+  }
+
+  return { files: expandedFiles, errors };
 }
 
 function getImageDimensions(file: File): Promise<{ width: number; height: number }> {

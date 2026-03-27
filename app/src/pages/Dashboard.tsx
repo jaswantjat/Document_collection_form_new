@@ -135,23 +135,35 @@ interface PreparedAdminPage {
   sizeBytes: number;
 }
 
-async function prepareAdminUploadPages(file: File): Promise<PreparedAdminPage[]> {
-  const sourceFiles = file.type === 'application/pdf'
-    ? await pdfToImageFiles(file)
-    : [file];
+async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminPage[]> {
+  const preparedPages: PreparedAdminPage[] = [];
 
-  if (sourceFiles.length === 0) {
-    throw new Error('El archivo no contenía ninguna página utilizable.');
+  for (const file of files) {
+    const sourceFiles = file.type === 'application/pdf'
+      ? await pdfToImageFiles(file)
+      : [file];
+
+    if (sourceFiles.length === 0) {
+      throw new Error(`El archivo "${file.name}" no contenía ninguna página utilizable.`);
+    }
+
+    const preparedFromFile = await Promise.all(sourceFiles.map(async (page) => {
+      const preview = await fileToBase64(page);
+      return {
+        preview,
+        aiDataUrl: await compressImageForAI(preview),
+        sizeBytes: page.size,
+      };
+    }));
+
+    preparedPages.push(...preparedFromFile);
   }
 
-  return Promise.all(sourceFiles.map(async (page) => {
-    const preview = await fileToBase64(page);
-    return {
-      preview,
-      aiDataUrl: await compressImageForAI(preview),
-      sizeBytes: page.size,
-    };
-  }));
+  if (preparedPages.length === 0) {
+    throw new Error('No se encontró ninguna imagen utilizable.');
+  }
+
+  return preparedPages;
 }
 
 async function viewPDFInNewTab(pdfFactory: () => Promise<Blob>) {
@@ -601,12 +613,17 @@ function AdminUploadModal({
   const [statusMsg, setStatusMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (file: File) => {
+  const handleFiles = async (files: File[]) => {
+    const hasPdf = files.some((file) => file.type === 'application/pdf');
     setStatus('extracting');
-    setStatusMsg(file.type === 'application/pdf' ? 'Convirtiendo PDF en imágenes...' : 'Preparando imagen...');
+    setStatusMsg(hasPdf
+      ? 'Convirtiendo PDF en imágenes...'
+      : files.length > 1
+        ? 'Preparando imágenes...'
+        : 'Preparando imagen...');
 
     try {
-      const preparedPages = await prepareAdminUploadPages(file);
+      const preparedPages = await prepareAdminUploadPages(files);
       setStatusMsg('Extrayendo datos con IA...');
 
       const docTypeMap: Record<AdminDocType, Parameters<typeof extractDocument>[1]> = {
@@ -731,10 +748,12 @@ function AdminUploadModal({
                 ref={fileRef}
                 type="file"
                 accept="image/jpeg,image/png,application/pdf"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFile(file);
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (files.length) handleFiles(files);
                 }}
               />
             </label>
