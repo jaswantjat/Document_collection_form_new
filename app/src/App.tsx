@@ -54,25 +54,21 @@ function hasRepresentationDone(formData: FormData | null, location: string | nul
   return false;
 }
 
-function isAssessorFollowUpDocumentFlow(
-  source: 'customer' | 'assessor',
-  formData: FormData | null
-): boolean {
-  if (source !== 'assessor' || !formData) return false;
+function hasExistingRepresentationFlow(formData: FormData | null): boolean {
+  if (!formData) return false;
   const location = formData.location ?? formData.representation?.location ?? null;
   return hasRepresentationDone(formData, location);
 }
 
 function getInitialSection(
   project: ProjectData | null,
-  urlCode: string | null,
-  source: 'customer' | 'assessor'
+  urlCode: string | null
 ): Section | 'phone' {
   if (!project || !urlCode) return urlCode ? 'property-docs' : 'phone';
 
   const fd = project.formData;
   const location = fd?.location ?? fd?.representation?.location ?? null;
-  const followUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, fd);
+  const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
 
   if (followUpDocumentFlow && !hasPropertyDocsDone(fd)) return 'property-docs';
   if (hasRepresentationDone(fd, location)) return 'review';
@@ -105,7 +101,7 @@ function FormApp() {
   const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
-  const projectFollowUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, project?.formData ?? null);
+  const projectFollowUpDocumentFlow = hasExistingRepresentationFlow(project?.formData ?? null);
 
   const loadProjectFromUrl = useEffectEvent((code: string, token?: string | null) => {
     setLoading(true);
@@ -141,17 +137,16 @@ function FormApp() {
 
   const syncInitialSection = useEffectEvent((
     nextProject: ProjectData | null,
-    nextUrlCode: string | null,
-    nextSource: 'customer' | 'assessor'
+    nextUrlCode: string | null
   ) => {
     if (!nextProject) return;
-    setCurrentSection(getInitialSection(nextProject, nextUrlCode, nextSource));
+    setCurrentSection(getInitialSection(nextProject, nextUrlCode));
   });
 
   // Determine initial section when project loads
   useEffect(() => {
-    void syncInitialSection(project, urlCode, source);
-  }, [project, urlCode, source]);
+    void syncInitialSection(project, urlCode);
+  }, [project, urlCode]);
 
   const {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
@@ -171,7 +166,7 @@ function FormApp() {
     projectToken,
     { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
   );
-  const followUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, formData);
+  const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   const goTo = (section: Section | 'phone') => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
