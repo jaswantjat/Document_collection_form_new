@@ -135,6 +135,29 @@ export async function extractDocumentBatch(
   return res.json();
 }
 
+export async function extractDniBatch(
+  imagesBase64: string[]
+): Promise<{
+  success: boolean;
+  results?: Array<{
+    side?: 'front' | 'back' | null;
+    extraction?: unknown;
+    needsManualReview?: boolean;
+    isWrongDocument?: boolean;
+    isUnreadable?: boolean;
+    reason?: 'unreadable' | 'wrong-document' | 'wrong-side' | 'temporary-error';
+    message?: string;
+  }>;
+  message?: string;
+}> {
+  const res = await fetch(`${API_BASE}/extract-dni-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imagesBase64 }),
+  });
+  return res.json();
+}
+
 export async function adminUpdateFormData(
   code: string,
   formDataPatch: any,

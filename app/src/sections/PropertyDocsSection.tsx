@@ -13,7 +13,7 @@ import type {
   DocumentProcessingState,
 } from '@/types';
 import { validatePhoto, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles } from '@/lib/photoValidation';
-import { extractDocument, extractDocumentBatch } from '@/services/api';
+import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
 interface Props {
   dni: DNIData;
@@ -82,6 +82,15 @@ interface PendingItem {
   preview: string | null;
   status: 'validating' | 'extracting' | 'failed';
   error?: string;
+}
+
+interface PreparedDniItem {
+  id: string;
+  file: File;
+  preview: string;
+  base64: string;
+  width: number | undefined;
+  height: number | undefined;
 }
 
 function genId() {
@@ -380,42 +389,73 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
     let assignedFront = !!front.photo;
     let assignedBack = !!back.photo;
 
-    // Process sequentially so duplicate-side detection is accurate
-    for (let i = 0; i < expandedFiles.length; i++) {
-      const { file, skipBlurCheck } = expandedFiles[i];
-      const id = newItems[i].id;
-
+    const preparedFileResults = await Promise.all(expandedFiles.map(async ({ file, skipBlurCheck }, index) => {
+      const id = newItems[index].id;
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
-        continue;
+        return null;
       }
 
-      const preview = await fileToPreview(file);
+      const [preview, raw] = await Promise.all([
+        fileToPreview(file),
+        fileToBase64(file),
+      ]);
+      const base64 = await compressImageForAI(raw);
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
 
-      try {
-        const raw = await fileToBase64(file);
-        const base64 = await compressImageForAI(raw);
-        const res = await extractDocument(base64, 'dniAuto');
+      return {
+        id,
+        file,
+        preview,
+        base64,
+        width: check.width,
+        height: check.height,
+      };
+    }));
 
-        if (!res.success || !res.extraction) {
-          setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: res.message || 'No se pudo procesar el DNI.' } : p));
-          continue;
+    const preparedFiles: PreparedDniItem[] = preparedFileResults.filter(
+      (item): item is PreparedDniItem => item !== null
+    );
+
+    if (preparedFiles.length === 0) return;
+
+    try {
+      const res = await extractDniBatch(preparedFiles.map((item) => item.base64));
+
+      if (!res.success || !Array.isArray(res.results) || res.results.length !== preparedFiles.length) {
+        const error = res.message || 'No se pudo procesar el DNI.';
+        setPendingItems(prev => prev.map(p =>
+          preparedFiles.some((item) => item.id === p.id)
+            ? { ...p, status: 'failed' as const, error }
+            : p
+        ));
+        return;
+      }
+
+      preparedFiles.forEach((prepared, index) => {
+        const result = res.results?.[index];
+        if (!result?.extraction) {
+          setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
+            ...p,
+            status: 'failed' as const,
+            error: result?.message || 'No se pudo procesar el DNI.',
+          } : p));
+          return;
         }
 
-        const photo = createUploadedPhoto(file, preview, check.width, check.height);
+        const photo = createUploadedPhoto(prepared.file, prepared.preview, prepared.width, prepared.height);
         const extraction: AIExtraction = {
-          ...res.extraction,
-          needsManualReview: res.needsManualReview ?? false,
+          ...result.extraction,
+          needsManualReview: result.needsManualReview ?? false,
           confirmedByUser: true,
         };
 
-        if (res.side === 'back') {
-          // Check if back slot is already filled (duplicate-side detection)
+        if (result.side === 'back') {
           if (assignedBack) {
-            setPendingItems(prev => prev.map(p => p.id === id ? {
-              ...p, status: 'failed' as const,
+            setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
+              ...p,
+              status: 'failed' as const,
               error: 'El sistema detectó que esta imagen también es la cara trasera. Sube la cara frontal del DNI (el lado con la foto y el número).'
             } : p));
             return;
@@ -424,10 +464,10 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
           onBackPhotoChange(photo);
           onBackExtractionChange(extraction);
         } else {
-          // Check if front slot is already filled (duplicate-side detection)
           if (assignedFront) {
-            setPendingItems(prev => prev.map(p => p.id === id ? {
-              ...p, status: 'failed' as const,
+            setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
+              ...p,
+              status: 'failed' as const,
               error: 'El sistema detectó que esta imagen también es la cara frontal. Sube la cara trasera del DNI (el lado con la dirección).'
             } : p));
             return;
@@ -437,10 +477,14 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
           onFrontExtractionChange(extraction);
         }
 
-        setPendingItems(prev => prev.filter(p => p.id !== id));
-      } catch {
-        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' } : p));
-      }
+        setPendingItems(prev => prev.filter(p => p.id !== prepared.id));
+      });
+    } catch {
+      setPendingItems(prev => prev.map(p =>
+        preparedFiles.some((item) => item.id === p.id)
+          ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' }
+          : p
+      ));
     }
   }, [front.photo, back.photo, onFrontPhotoChange, onFrontExtractionChange, onBackPhotoChange, onBackExtractionChange]);
 

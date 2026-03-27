@@ -937,10 +937,52 @@ If this is NOT a DNI/NIE at all, set isCorrectDocument: false.
 For the FRONT, respond with:
 {"side":"front","isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":null,"municipality":null,"province":null,"placeOfBirth":null},"confidence":0.95,"notes":"string"}
 
-For the BACK, respond with:
+  For the BACK, respond with:
 {"side":"back","isCorrectDocument":true,"documentTypeDetected":"DNI back","isReadable":true,"extractedData":{"fullName":null,"dniNumber":null,"dateOfBirth":null,"expiryDate":null,"sex":null,"nationality":null,"address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
 
 Respond ONLY with this exact JSON (no markdown, no extra text).`
+,
+
+  dniAutoBatch: `You are a document data extractor for Spanish government documents.
+
+Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.
+
+You are analyzing multiple Spanish DNI/NIE images in one request.
+
+For EACH attached image, in the SAME ORDER as received:
+1. Determine whether it is the FRONT or BACK of a Spanish DNI/NIE
+2. If it is not a DNI/NIE, set isCorrectDocument: false
+3. If it is unreadable, set isReadable: false
+4. Extract the fields for that side only and set the fields that are not present on that side to null
+
+FRONT fields:
+- fullName
+- dniNumber
+- dateOfBirth
+- expiryDate
+- sex
+- nationality
+- address: null
+- municipality: null
+- province: null
+- placeOfBirth: null
+
+BACK fields:
+- fullName: null
+- dniNumber: null
+- dateOfBirth: null
+- expiryDate: null
+- sex: null
+- nationality: null
+- address
+- municipality
+- province
+- placeOfBirth
+
+Respond ONLY with this exact JSON shape (no markdown, no extra text):
+{"results":[{"side":"front or back","isCorrectDocument":true,"documentTypeDetected":"DNI front or DNI back","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
+
+Return exactly one result object per image, preserving the same order as the input images.`
 };
 
 
@@ -960,8 +1002,8 @@ app.post('/api/extract', async (req, res) => {
     return res.status(503).json({ success: false, isUnreadable: false, needsManualReview: true, reason: 'temporary-error', message: 'Servicio de extracción no configurado. Contacta al administrador.' });
   }
 
-  // Build content parts: text prompt + one image part per page (capped at 5 pages)
-  const imageContent = imagesToSend.slice(0, 5).map(img => ({
+  // Build content parts: text prompt + one image part per uploaded page
+  const imageContent = imagesToSend.map(img => ({
     type: 'image_url',
     image_url: { url: img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}` }
   }));
@@ -1191,6 +1233,120 @@ app.post('/api/extract-batch', async (req, res) => {
   } catch (err) {
     console.error('[extract-batch] Unexpected error:', err);
     res.json({ success: false, needsManualReview: true, reason: 'temporary-error', message: 'Error interno. Inténtalo de nuevo en unos segundos.' });
+  }
+});
+
+app.post('/api/extract-dni-batch', async (req, res) => {
+  const { imagesBase64 } = req.body;
+  if (!Array.isArray(imagesBase64) || imagesBase64.length === 0) {
+    return res.status(400).json({ success: false, message: 'Faltan imagesBase64.' });
+  }
+
+  const openRouterApiKey = getOpenRouterApiKey();
+  if (!openRouterApiKey) {
+    return res.status(503).json({ success: false, message: 'Servicio de extracción no configurado. Contacta al administrador.' });
+  }
+
+  const imageCount = imagesBase64.length;
+  const imageContent = imagesBase64.map(img => ({
+    type: 'image_url',
+    image_url: { url: img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}` }
+  }));
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openRouterApiKey}` },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `${PROMPTS.dniAutoBatch}\n\nAttached images: ${imageCount}. Return exactly ${imageCount} result objects.` },
+            ...imageContent
+          ]
+        }],
+        max_tokens: 1400,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[extract-dni-batch] OpenRouter error:', response.status, errText.slice(0, 200));
+      let userMessage = 'No se pudo analizar automáticamente.';
+      if (response.status === 401) userMessage = 'API key de OpenRouter inválida o no configurada.';
+      else if (response.status === 402) userMessage = 'Créditos de OpenRouter agotados.';
+      else if (response.status === 429) userMessage = 'Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.';
+      return res.json({ success: false, message: userMessage });
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    console.log(`[extract-dni-batch] AI response (${imageCount} img):`, content.slice(0, 300));
+
+    let parsed;
+    try {
+      const m = content.match(/\{[\s\S]*\}/);
+      parsed = m ? JSON.parse(m[0]) : null;
+    } catch (e) {
+      console.error('[extract-dni-batch] JSON parse error:', e.message);
+      parsed = null;
+    }
+
+    if (!parsed || !Array.isArray(parsed.results) || parsed.results.length !== imageCount) {
+      return res.json({ success: false, message: 'No se pudo analizar el DNI correctamente.' });
+    }
+
+    const results = parsed.results.map((item) => {
+      if (!item || typeof item !== 'object') {
+        return {
+          side: null,
+          reason: 'temporary-error',
+          message: 'No se pudo procesar el DNI.',
+        };
+      }
+
+      if (item.extractedData && typeof item.extractedData === 'object') {
+        for (const [key, value] of Object.entries(item.extractedData)) {
+          if (typeof value === 'string') {
+            item.extractedData[key] = value.replace(/\s+/g, ' ').trim() || null;
+          }
+        }
+      }
+
+      if (item.isReadable === false) {
+        return {
+          side: item.side || null,
+          isUnreadable: true,
+          reason: 'unreadable',
+          message: 'La imagen no es lo suficientemente clara. Por favor, vuelve a hacer la foto con buena iluminación y texto enfocado.'
+        };
+      }
+
+      if (!item.isCorrectDocument) {
+        return {
+          side: item.side || null,
+          isWrongDocument: true,
+          reason: 'wrong-document',
+          message: 'Documento incorrecto. Por favor sube el DNI/NIE.'
+        };
+      }
+
+      return {
+        side: item.side || null,
+        extraction: {
+          ...item,
+          needsManualReview: item.confidence < 0.75,
+        },
+        needsManualReview: item.confidence < 0.75,
+      };
+    });
+
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[extract-dni-batch] Unexpected error:', err);
+    res.json({ success: false, message: 'Error interno. Inténtalo de nuevo en unos segundos.' });
   }
 });
 
