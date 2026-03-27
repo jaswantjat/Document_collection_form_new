@@ -54,12 +54,27 @@ function hasRepresentationDone(formData: FormData | null, location: string | nul
   return false;
 }
 
-function getInitialSection(project: ProjectData | null, urlCode: string | null): Section | 'phone' {
+function isAssessorFollowUpDocumentFlow(
+  source: 'customer' | 'assessor',
+  formData: FormData | null
+): boolean {
+  if (source !== 'assessor' || !formData) return false;
+  const location = formData.location ?? formData.representation?.location ?? null;
+  return hasRepresentationDone(formData, location);
+}
+
+function getInitialSection(
+  project: ProjectData | null,
+  urlCode: string | null,
+  source: 'customer' | 'assessor'
+): Section | 'phone' {
   if (!project || !urlCode) return urlCode ? 'property-docs' : 'phone';
 
   const fd = project.formData;
   const location = fd?.location ?? fd?.representation?.location ?? null;
+  const followUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, fd);
 
+  if (followUpDocumentFlow && !hasPropertyDocsDone(fd)) return 'property-docs';
   if (hasRepresentationDone(fd, location)) return 'review';
   if (location) return 'representation';
   if (hasPropertyDocsDone(fd)) return 'province-selection';
@@ -90,6 +105,7 @@ function FormApp() {
   const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
+  const projectFollowUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, project?.formData ?? null);
 
   const loadProjectFromUrl = useEffectEvent((code: string, token?: string | null) => {
     setLoading(true);
@@ -123,15 +139,19 @@ function FormApp() {
     urlCode ? 'property-docs' : 'phone'
   );
 
-  const syncInitialSection = useEffectEvent((nextProject: ProjectData | null, nextUrlCode: string | null) => {
+  const syncInitialSection = useEffectEvent((
+    nextProject: ProjectData | null,
+    nextUrlCode: string | null,
+    nextSource: 'customer' | 'assessor'
+  ) => {
     if (!nextProject) return;
-    setCurrentSection(getInitialSection(nextProject, nextUrlCode));
+    setCurrentSection(getInitialSection(nextProject, nextUrlCode, nextSource));
   });
 
   // Determine initial section when project loads
   useEffect(() => {
-    void syncInitialSection(project, urlCode);
-  }, [project, urlCode]);
+    void syncInitialSection(project, urlCode, source);
+  }, [project, urlCode, source]);
 
   const {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
@@ -144,7 +164,14 @@ function FormApp() {
     setDocumentProcessingState,
     validatePropertyDocs,
     canSubmit,
-  } = useFormState(project?.code ?? null, project?.productType ?? 'solar', project?.formData ?? null, projectToken);
+  } = useFormState(
+    project?.code ?? null,
+    project?.productType ?? 'solar',
+    project?.formData ?? null,
+    projectToken,
+    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
+  );
+  const followUpDocumentFlow = isAssessorFollowUpDocumentFlow(source, formData);
 
   const goTo = (section: Section | 'phone') => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -181,6 +208,7 @@ function FormApp() {
             dni={formData.dni}
             ibi={formData.ibi}
             electricityBill={formData.electricityBill}
+            followUpMode={followUpDocumentFlow}
             errors={errors}
             documentProcessing={documentProcessing}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
@@ -195,7 +223,12 @@ function FormApp() {
             onDocumentProcessingChange={setDocumentProcessingState}
             onBack={() => goTo('phone')}
             onContinue={() => {
-              if (validatePropertyDocs()) goTo('province-selection');
+              if (!validatePropertyDocs()) return;
+              if (followUpDocumentFlow) {
+                goTo('review');
+                return;
+              }
+              goTo('province-selection');
             }}
           />
         );
@@ -235,10 +268,11 @@ function FormApp() {
             source={source}
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
+            followUpMode={followUpDocumentFlow}
             onEdit={(s) => goTo(s as Section)}
             onSuccess={() => goTo('success')}
             projectToken={projectToken}
-            onBack={() => goTo(reviewLoc === 'other' ? 'province-selection' : 'representation')}
+            onBack={() => goTo(followUpDocumentFlow ? 'property-docs' : reviewLoc === 'other' ? 'province-selection' : 'representation')}
           />
         );
       }

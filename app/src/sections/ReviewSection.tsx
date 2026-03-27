@@ -10,6 +10,7 @@ interface Props {
   source: 'customer' | 'assessor';
   canSubmit: boolean;
   hasBlockingDocumentProcessing: boolean;
+  followUpMode?: boolean;
   onEdit: (section: string) => void;
   onSuccess: () => void;
   projectToken?: string | null;
@@ -26,7 +27,17 @@ function hasRequiredSignatures(formData: FormData): boolean {
   return !!(rep?.ivaCertificateEsSignature && rep?.poderRepresentacioSignature);
 }
 
-export function ReviewSection({ project, formData, source, hasBlockingDocumentProcessing, onEdit, onSuccess, projectToken, onBack }: Props) {
+export function ReviewSection({
+  project,
+  formData,
+  source,
+  hasBlockingDocumentProcessing,
+  followUpMode = false,
+  onEdit,
+  onSuccess,
+  projectToken,
+  onBack,
+}: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
@@ -130,12 +141,18 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
         <div className="max-w-sm mx-auto">
           <img src="/eltex-logo.png" alt="Eltex" className="h-7 object-contain mb-4" />
           <h1 className="text-xl font-bold text-gray-900">
-            {allDone ? '¡Todo listo para enviar!' : 'Completa tu expediente'}
+            {followUpMode
+              ? (allDone ? 'Confirma tu documentación' : 'Sube lo que falte y confirma')
+              : (allDone ? '¡Todo listo para enviar!' : 'Completa tu expediente')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {allDone
-              ? 'Hemos recibido todos tus documentos. Revisa y envía cuando quieras.'
-              : `Faltan ${pendingItems.length} documento${pendingItems.length !== 1 ? 's' : ''} — toca cada uno para subirlo`}
+            {followUpMode
+              ? (allDone
+                ? 'Las firmas ya están registradas. Solo revisa y confirma el envío.'
+                : `Añade los documentos que te falten y confirma cuando quieras.`)
+              : (allDone
+                ? 'Hemos recibido todos tus documentos. Revisa y envía cuando quieras.'
+                : `Faltan ${pendingItems.length} documento${pendingItems.length !== 1 ? 's' : ''} — toca cada uno para subirlo`)}
           </p>
 
           {/* Progress bar */}
@@ -220,7 +237,7 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
         )}
 
         {/* Signature warning */}
-        {!hasBlockingDocumentProcessing && !signaturesOk && (
+        {!followUpMode && !hasBlockingDocumentProcessing && !signaturesOk && (
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>Faltan las firmas de los documentos de representación. Sin ellas, tu asesor <strong>no podrá tramitar el expediente</strong> ni solicitar las subvenciones correspondientes.</span>
@@ -246,7 +263,16 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
         {/* Bottom nav */}
         {!submitError && (
           <div className="pt-2 space-y-3">
-            {allDone ? (
+            {followUpMode ? (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={hasBlockingDocumentProcessing}
+                className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition-colors disabled:opacity-40 shadow-sm"
+              >
+                <Send className="w-5 h-5" /> {allDone ? 'Confirmar documentación' : 'Confirmar por ahora'}
+              </button>
+            ) : allDone ? (
               <button
                 type="button"
                 onClick={submit}

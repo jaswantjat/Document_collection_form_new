@@ -22,6 +22,22 @@ function clearAllSignedRepresentationArtifacts(representation: RepresentationDat
   };
 }
 
+function clearRenderedRepresentationArtifacts(representation: RepresentationData): RepresentationData {
+  return {
+    ...representation,
+    renderedDocuments: {},
+  };
+}
+
+function clearRepresentationArtifacts(
+  representation: RepresentationData,
+  preserveSignatures: boolean
+): RepresentationData {
+  return preserveSignatures
+    ? clearRenderedRepresentationArtifacts(representation)
+    : clearAllSignedRepresentationArtifacts(representation);
+}
+
 function clearGeneralitatArtifact(representation: RepresentationData): RepresentationData {
   const renderedDocuments = { ...(representation.renderedDocuments || {}) };
   delete renderedDocuments.catalunaGeneralitat;
@@ -191,7 +207,15 @@ export function getFormItems(_productType: ProductType): FormItem[] {
   return items;
 }
 
-export const useFormState = (projectCode: string | null, productType: ProductType, savedFormData?: FormData | null, projectToken?: string | null) => {
+export const useFormState = (
+  projectCode: string | null,
+  productType: ProductType,
+  savedFormData?: FormData | null,
+  projectToken?: string | null,
+  options?: { preserveRepresentationSignaturesOnDocumentChange?: boolean }
+) => {
+  const preserveRepresentationSignatures =
+    options?.preserveRepresentationSignaturesOnDocumentChange ?? false;
   const [formData, setFormData] = useState<FormData>(() => normalizeFormData(savedFormData));
   const [documentProcessing, setDocumentProcessing] = useState<Record<DocumentSlotKey, DocumentProcessingState>>(
     () => createInitialDocumentProcessing(normalizeFormData(savedFormData))
@@ -239,46 +263,46 @@ export const useFormState = (projectCode: string | null, productType: ProductTyp
     setFormData(prev => ({
       ...prev,
       dni: { ...prev.dni, front: { photo, extraction: photo ? prev.dni.front.extraction : null } },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
   const setDNIFrontExtraction = useCallback((extraction: AIExtraction | null) => {
     setFormData(prev => ({
       ...prev,
       dni: { ...prev.dni, front: { ...prev.dni.front, extraction } },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
   const setDNIBackPhoto = useCallback((photo: UploadedPhoto | null) => {
     setFormData(prev => ({
       ...prev,
       dni: { ...prev.dni, back: { photo, extraction: photo ? prev.dni.back.extraction : null } },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
   const setDNIBackExtraction = useCallback((extraction: AIExtraction | null) => {
     setFormData(prev => ({
       ...prev,
       dni: { ...prev.dni, back: { ...prev.dni.back, extraction } },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
 
   // IBI
   const setIBIPhoto = useCallback((photo: UploadedPhoto | null) => {
     setFormData(prev => ({
       ...prev,
       ibi: { ...prev.ibi, photo, extraction: photo ? prev.ibi.extraction : null },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
   const setIBIExtraction = useCallback((extraction: AIExtraction | null) => {
     setFormData(prev => ({
       ...prev,
       ibi: { ...prev.ibi, extraction },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
-  }, []);
+  }, [preserveRepresentationSignatures]);
 
   // Electricity — multi-page
   const addElectricityPage = useCallback((photo: UploadedPhoto, extraction: AIExtraction) => {
@@ -287,13 +311,13 @@ export const useFormState = (projectCode: string | null, productType: ProductTyp
       electricityBill: {
         pages: [...prev.electricityBill.pages, { photo, extraction }],
       },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
     setElectricityProcessing(prev => [
       ...prev,
       { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null },
     ]);
-  }, []);
+  }, [preserveRepresentationSignatures]);
 
   const removeElectricityPage = useCallback((index: number) => {
     setFormData(prev => ({
@@ -301,10 +325,10 @@ export const useFormState = (projectCode: string | null, productType: ProductTyp
       electricityBill: {
         pages: prev.electricityBill.pages.filter((_, i) => i !== index),
       },
-      representation: clearAllSignedRepresentationArtifacts(prev.representation),
+      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
     setElectricityProcessing(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [preserveRepresentationSignatures]);
 
   const setElectricityPageProcessing = useCallback((index: number, state: DocumentProcessingState) => {
     setElectricityProcessing(prev => {

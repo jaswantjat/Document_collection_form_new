@@ -19,6 +19,7 @@ interface Props {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
+  followUpMode?: boolean;
   errors: FormErrors;
   documentProcessing: Record<DocumentSlotKey, DocumentProcessingState>;
   hasBlockingDocumentProcessing: boolean;
@@ -843,6 +844,7 @@ export function PropertyDocsSection({
   dni,
   ibi,
   electricityBill,
+  followUpMode = false,
   errors,
   documentProcessing,
   hasBlockingDocumentProcessing,
@@ -903,7 +905,9 @@ export function PropertyDocsSection({
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Documentos</h1>
           <p className="text-gray-400 text-sm mt-1">
-            {isResuming && missingCount > 0
+            {followUpMode
+              ? 'Sube solo la documentación pendiente y confirma cuando termines.'
+              : isResuming && missingCount > 0
               ? `Falta${missingCount > 1 ? 'n' : ''} ${missingCount} documento${missingCount > 1 ? 's' : ''} por completar.`
               : 'Sube cada documento con buena luz. Solo se guarda cuando la verificación termina correctamente.'}
           </p>
@@ -976,7 +980,9 @@ export function PropertyDocsSection({
         ))}
 
         <p className="text-xs text-gray-400 text-center pt-1">
-          Puedes continuar sin tenerlos todos, pero no mientras haya una verificación en curso.
+          {followUpMode
+            ? 'Puedes confirmar lo que hayas subido, pero no mientras haya una verificación en curso.'
+            : 'Puedes continuar sin tenerlos todos, pero no mientras haya una verificación en curso.'}
         </p>
 
         {errors['propertyDocs.blocking'] && (
@@ -996,7 +1002,7 @@ export function PropertyDocsSection({
             disabled={isAnyBusy}
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Continuar <ArrowRight className="w-4 h-4" />
+            {followUpMode ? 'Revisar y confirmar' : 'Continuar'} <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
