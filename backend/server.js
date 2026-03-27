@@ -741,13 +741,22 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
     zip.addFile(`${folder}/${safeName}.${ext}`, buffer);
   };
 
+  const addStoredFiles = (label, files, folder) => {
+    if (!Array.isArray(files)) return;
+    files.forEach((file, index) => {
+      addBase64File(files.length === 1 ? label : `${label}_${index + 1}`, file?.dataUrl, folder);
+    });
+  };
+
   if (fd) {
     const ibiPages = getIbiPages(fd);
     addBase64File('DNI_frontal', fd.dni?.front?.photo?.preview, '1_documentos');
     addBase64File('DNI_trasera', fd.dni?.back?.photo?.preview, '1_documentos');
+    addStoredFiles('DNI_original_pdf', fd.dni?.originalPdfs, '1_documentos');
     ibiPages.forEach((page, i) => {
       addBase64File(ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`, page?.preview, '1_documentos');
     });
+    addStoredFiles('IBI_original_pdf', fd.ibi?.originalPdfs, '1_documentos');
 
     const getElecPages = (formData) => {
       const eb = formData.electricityBill;
@@ -758,6 +767,7 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
     getElecPages(fd).forEach((page, i) => {
       addBase64File(`Factura_luz_${i + 1}`, page?.photo?.preview, '1_documentos');
     });
+    addStoredFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, '1_documentos');
 
     (fd.electricalPanel?.photos || []).forEach((p, i) => addBase64File(`Cuadro_electrico_${i + 1}`, p?.preview, '2_fotos_instalacion'));
     (fd.roof?.photos || []).forEach((p, i) => addBase64File(`Tejado_${i + 1}`, p?.preview, '2_fotos_instalacion'));
@@ -795,16 +805,26 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
     }
   };
 
+  const addStoredManifestFiles = (label, storedFiles, category) => {
+    if (!Array.isArray(storedFiles)) return;
+    storedFiles.forEach((file, index) => {
+      addDataUrlFile(storedFiles.length === 1 ? label : `${label}_${index + 1}`, file?.dataUrl, category);
+    });
+  };
+
   if (fd) {
     const ibiPages = getIbiPages(fd);
     addDataUrlFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'document');
     addDataUrlFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'document');
+    addStoredManifestFiles('DNI_original_pdf', fd.dni?.originalPdfs, 'document-original-pdf');
     ibiPages.forEach((page, index) => {
       addDataUrlFile(ibiPages.length === 1 ? 'IBI' : `IBI_${index + 1}`, page?.preview, 'document');
     });
+    addStoredManifestFiles('IBI_original_pdf', fd.ibi?.originalPdfs, 'document-original-pdf');
     getElectricityPages(fd).forEach((page, index) => {
       addDataUrlFile(`Factura_luz_${index + 1}`, page?.photo?.preview, 'document');
     });
+    addStoredManifestFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'document-original-pdf');
     addDataUrlFile('Firma_iva_cat', fd.representation?.ivaCertificateSignature, 'signed-form-signature');
     addDataUrlFile('Firma_generalitat', fd.representation?.generalitatSignature, 'signed-form-signature');
     addDataUrlFile('Firma_representacio_cat', fd.representation?.representacioSignature, 'signed-form-signature');

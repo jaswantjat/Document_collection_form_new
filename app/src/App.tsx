@@ -169,8 +169,9 @@ function FormApp() {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
+    mergeDNIOriginalPdfs,
     setIBIDocument,
-    addElectricityPage, removeElectricityPage,
+    addElectricityPages, removeElectricityPage,
     setLocation,
     setRepresentation,
     setDocumentProcessingState,
@@ -228,8 +229,9 @@ function FormApp() {
             onDNIFrontExtractionChange={setDNIFrontExtraction}
             onDNIBackPhotoChange={setDNIBackPhoto}
             onDNIBackExtractionChange={setDNIBackExtraction}
+            onDNIOriginalPdfsMerge={mergeDNIOriginalPdfs}
             onIBIDocumentChange={setIBIDocument}
-            onAddElectricityPage={addElectricityPage}
+            onAddElectricityPages={addElectricityPages}
             onRemoveElectricityPage={removeElectricityPage}
             onDocumentProcessingChange={setDocumentProcessingState}
             onBack={() => goTo('phone')}

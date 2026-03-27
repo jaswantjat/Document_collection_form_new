@@ -1,4 +1,4 @@
-import type { PhotoValidationResult, UploadedPhoto } from '@/types';
+import type { PhotoValidationResult, StoredDocumentFile, UploadedPhoto } from '@/types';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
@@ -62,9 +62,11 @@ export interface ExpandedUploadError {
 
 export async function expandUploadFiles(files: File[]): Promise<{
   files: ExpandedUploadFile[];
+  originalPdfs: StoredDocumentFile[];
   errors: ExpandedUploadError[];
 }> {
   const expandedFiles: ExpandedUploadFile[] = [];
+  const originalPdfs: StoredDocumentFile[] = [];
   const errors: ExpandedUploadError[] = [];
 
   for (const file of files) {
@@ -83,6 +85,8 @@ export async function expandUploadFiles(files: File[]): Promise<{
         continue;
       }
 
+      originalPdfs.push(await createStoredDocumentFile(file));
+
       expandedFiles.push(
         ...pages.map((page) => ({
           file: page,
@@ -97,7 +101,7 @@ export async function expandUploadFiles(files: File[]): Promise<{
     }
   }
 
-  return { files: expandedFiles, errors };
+  return { files: expandedFiles, originalPdfs, errors };
 }
 
 function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
@@ -163,6 +167,32 @@ export function createUploadedPhoto(file: File, preview: string, width?: number,
     sizeBytes: file.size,
     width, height,
   };
+}
+
+export async function createStoredDocumentFile(file: File): Promise<StoredDocumentFile> {
+  return {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    filename: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    dataUrl: await fileToBase64(file),
+    timestamp: Date.now(),
+    sizeBytes: file.size,
+  };
+}
+
+export function mergeStoredDocumentFiles(
+  existing: StoredDocumentFile[] | null | undefined,
+  incoming: StoredDocumentFile[] | null | undefined
+): StoredDocumentFile[] {
+  const merged = [...(existing || []), ...(incoming || [])];
+  const seen = new Set<string>();
+
+  return merged.filter((file) => {
+    const key = `${file.filename}:${file.sizeBytes}:${file.dataUrl}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function fileToBase64(file: File): Promise<string> {

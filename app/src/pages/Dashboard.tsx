@@ -36,7 +36,8 @@ import {
 } from '@/lib/dashboardProject';
 import { getStoredRenderedDocument, renderSignedDocumentOverlay } from '@/lib/signedDocumentOverlays';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
-import { compressImageForAI, fileToBase64 } from '@/lib/photoValidation';
+import type { StoredDocumentFile } from '@/types';
+import { compressImageForAI, createStoredDocumentFile, fileToBase64, mergeStoredDocumentFiles } from '@/lib/photoValidation';
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -134,6 +135,11 @@ interface PreparedAdminPage {
   sizeBytes: number;
 }
 
+interface PreparedAdminUpload {
+  pages: PreparedAdminPage[];
+  originalPdfs: StoredDocumentFile[];
+}
+
 function getIbiPages(ibi: any): any[] {
   if (Array.isArray(ibi?.pages) && ibi.pages.length > 0) {
     return ibi.pages;
@@ -141,8 +147,9 @@ function getIbiPages(ibi: any): any[] {
   return ibi?.photo ? [ibi.photo] : [];
 }
 
-async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminPage[]> {
+async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminUpload> {
   const preparedPages: PreparedAdminPage[] = [];
+  const originalPdfs: StoredDocumentFile[] = [];
 
   for (const file of files) {
     const sourceFiles = file.type === 'application/pdf'
@@ -151,6 +158,10 @@ async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminPage
 
     if (sourceFiles.length === 0) {
       throw new Error(`El archivo "${file.name}" no contenía ninguna página utilizable.`);
+    }
+
+    if (file.type === 'application/pdf') {
+      originalPdfs.push(await createStoredDocumentFile(file));
     }
 
     const preparedFromFile = await Promise.all(sourceFiles.map(async (page) => {
@@ -169,7 +180,7 @@ async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminPage
     throw new Error('No se encontró ninguna imagen utilizable.');
   }
 
-  return preparedPages;
+  return { pages: preparedPages, originalPdfs };
 }
 
 async function viewPDFInNewTab(pdfFactory: () => Promise<Blob>) {
@@ -663,7 +674,7 @@ function AdminUploadModal({
         : 'Preparando imagen...');
 
     try {
-      const preparedPages = await prepareAdminUploadPages(files);
+      const { pages: preparedPages, originalPdfs } = await prepareAdminUploadPages(files);
       setStatusMsg('Extrayendo datos con IA...');
 
       const docTypeMap: Record<AdminDocType, Parameters<typeof extractDocument>[1]> = {
@@ -703,12 +714,26 @@ function AdminUploadModal({
 
       let formDataPatch: any;
       if (activeTab === 'dni-front') {
-        formDataPatch = { dni: { front: { photo: buildPhoto(preparedPages[0]), extraction } } };
+        formDataPatch = {
+          dni: {
+            front: { photo: buildPhoto(preparedPages[0]), extraction },
+            ...(originalPdfs.length > 0
+              ? { originalPdfs: mergeStoredDocumentFiles(project.formData?.dni?.originalPdfs, originalPdfs) }
+              : {}),
+          },
+        };
       } else if (activeTab === 'dni-back') {
-        formDataPatch = { dni: { back: { photo: buildPhoto(preparedPages[0]), extraction } } };
+        formDataPatch = {
+          dni: {
+            back: { photo: buildPhoto(preparedPages[0]), extraction },
+            ...(originalPdfs.length > 0
+              ? { originalPdfs: mergeStoredDocumentFiles(project.formData?.dni?.originalPdfs, originalPdfs) }
+              : {}),
+          },
+        };
       } else if (activeTab === 'ibi') {
         const storedPages = preparedPages.map((page, index) => buildPhoto(page, index));
-        formDataPatch = { ibi: { photo: storedPages[0], pages: storedPages, extraction } };
+        formDataPatch = { ibi: { photo: storedPages[0], pages: storedPages, originalPdfs, extraction } };
       } else {
         const existingPages = project.formData?.electricityBill?.pages ?? [];
         formDataPatch = {
@@ -720,6 +745,7 @@ function AdminUploadModal({
                 extraction,
               })),
             ],
+            originalPdfs: mergeStoredDocumentFiles(project.formData?.electricityBill?.originalPdfs, originalPdfs),
           },
         };
       }

@@ -26,6 +26,15 @@ export interface UploadedPhoto {
   height?: number;
 }
 
+export interface StoredDocumentFile {
+  id: string;
+  filename: string;
+  mimeType: string;
+  dataUrl: string;
+  timestamp: number;
+  sizeBytes: number;
+}
+
 export interface AIExtraction {
   extractedData: Record<string, any>;
   confidence: number;
@@ -71,16 +80,19 @@ export interface DocumentProcessingState {
 export interface DNIData {
   front: DocSlot;
   back: DocSlot;
+  originalPdfs: StoredDocumentFile[];
 }
 
 export interface IBIData {
   photo: UploadedPhoto | null;
   pages: UploadedPhoto[];
+  originalPdfs: StoredDocumentFile[];
   extraction: AIExtraction | null;
 }
 
 export interface ElectricityBillData {
   pages: DocSlot[];
+  originalPdfs: StoredDocumentFile[];
   front?: DocSlot;
   back?: DocSlot;
 }
