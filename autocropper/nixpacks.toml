@@ -1,0 +1,20 @@
+[phases.setup]
+nixpkgs.bash = "inherit"
+
+[phases.build]
+nixpkgs.bash = "inherit"
+nixpkgs.python311 = "inherit"
+nixpkgs.python311Packages.flask = "inherit"
+nixpkgs.python311Packages.pip = "inherit"
+nixpkgs.opencv4 = "inherit"
+nixpkgs.opencv4.python = "inherit"
+nixpkgs.tesseract = "inherit"
+
+[phases.install]
+nixpkgs.bash = "inherit"
+nixpkgs.python311 = "inherit"
+nixpkgs.python311Packages.pip = "inherit"
+nixpkgs.python311Packages.numpy = "inherit"
+
+[start]
+command = "gunicorn --bind 0.0.0.0:5000 app:app --timeout 120 --workers 1 --worker-class sync"

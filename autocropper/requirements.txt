@@ -1,0 +1,19 @@
+# Flask web framework
+Flask==3.0.3
+flask-cors==5.0.0
+Werkzeug==3.0.3
+
+# Image processing
+opencv-python==4.10.0.84
+numpy==1.26.4
+Pillow==11.1.0
+
+# PDF generation
+img2pdf==0.1.4
+reportlab==4.2.5
+
+# OCR for orientation detection (optional, can be skipped initially)
+pytesseract==0.3.13
+
+# Gunicorn for production
+gunicorn==23.0.0

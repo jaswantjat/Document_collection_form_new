@@ -1,0 +1,10 @@
+{
+  "scripts": [
+    {
+      "name": "test",
+      "command": "npm run test",
+      "mode": "command",
+      "category": "test"
+    }
+  ]
+}

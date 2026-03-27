@@ -136,40 +136,10 @@ export interface SignaturesData {
   repSignature: string | null;
 }
 
-export interface ElectricalPanelData {
-  photos: UploadedPhoto[];
-}
-
-export interface RoofData {
-  photos: UploadedPhoto[];
-  lengthM: string;
-  widthM: string;
-  roofType: string;
-  orientation: string;
-}
-
-export interface InstallationSpaceData {
-  photos: UploadedPhoto[];
-  widthCm: string;
-  depthCm: string;
-  heightCm: string;
-}
-
-export interface RadiatorsData {
-  photos: UploadedPhoto[];
-  radiatorType: string;
-  totalCount: string;
-  heatingZones: string;
-}
-
 export interface FormData {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
-  electricalPanel: ElectricalPanelData;
-  roof: RoofData;
-  installationSpace: InstallationSpaceData;
-  radiators: RadiatorsData;
   location?: LocationRegion;
   representation: RepresentationData;
   signatures: SignaturesData;

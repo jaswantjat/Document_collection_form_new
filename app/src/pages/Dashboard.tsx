@@ -25,6 +25,7 @@ import {
   X,
   Upload,
   Zap,
+  Scissors,
 } from 'lucide-react';
 import { dashboardLogout, fetchDashboard, fetchDashboardProject, generateImagePDF, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
 import {
@@ -256,13 +257,16 @@ function ProductBadge({ type }: { type: string }) {
   );
 }
 
-function SectionHeading({ icon: Icon, label }: { icon: any; label: string }) {
+function SectionHeading({ icon: Icon, label, actions }: { icon: any; label: string; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-      <div className="w-6 h-6 rounded-md bg-eltex-blue-light flex items-center justify-center">
-        <Icon className="w-3.5 h-3.5 text-eltex-blue" />
+    <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
+      <div className="flex items-center gap-2">
+        <div className="w-6 h-6 rounded-md bg-eltex-blue-light flex items-center justify-center">
+          <Icon className="w-3.5 h-3.5 text-eltex-blue" />
+        </div>
+        <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">{label}</p>
       </div>
-      <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">{label}</p>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -454,6 +458,105 @@ function SignedPdfButtons({
       >
         {loading === 'download' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
       </button>
+    </div>
+  );
+}
+
+async function callAutocropper(documentType: string, images: string[]): Promise<{ success: boolean; cropped_images?: string[]; combined_pdf?: string }> {
+  const response = await fetch('/api/autocropper/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documentType, images }),
+  });
+  if (!response.ok) {
+    throw new Error('Autocropper service error');
+  }
+  return response.json();
+}
+
+function AutocropperButton({
+  documentType,
+  images,
+  onPDFReady,
+  projectCode,
+}: {
+  documentType: 'dni' | 'ibi' | 'electricity';
+  images: string[];
+  onPDFReady?: (pdfDataUrl: string) => void;
+  projectCode: string;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ cropped_images: string[]; combined_pdf: string } | null>(null);
+
+  const handleAutocrop = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const response = await callAutocropper(documentType, images);
+      if (response.success && response.combined_pdf) {
+        setResult({ cropped_images: response.cropped_images || [], combined_pdf: response.combined_pdf });
+        onPDFReady?.(response.combined_pdf);
+      } else {
+        alert('No se pudo procesar el documento. Asegúrate de que el servicio autocropper está activo.');
+      }
+    } catch (err) {
+      console.error('Autocropper error:', err);
+      alert('Error al conectar con el servicio de recorte automático.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadPDF = () => {
+    if (result?.combined_pdf) {
+      const pdfData = result.combined_pdf.split(',')[1];
+      const blob = new Blob([Uint8Array.from(atob(pdfData), (c) => c.charCodeAt(0))], { type: 'application/pdf' });
+      downloadBlob(blob, `${projectCode}_${documentType}_recortado.pdf`);
+    }
+  };
+
+  const downloadCroppedImages = () => {
+    if (result?.cropped_images) {
+      result.cropped_images.forEach((imgDataUrl, index) => {
+        const imgData = imgDataUrl.split(',')[1];
+        const blob = new Blob([Uint8Array.from(atob(imgData), (c) => c.charCodeAt(0))], { type: 'image/jpeg' });
+        downloadBlob(blob, `${projectCode}_${documentType}_${index + 1}_recortado.jpg`);
+      });
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={loading}
+        onClick={handleAutocrop}
+        className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-eltex-blue-200 bg-white text-eltex-blue-700 hover:bg-eltex-blue-50 transition-colors disabled:opacity-50"
+        title="Recortar y generar PDF"
+      >
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Scissors className="w-3.5 h-3.5" />}
+        {!loading && <span className="text-xs font-medium">Recortar</span>}
+      </button>
+      {result?.combined_pdf && (
+        <>
+          <button
+            type="button"
+            onClick={downloadPDF}
+            className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+            title="Descargar PDF recortado"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={downloadCroppedImages}
+            className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors"
+            title="Descargar imágenes recortadas"
+          >
+            <Archive className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1063,9 +1166,24 @@ export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string
     mimeType: extensionFromMimeType(undefined, dni.back.photo.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
   } : null;
 
+  // Collect images for autocropper
+  const dniImages: string[] = [];
+  if (dni.front?.photo?.preview) dniImages.push(dni.front.photo.preview);
+  if (dni.back?.photo?.preview) dniImages.push(dni.back.photo.preview);
+
   return (
     <div className="space-y-3">
-      <SectionHeading icon={CreditCard} label="DNI / NIE" />
+      <SectionHeading
+        icon={CreditCard}
+        label="DNI / NIE"
+        actions={dniImages.length > 0 ? (
+          <AutocropperButton
+            documentType="dni"
+            images={dniImages}
+            projectCode={projectCode}
+          />
+        ) : undefined}
+      />
       <div className="grid lg:grid-cols-2 gap-4">
         <ImagePreviewCard
           title="Cara frontal"
@@ -1111,9 +1229,22 @@ export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string
     }));
   const primaryAsset = assets[0] || null;
 
+  // Collect images for autocropper
+  const ibiImages: string[] = assets.map(a => a.dataUrl);
+
   return (
     <div className="space-y-3">
-      <SectionHeading icon={FileText} label="IBI / Escritura" />
+      <SectionHeading
+        icon={FileText}
+        label="IBI / Escritura"
+        actions={ibiImages.length > 0 ? (
+          <AutocropperButton
+            documentType="ibi"
+            images={ibiImages}
+            projectCode={projectCode}
+          />
+        ) : undefined}
+      />
       <div className="grid lg:grid-cols-[220px_1fr] gap-4">
         <div className="space-y-2">
           {assets.length > 0 && (
@@ -1170,9 +1301,27 @@ export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCo
   const uploadedPages = normalised.filter((p: any) => p?.photo);
   if (uploadedPages.length === 0) return null;
 
+  // Collect images for autocropper
+  const electricityImages: string[] = [];
+  uploadedPages.forEach((page: any) => {
+    if (page?.photo?.preview) {
+      electricityImages.push(page.photo.preview);
+    }
+  });
+
   return (
     <div className="space-y-3">
-      <SectionHeading icon={Zap} label={`Factura de electricidad — ${uploadedPages.length} imagen${uploadedPages.length !== 1 ? 'es' : ''}`} />
+      <SectionHeading
+        icon={Zap}
+        label={`Factura de electricidad — ${uploadedPages.length} imagen${uploadedPages.length !== 1 ? 'es' : ''}`}
+        actions={electricityImages.length > 0 ? (
+          <AutocropperButton
+            documentType="electricity"
+            images={electricityImages}
+            projectCode={projectCode}
+          />
+        ) : undefined}
+      />
       <div className="grid lg:grid-cols-2 gap-4">
         {uploadedPages.map((page: any, i: number) => {
           const asset = page?.photo?.preview ? {

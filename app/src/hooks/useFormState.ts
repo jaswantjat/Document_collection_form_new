@@ -89,10 +89,6 @@ export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [] },
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
   electricityBill: { pages: [], originalPdfs: [] },
-  electricalPanel: { photos: [] },
-  roof: { photos: [], lengthM: '', widthM: '', roofType: '', orientation: '' },
-  installationSpace: { photos: [], widthCm: '', depthCm: '', heightCm: '' },
-  radiators: { photos: [], radiatorType: '', totalCount: '', heatingZones: '' },
   signatures: { customerSignature: null, repSignature: null },
   representation: {
     location: null,
@@ -144,26 +140,6 @@ function normalizeFormData(savedFormData?: FormData | null): FormData {
     electricityBill: {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
       originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
-    },
-    electricalPanel: {
-      ...initialFormData.electricalPanel,
-      ...savedFormData?.electricalPanel,
-      photos: savedFormData?.electricalPanel?.photos ?? initialFormData.electricalPanel.photos,
-    },
-    roof: {
-      ...initialFormData.roof,
-      ...savedFormData?.roof,
-      photos: savedFormData?.roof?.photos ?? initialFormData.roof.photos,
-    },
-    installationSpace: {
-      ...initialFormData.installationSpace,
-      ...savedFormData?.installationSpace,
-      photos: savedFormData?.installationSpace?.photos ?? initialFormData.installationSpace.photos,
-    },
-    radiators: {
-      ...initialFormData.radiators,
-      ...savedFormData?.radiators,
-      photos: savedFormData?.radiators?.photos ?? initialFormData.radiators.photos,
     },
     signatures: {
       ...initialFormData.signatures,
@@ -375,20 +351,6 @@ export const useFormState = (
     });
   }, []);
 
-  // Property Photos
-  const setElectricalPanelPhotos = useCallback((photos: UploadedPhoto[]) => {
-    setFormData(prev => ({ ...prev, electricalPanel: { photos } }));
-  }, []);
-  const updateRoof = useCallback((field: string, value: any) => {
-    setFormData(prev => ({ ...prev, roof: { ...prev.roof, [field]: value } }));
-  }, []);
-  const updateInstallationSpace = useCallback((field: string, value: any) => {
-    setFormData(prev => ({ ...prev, installationSpace: { ...prev.installationSpace, [field]: value } }));
-  }, []);
-  const updateRadiators = useCallback((field: string, value: any) => {
-    setFormData(prev => ({ ...prev, radiators: { ...prev.radiators, [field]: value } }));
-  }, []);
-
   // Representation
   const setRepresentation = useCallback((rep: RepresentationData) => {
     setFormData(prev => {
@@ -501,8 +463,6 @@ export const useFormState = (
     mergeDNIOriginalPdfs,
     setIBIDocument,
     addElectricityPages, removeElectricityPage, setElectricityPageProcessing,
-    setElectricalPanelPhotos,
-    updateRoof, updateInstallationSpace, updateRadiators,
     setLocation,
     setRepresentation,
     setDocumentProcessingState,

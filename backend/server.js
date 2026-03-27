@@ -768,11 +768,6 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
       addBase64File(`Factura_luz_${i + 1}`, page?.photo?.preview, '1_documentos');
     });
     addStoredFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, '1_documentos');
-
-    (fd.electricalPanel?.photos || []).forEach((p, i) => addBase64File(`Cuadro_electrico_${i + 1}`, p?.preview, '2_fotos_instalacion'));
-    (fd.roof?.photos || []).forEach((p, i) => addBase64File(`Tejado_${i + 1}`, p?.preview, '2_fotos_instalacion'));
-    (fd.installationSpace?.photos || []).forEach((p, i) => addBase64File(`Espacio_instalacion_${i + 1}`, p?.preview, '2_fotos_instalacion'));
-    (fd.radiators?.photos || []).forEach((p, i) => addBase64File(`Radiadores_${i + 1}`, p?.preview, '2_fotos_instalacion'));
   }
 
   const zipBuffer = zip.toBuffer();
@@ -832,11 +827,6 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
     addDataUrlFile('Firma_poder_es', fd.representation?.poderRepresentacioSignature, 'signed-form-signature');
     addDataUrlFile('Firma_cliente', fd.signatures?.customerSignature, 'final-signature');
     addDataUrlFile('Firma_comercial', fd.signatures?.repSignature, 'final-signature');
-
-    (fd.electricalPanel?.photos || []).forEach((photo, index) => addDataUrlFile(`Cuadro_electrico_${index + 1}`, photo?.preview, 'property-photo'));
-    (fd.roof?.photos || []).forEach((photo, index) => addDataUrlFile(`Tejado_${index + 1}`, photo?.preview, 'property-photo'));
-    (fd.installationSpace?.photos || []).forEach((photo, index) => addDataUrlFile(`Espacio_instalacion_${index + 1}`, photo?.preview, 'property-photo'));
-    (fd.radiators?.photos || []).forEach((photo, index) => addDataUrlFile(`Radiadores_${index + 1}`, photo?.preview, 'property-photo'));
   }
 
   res.json({ success: true, projectCode: project.code, customerName: project.customerName, files });
@@ -1834,6 +1824,64 @@ app.post('/api/generate-image-pdf', async (req, res) => {
   } catch (err) {
     console.error('Overlay PDF generation error:', err);
     res.status(500).json({ success: false, error: 'PDF_GENERATION_ERROR', message: 'Error al generar el PDF desde la imagen.' });
+  }
+});
+
+// ============================================================================
+// AUTOCROPPER SERVICE PROXY
+// ============================================================================
+const AUTOCROPPER_URL = process.env.AUTOCROPPER_URL || 'http://localhost:5001';
+
+app.post('/api/autocropper/process', async (req, res) => {
+  try {
+    const { documentType, images } = req.body || {};
+
+    if (!documentType) {
+      return res.status(400).json({ success: false, error: 'INVALID_REQUEST', message: 'documentType is required' });
+    }
+
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ success: false, error: 'INVALID_REQUEST', message: 'images array is required' });
+    }
+
+    // Forward request to autocropper service
+    const response = await fetch(`${AUTOCROPPER_URL}/api/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ documentType, images }),
+    });
+
+    if (!response.ok) {
+      console.error('Autocropper service error:', response.status, response.statusText);
+      return res.status(response.status).json({
+        success: false,
+        error: 'AUTOCROPPER_SERVICE_ERROR',
+        message: 'Error communicating with autocropper service'
+      });
+    }
+
+    const result = await response.json();
+    res.json(result);
+
+  } catch (err) {
+    console.error('Autocropper proxy error:', err);
+    res.status(500).json({ success: false, error: 'AUTOCROPPER_ERROR', message: 'Error procesando documento' });
+  }
+});
+
+app.get('/api/autocropper/health', async (req, res) => {
+  try {
+    const response = await fetch(`${AUTOCROPPER_URL}/health`);
+    if (response.ok) {
+      const health = await response.json();
+      res.json({ ...health, proxy: 'connected' });
+    } else {
+      res.status(503).json({ status: 'unavailable', service: 'autocropper', proxy: 'disconnected' });
+    }
+  } catch (err) {
+    res.status(503).json({ status: 'error', service: 'autocropper', proxy: 'error' });
   }
 });
 
