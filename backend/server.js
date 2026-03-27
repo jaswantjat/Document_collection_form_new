@@ -1025,6 +1025,14 @@ function normalizeIdentityExtraction(item) {
     || extractedData.province
     || extractedData.placeOfBirth
   );
+  const explicitBackCue =
+    detectedText.includes('back side')
+    || detectedText.includes('back')
+    || detectedText.includes('reverse')
+    || detectedText.includes('reverso')
+    || detectedText.includes('dorso')
+    || detectedText.includes('trasera')
+    || detectedText.includes('legal text');
 
   let identityDocumentKind = IDENTITY_DOCUMENT_KINDS.has(normalized.identityDocumentKind)
     ? normalized.identityDocumentKind
@@ -1045,7 +1053,9 @@ function normalizeIdentityExtraction(item) {
     ? normalized.side
     : null;
 
-  if (identityDocumentKind === 'nie-certificate') {
+  if (explicitBackCue && !hasIdentityCore) {
+    side = 'back';
+  } else if (identityDocumentKind === 'nie-certificate') {
     side = 'front';
   } else if (hasIdentityCore) {
     side = 'front';
