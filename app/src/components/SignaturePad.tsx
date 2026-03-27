@@ -12,7 +12,8 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(!!existingSignature);
+  const [hasLocalSignature, setHasLocalSignature] = useState(false);
+  const hasSignature = hasLocalSignature || !!existingSignature;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,8 +28,8 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
-    
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
@@ -38,6 +39,7 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     if (existingSignature) {
       const img = new Image();
       img.onload = () => {
+        ctx.clearRect(0, 0, rect.width, rect.height);
         ctx.drawImage(img, 0, 0, rect.width, rect.height);
       };
       img.src = existingSignature;
@@ -123,7 +125,7 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
       }
     }
 
-    setHasSignature(hasContent);
+    setHasLocalSignature(hasContent);
     
     if (hasContent) {
       // Export at display size for storage
@@ -146,7 +148,7 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     if (!canvas || !ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
+    setHasLocalSignature(false);
     onSignature(null);
 
     // Animate clear

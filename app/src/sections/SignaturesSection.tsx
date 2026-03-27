@@ -26,7 +26,8 @@ interface SignaturePadProps {
 function SignaturePad({ label, subtitle, value, error, onChange }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(!!value);
+  const [hasLocalSignature, setHasLocalSignature] = useState(false);
+  const hasSignature = hasLocalSignature || !!value;
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -40,14 +41,18 @@ function SignaturePad({ label, subtitle, value, error, onChange }: SignaturePadP
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // If we have a value, restore it
-    if (value && !hasSignature) {
+    if (value) {
       const img = new Image();
-      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      };
       img.src = value;
     }
-  }, []);
+  }, [value]);
 
   const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
@@ -85,7 +90,7 @@ function SignaturePad({ label, subtitle, value, error, onChange }: SignaturePadP
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
     lastPos.current = pos;
-    setHasSignature(true);
+    setHasLocalSignature(true);
   };
 
   const endDraw = () => {
@@ -104,7 +109,7 @@ function SignaturePad({ label, subtitle, value, error, onChange }: SignaturePadP
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
+    setHasLocalSignature(false);
     onChange(null);
   };
 

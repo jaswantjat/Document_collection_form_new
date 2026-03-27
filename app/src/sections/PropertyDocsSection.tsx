@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type {
@@ -639,7 +639,7 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
         validFiles.find(f => f.id === p.id) ? { ...p, status: 'failed' as const, error: errMsg } : p
       ));
     }
-  }, [onAddPage]);
+  }, [onAddPage, pages]);
 
   const dismissError = (id: string) => {
     setPendingItems(prev => prev.filter(p => p.id !== id));
@@ -839,10 +839,12 @@ export function PropertyDocsSection({
   const [electricityIsBusy, setElectricityIsBusy] = useState(false);
 
   // Frictionless resume: detect which docs were already done on first mount
-  const initialDni = useRef(!!(dni.front.photo || dni.back.photo));
-  const initialIbi = useRef(!!ibi.photo);
-  const initialElectricity = useRef(electricityBill.pages.length > 0);
-  const isResuming = initialDni.current || initialIbi.current || initialElectricity.current;
+  const [resumeSnapshot] = useState(() => ({
+    dni: !!(dni.front.photo && dni.back.photo),
+    ibi: !!ibi.photo,
+    electricity: electricityBill.pages.length > 0,
+  }));
+  const isResuming = resumeSnapshot.dni || resumeSnapshot.ibi || resumeSnapshot.electricity;
 
   // Track which compact rows have been expanded by the user
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -855,7 +857,7 @@ export function PropertyDocsSection({
   const validationWarnings = hasAnyDoc ? computeValidationWarnings(dni, electricityBill) : [];
 
   // Whether each card should show compact
-  const dniDone = !!(dni.front.photo || dni.back.photo);
+  const dniDone = !!(dni.front.photo && dni.back.photo);
   const ibiDone = !!ibi.photo;
   const elecDone = electricityBill.pages.length > 0;
 

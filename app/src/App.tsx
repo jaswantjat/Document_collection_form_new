@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import { useFormState } from '@/hooks/useFormState';
@@ -32,7 +32,12 @@ function DashboardApp() {
 // ── Helpers for smart section routing ─────────────────────────────────────────
 function hasPropertyDocsDone(formData: FormData | null): boolean {
   if (!formData) return false;
-  return !!(formData.dni?.front?.photo || formData.dni?.back?.photo);
+  return !!(
+    formData.dni?.front?.photo
+    && formData.dni?.back?.photo
+    && formData.ibi?.photo
+    && formData.electricityBill?.pages?.length
+  );
 }
 
 function hasRepresentationDone(formData: FormData | null, location: string | null): boolean {
@@ -76,6 +81,7 @@ function FormApp() {
 
   const urlCode = searchParams.get('code') || searchParams.get('project');
   const urlToken = searchParams.get('token');
+  const source = searchParams.get('source') === 'assessor' ? 'assessor' : 'customer';
 
   // Resolve token: URL param → sessionStorage fallback
   const resolvedToken = urlToken ?? (urlCode ? getStoredToken(urlCode) : null);
@@ -85,12 +91,9 @@ function FormApp() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
 
-  // If URL has a code, load it on mount
-  useEffect(() => {
-    if (!urlCode) return;
-    const token = urlToken ?? getStoredToken(urlCode);
+  const loadProjectFromUrl = useEffectEvent((code: string, token?: string | null) => {
     setLoading(true);
-    fetchProject(urlCode, token)
+    fetchProject(code, token)
       .then(res => {
         if (res.success && res.project) {
           setProject(res.project);
@@ -98,7 +101,7 @@ function FormApp() {
           const activeToken = token ?? res.project.accessToken ?? null;
           if (activeToken) {
             setProjectToken(activeToken);
-            storeToken(urlCode, activeToken);
+            storeToken(code, activeToken);
           }
         } else {
           setLoadError(res.error || 'PROJECT_NOT_FOUND');
@@ -106,6 +109,13 @@ function FormApp() {
       })
       .catch(() => setLoadError('NETWORK_ERROR'))
       .finally(() => setLoading(false));
+  });
+
+  // If URL has a code, load it on mount
+  useEffect(() => {
+    if (!urlCode) return;
+    const token = urlToken ?? getStoredToken(urlCode);
+    void loadProjectFromUrl(urlCode, token);
   }, [urlCode, urlToken]);
 
   // Current section — smart routing based on what's already completed
@@ -113,10 +123,14 @@ function FormApp() {
     urlCode ? 'property-docs' : 'phone'
   );
 
+  const syncInitialSection = useEffectEvent((nextProject: ProjectData | null, nextUrlCode: string | null) => {
+    if (!nextProject) return;
+    setCurrentSection(getInitialSection(nextProject, nextUrlCode));
+  });
+
   // Determine initial section when project loads
   useEffect(() => {
-    if (!project) return;
-    setCurrentSection(getInitialSection(project, urlCode));
+    void syncInitialSection(project, urlCode);
   }, [project, urlCode]);
 
   const {
@@ -143,7 +157,7 @@ function FormApp() {
     setProjectToken(token);
     // Persist so page refresh after phone lookup doesn't hit FORBIDDEN
     if (token) storeToken(foundProject.code, token);
-    navigate(`/?code=${foundProject.code}`, { replace: true });
+    navigate(`/?code=${foundProject.code}&source=assessor`, { replace: true });
     goTo('property-docs');
   };
 
@@ -218,7 +232,7 @@ function FormApp() {
           <ReviewSection
             project={project}
             formData={formData}
-            source={urlCode ? 'customer' : 'assessor'}
+            source={source}
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             onEdit={(s) => goTo(s as Section)}

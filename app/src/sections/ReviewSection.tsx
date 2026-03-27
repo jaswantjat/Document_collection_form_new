@@ -17,7 +17,7 @@ interface Props {
 }
 
 function hasRequiredSignatures(formData: FormData): boolean {
-  const location = (formData.location ?? (formData.representation as any)?.location ?? null) as LocationRegion | null;
+  const location = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
   if (!location || location === 'other') return true;
   const rep = formData.representation;
   if (location === 'cataluna') {
@@ -40,14 +40,14 @@ export function ReviewSection({ project, formData, source, hasBlockingDocumentPr
     {
       id: 'dni',
       label: 'DNI / NIE',
-      doneLabel: (!!dni.front.photo && !!dni.back.photo)
+      doneLabel: (dni.front.photo && dni.back.photo)
         ? 'DNI / NIE — ambas caras'
-        : !!dni.front.photo ? 'DNI / NIE — cara frontal'
+        : dni.front.photo ? 'DNI / NIE — cara frontal'
         : 'DNI / NIE — cara trasera',
       description: 'Foto de tu DNI o NIE por ambas caras',
       hint: 'Asegúrate de que los datos sean legibles',
       icon: Camera,
-      done: !!dni.front.photo || !!dni.back.photo,
+      done: !!dni.front.photo && !!dni.back.photo,
       section: 'property-docs',
     },
     {
