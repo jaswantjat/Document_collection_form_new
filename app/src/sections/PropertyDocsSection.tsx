@@ -445,8 +445,9 @@ function DNICard({ front, back, onFrontPhotoChange, onFrontExtractionChange, onB
         }
 
         const photo = createUploadedPhoto(prepared.file, prepared.preview, prepared.width, prepared.height);
+        const extracted = result.extraction as Omit<AIExtraction, 'needsManualReview' | 'confirmedByUser'>;
         const extraction: AIExtraction = {
-          ...result.extraction,
+          ...extracted,
           needsManualReview: result.needsManualReview ?? false,
           confirmedByUser: true,
         };

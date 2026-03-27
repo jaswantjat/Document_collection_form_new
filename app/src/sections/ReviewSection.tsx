@@ -98,7 +98,7 @@ export function ReviewSection({
       const submitPayload = stripRenderedImages(renderedFormData);
       const res = await submitForm(project.code, submitPayload, source, projectToken);
       if (res.success) onSuccess();
-      else setSubmitError('Error al enviar. Inténtalo de nuevo.');
+      else setSubmitError(res.message || 'Error al enviar. Inténtalo de nuevo.');
     } catch {
       setSubmitError('Sin conexión. Inténtalo de nuevo.');
     } finally {

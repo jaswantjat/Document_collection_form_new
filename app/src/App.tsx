@@ -85,6 +85,13 @@ function storeToken(code: string, token: string) {
   try { sessionStorage.setItem(`project_token_${code}`, token); } catch { /* ignore */ }
 }
 
+function buildProjectUrl(code: string, token?: string | null, source?: 'customer' | 'assessor') {
+  const params = new URLSearchParams({ code });
+  if (token) params.set('token', token);
+  if (source === 'assessor') params.set('source', 'assessor');
+  return `/?${params.toString()}`;
+}
+
 // ── Main Form App ─────────────────────────────────────────────────────────────
 function FormApp() {
   const [searchParams] = useSearchParams();
@@ -129,6 +136,11 @@ function FormApp() {
     const token = urlToken ?? getStoredToken(urlCode);
     void loadProjectFromUrl(urlCode, token);
   }, [urlCode, urlToken]);
+
+  useEffect(() => {
+    if (!urlCode || !projectToken || urlToken) return;
+    navigate(buildProjectUrl(urlCode, projectToken, source), { replace: true });
+  }, [navigate, projectToken, source, urlCode, urlToken]);
 
   // Current section — smart routing based on what's already completed
   const [currentSection, setCurrentSection] = useState<Section | 'phone'>(
@@ -179,7 +191,7 @@ function FormApp() {
     setProjectToken(token);
     // Persist so page refresh after phone lookup doesn't hit FORBIDDEN
     if (token) storeToken(foundProject.code, token);
-    navigate(`/?code=${foundProject.code}&source=assessor`, { replace: true });
+    navigate(buildProjectUrl(foundProject.code, token, 'assessor'), { replace: true });
     goTo('property-docs');
   };
 
