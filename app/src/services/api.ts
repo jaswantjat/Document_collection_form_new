@@ -64,6 +64,16 @@ export async function fetchDashboard(token: string): Promise<{ success: boolean;
   return res.json();
 }
 
+export async function fetchDashboardProject(
+  code: string,
+  token: string
+): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
+    headers: { 'x-dashboard-token': token },
+  });
+  return res.json();
+}
+
 export async function saveProgress(
   code: string,
   formData: any,

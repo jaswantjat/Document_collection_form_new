@@ -245,11 +245,41 @@ function getProjectSnapshot(formData) {
   };
 }
 
+function normalizeNamePart(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z]/g, '');
+}
+
+function computeDashboardWarnings(formData) {
+  const warnings = [];
+  if (!formData) return warnings;
+
+  const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName ?? null;
+  const ebPages = getElectricityPages(formData);
+  const ebTitular = ebPages[0]?.extraction?.extractedData?.titular ?? null;
+
+  if (dniName && ebTitular) {
+    const dniWords = dniName.split(/\s+/).filter((w) => w.length > 2).map(normalizeNamePart);
+    const ebWords = ebTitular.split(/\s+/).filter((w) => w.length > 2).map(normalizeNamePart);
+    const hasCommonWord = dniWords.some((w) => ebWords.includes(w));
+    if (!hasCommonWord) {
+      warnings.push({
+        key: 'titular-mismatch',
+        message: `El nombre del DNI («${dniName}») no coincide con el titular de la factura de luz («${ebTitular}»). Comprueba que el documento pertenezca al mismo titular.`,
+      });
+    }
+  }
+
+  return warnings;
+}
+
 function buildDashboardSummary(project) {
   const formData = project?.formData || null;
   const snapshot = getProjectSnapshot(formData);
   const location = snapshot.location;
-  const representation = formData?.representation || {};
   const locality = [snapshot.postalCode, snapshot.municipality].filter(Boolean).join(' ');
   const displayAddress = [
     snapshot.address || null,
@@ -261,63 +291,67 @@ function buildDashboardSummary(project) {
   const electricityDocs = electricityPages.length > 0
     ? electricityPages.map((page, i) => ({
         key: `electricity_${i}`,
-        label: `Factura luz (pág. ${i + 1})`,
+        label: `Factura luz — pág. ${i + 1}`,
+        shortLabel: `Luz ${i + 1}`,
         present: !!page?.photo?.preview,
+        dataUrl: null,
+        mimeType: null,
         needsManualReview: !!page?.extraction?.needsManualReview,
+        extractedData: null,
       }))
-    : [{ key: 'electricity_0', label: 'Factura de luz', present: false, needsManualReview: false }];
+    : [{ key: 'electricity_0', label: 'Factura de luz', shortLabel: 'Luz', present: false, dataUrl: null, mimeType: null, needsManualReview: false, extractedData: null }];
 
   const documents = [
     {
       key: 'dniFront',
       label: 'DNI frontal',
+      shortLabel: 'DNI front',
       present: !!formData?.dni?.front?.photo?.preview,
+      dataUrl: null,
+      mimeType: null,
       needsManualReview: !!formData?.dni?.front?.extraction?.needsManualReview,
+      extractedData: null,
     },
     {
       key: 'dniBack',
       label: 'DNI trasera',
+      shortLabel: 'DNI back',
       present: !!formData?.dni?.back?.photo?.preview,
+      dataUrl: null,
+      mimeType: null,
       needsManualReview: !!formData?.dni?.back?.extraction?.needsManualReview,
+      extractedData: null,
     },
     {
       key: 'ibi',
       label: 'IBI / Escritura',
+      shortLabel: 'IBI',
       present: getIbiPages(formData).length > 0,
+      dataUrl: null,
+      mimeType: null,
       needsManualReview: !!formData?.ibi?.extraction?.needsManualReview,
+      extractedData: null,
     },
-    ...electricityDocs,
   ];
 
-  const signedForms = [];
-  const generatedPdfs = [];
+  const signedDocuments = [];
+  const representation = formData?.representation || {};
 
   if (location === 'cataluna') {
-    signedForms.push(
-      { key: 'ivaCat', label: 'IVA 10% Cataluña', present: !!representation.ivaCertificateSignature },
-      { key: 'generalitat', label: 'Declaració Generalitat', present: !!representation.generalitatSignature },
-      { key: 'representacioCat', label: 'Autorització de representació', present: !!representation.representacioSignature }
-    );
-    generatedPdfs.push(
-      { key: 'ivaCatPdf', label: 'PDF IVA Cataluña', available: !!representation.ivaCertificateSignature },
-      { key: 'generalitatPdf', label: 'PDF Generalitat', available: !!representation.generalitatSignature },
-      { key: 'representacioPdf', label: 'PDF Autorització', available: !!representation.representacioSignature }
+    signedDocuments.push(
+      { key: 'catalunaIva', label: 'PDF IVA Cataluña', filename: 'iva_10_cataluna_firmado.pdf', present: !!representation.ivaCertificateSignature },
+      { key: 'catalunaGeneralitat', label: 'PDF Generalitat', filename: 'declaracio_generalitat_firmada.pdf', present: !!representation.generalitatSignature },
+      { key: 'catalunaRepresentacio', label: 'PDF Autorització', filename: 'autoritzacio_representacio_firmada.pdf', present: !!representation.representacioSignature }
     );
   } else if (location === 'madrid' || location === 'valencia') {
-    signedForms.push(
-      { key: 'ivaEs', label: 'IVA 10% España', present: !!representation.ivaCertificateEsSignature },
-      { key: 'poderEs', label: 'Poder de representación', present: !!representation.poderRepresentacioSignature }
-    );
-    generatedPdfs.push(
-      { key: 'ivaEsPdf', label: 'PDF IVA España', available: !!representation.ivaCertificateEsSignature },
-      { key: 'poderEsPdf', label: 'PDF Poder', available: !!representation.poderRepresentacioSignature }
+    signedDocuments.push(
+      { key: 'spainIva', label: 'PDF IVA España', filename: 'iva_10_espana_firmado.pdf', present: !!representation.ivaCertificateEsSignature },
+      { key: 'spainPoder', label: 'PDF Poder', filename: 'poder_representacion_firmado.pdf', present: !!representation.poderRepresentacioSignature }
     );
   }
 
-  const finalSignatures = [
-    { key: 'customer', label: 'Firma cliente', present: !!formData?.signatures?.customerSignature },
-    { key: 'advisor', label: 'Firma comercial', present: !!formData?.signatures?.repSignature },
-  ];
+  const allDocuments = [...documents, ...electricityDocs];
+  const warnings = computeDashboardWarnings(formData);
 
   return {
     lastUpdated:
@@ -326,26 +360,70 @@ function buildDashboardSummary(project) {
       || project?.createdAt
       || null,
     location,
-    address: snapshot.address || null,
+    address: displayAddress,
     displayAddress,
+    customerDisplayName: snapshot.fullName || project?.customerName || '—',
     postalCode: snapshot.postalCode || null,
     municipality: snapshot.municipality || null,
     province: snapshot.province || null,
     documents,
-    signedForms,
-    generatedPdfs,
-    finalSignatures,
+    electricityPages: electricityDocs,
+    signedDocuments,
+    finalSignatures: [],
+    photoGroups: [],
+    downloadGroups: [],
+    warnings,
     counts: {
-      documentsPresent: documents.filter(d => d.present).length,
-      documentsTotal: documents.length,
-      manualReview: documents.filter(d => d.needsManualReview).length,
-      signedFormsPresent: signedForms.filter(d => d.present).length,
-      signedFormsTotal: signedForms.length,
-      pdfsAvailable: generatedPdfs.filter(d => d.available).length,
-      pdfsTotal: generatedPdfs.length,
-      finalSignaturesPresent: finalSignatures.filter(d => d.present).length,
-      finalSignaturesTotal: finalSignatures.length,
+      documentsPresent: allDocuments.filter((d) => d.present).length,
+      documentsTotal: allDocuments.length,
+      manualReview: allDocuments.filter((d) => d.needsManualReview).length,
+      signedFormsPresent: signedDocuments.filter((d) => d.present).length,
+      signedFormsTotal: signedDocuments.length,
+      pdfsAvailable: signedDocuments.filter((d) => d.present).length,
+      pdfsTotal: signedDocuments.length,
+      finalSignaturesPresent: 0,
+      finalSignaturesTotal: 0,
+      documentsRemaining: allDocuments.filter((d) => !d.present).length,
     }
+  };
+}
+
+function serializeProject(project, { includeAccessToken = false } = {}) {
+  const serialized = {
+    code: project.code,
+    customerName: project.customerName,
+    phone: project.phone,
+    email: project.email,
+    productType: project.productType,
+    assessor: project.assessor,
+    assessorId: project.assessorId,
+    formData: project.formData,
+    lastActivity: project.lastActivity,
+    createdAt: project.createdAt,
+    submissionCount: Array.isArray(project.submissions) ? project.submissions.length : 0,
+  };
+
+  if (includeAccessToken) {
+    serialized.accessToken = project.accessToken;
+  }
+
+  return serialized;
+}
+
+function serializeDashboardProject(project) {
+  return {
+    code: project.code,
+    accessToken: project.accessToken,
+    customerName: project.customerName,
+    phone: project.phone,
+    email: project.email,
+    productType: project.productType,
+    assessor: project.assessor,
+    createdAt: project.createdAt,
+    lastActivity: project.lastActivity,
+    submissionCount: Array.isArray(project.submissions) ? project.submissions.length : 0,
+    summary: buildDashboardSummary(project),
+    cataloniaPDFs: project.cataloniaPDFs || { canGenerateRepresentacio: false, canGeneratePoder: false },
   };
 }
 
@@ -370,9 +448,7 @@ app.get('/api/project/:code', (req, res) => {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
-  // Strip write token from public response — never expose it unauthenticated
-  const { accessToken: _omit, ...safeProject } = project;
-  res.json({ success: true, project: safeProject });
+  res.json({ success: true, project: serializeProject(project) });
 });
 
 // Look up project by phone number
@@ -380,7 +456,7 @@ app.get('/api/lookup/phone/:phone', (req, res) => {
   const needle = normalizePhone(decodeURIComponent(req.params.phone));
   const project = Object.values(database.projects).find(p => normalizePhone(p.phone) === needle);
   if (!project) return res.status(404).json({ success: false, error: 'NOT_FOUND', message: 'No encontramos ningún proyecto con ese teléfono. Contacta con tu asesor.' });
-  res.json({ success: true, project });
+  res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
 });
 
 // Create new project (SSR flow — phone number not yet in system)
@@ -394,7 +470,7 @@ app.post('/api/project/create', (req, res) => {
   // Check for duplicate
   const existing = Object.values(database.projects).find(p => normalizePhone(p.phone) === normalizedPhone);
   if (existing) {
-    return res.json({ success: true, project: existing, existing: true });
+    return res.json({ success: true, project: serializeProject(existing, { includeAccessToken: true }), existing: true });
   }
 
   const code = generateProjectCode();
@@ -416,7 +492,7 @@ app.post('/api/project/create', (req, res) => {
   database.projects[code] = project;
   saveDB();
 
-  res.json({ success: true, project, existing: false });
+  res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
 });
 
 // ── Helper: Check if Catalonia PDFs can be generated ───────────────────────────────
@@ -525,27 +601,20 @@ function requireDashboardAuth(req, res, next) {
 
 // ── Dashboard endpoint ─────────────────────────────────────────────────────────
 app.get('/api/dashboard', requireDashboardAuth, (req, res) => {
-  const projects = Object.values(database.projects).map(p => ({
-    code: p.code,
-    accessToken: p.accessToken,
-    customerName: p.customerName,
-    phone: p.phone,
-    email: p.email,
-    productType: p.productType,
-    assessor: p.assessor,
-    createdAt: p.createdAt,
-    lastActivity: p.lastActivity,
-    submissionCount: p.submissions.length,
-    latestSubmission: p.submissions.length > 0 ? p.submissions[p.submissions.length - 1] : null,
-    formData: p.formData,
-    summary: buildDashboardSummary(p),
-    cataloniaPDFs: p.cataloniaPDFs || { canGenerateRepresentacio: false, canGeneratePoder: false },
-  })).sort((a, b) => {
+  const projects = Object.values(database.projects).map((project) => serializeDashboardProject(project)).sort((a, b) => {
     const leftDate = new Date(a.summary?.lastUpdated || 0).getTime();
     const rightDate = new Date(b.summary?.lastUpdated || 0).getTime();
     return rightDate - leftDate;
   });
   res.json({ success: true, projects });
+});
+
+app.get('/api/dashboard/project/:code', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+  res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
 });
 
 // ── Dashboard CSV export ────────────────────────────────────────────────────────
