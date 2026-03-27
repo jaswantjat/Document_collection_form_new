@@ -520,6 +520,7 @@ function requireDashboardAuth(req, res, next) {
 app.get('/api/dashboard', requireDashboardAuth, (req, res) => {
   const projects = Object.values(database.projects).map(p => ({
     code: p.code,
+    accessToken: p.accessToken,
     customerName: p.customerName,
     phone: p.phone,
     email: p.email,

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useDeferredValue, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -26,15 +26,18 @@ import {
   Upload,
   Zap,
 } from 'lucide-react';
-import { dashboardLogout, fetchDashboard, generateImagePDF, extractDocument, adminUpdateFormData } from '@/services/api';
+import { dashboardLogout, fetchDashboard, generateImagePDF, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
 import {
   getDashboardProjectSummary,
   type DashboardAssetGroup,
   type DashboardAssetItem,
   type DashboardDocumentItem,
   type DashboardSignedPdfItem,
+  type DashboardProjectSummary,
 } from '@/lib/dashboardProject';
 import { getStoredRenderedDocument, renderSignedDocumentOverlay } from '@/lib/signedDocumentOverlays';
+import { pdfToImageFiles } from '@/lib/pdfToImages';
+import { compressImageForAI, fileToBase64 } from '@/lib/photoValidation';
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -124,6 +127,31 @@ function openDataUrlInNewTab(dataUrl: string) {
     a.click();
     document.body.removeChild(a);
   }
+}
+
+interface PreparedAdminPage {
+  aiDataUrl: string;
+  preview: string;
+  sizeBytes: number;
+}
+
+async function prepareAdminUploadPages(file: File): Promise<PreparedAdminPage[]> {
+  const sourceFiles = file.type === 'application/pdf'
+    ? await pdfToImageFiles(file)
+    : [file];
+
+  if (sourceFiles.length === 0) {
+    throw new Error('El archivo no contenía ninguna página utilizable.');
+  }
+
+  return Promise.all(sourceFiles.map(async (page) => {
+    const preview = await fileToBase64(page);
+    return {
+      preview,
+      aiDataUrl: await compressImageForAI(preview),
+      sizeBytes: page.size,
+    };
+  }));
 }
 
 async function viewPDFInNewTab(pdfFactory: () => Promise<Blob>) {
@@ -575,15 +603,11 @@ function AdminUploadModal({
 
   const handleFile = async (file: File) => {
     setStatus('extracting');
-    setStatusMsg('Extrayendo datos con IA...');
+    setStatusMsg(file.type === 'application/pdf' ? 'Convirtiendo PDF en imágenes...' : 'Preparando imagen...');
 
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const preparedPages = await prepareAdminUploadPages(file);
+      setStatusMsg('Extrayendo datos con IA...');
 
       const docTypeMap: Record<AdminDocType, Parameters<typeof extractDocument>[1]> = {
         'dni-front': 'dniFront',
@@ -592,32 +616,52 @@ function AdminUploadModal({
         'electricity-bill': 'electricity',
       };
 
-      const res = await extractDocument(dataUrl, docTypeMap[activeTab]);
+      const res = activeTab === 'electricity-bill'
+        ? await extractDocumentBatch(preparedPages.map((page) => page.aiDataUrl), 'electricity')
+        : await extractDocument(
+          preparedPages.length === 1
+            ? preparedPages[0].aiDataUrl
+            : preparedPages.map((page) => page.aiDataUrl),
+          docTypeMap[activeTab]
+        );
+
       if (!res.success || !res.extraction) {
         setStatus('error');
         setStatusMsg(res.message || 'No se pudo extraer el documento.');
         return;
       }
 
-      const photo = {
-        id: `admin-${Date.now()}`,
-        preview: dataUrl,
-        timestamp: Date.now(),
-        sizeBytes: file.size,
+      const extraction = {
+        ...res.extraction,
+        needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
+        confirmedByUser: true,
       };
+
+      const buildPhoto = (page: PreparedAdminPage, index = 0) => ({
+        id: `admin-${activeTab}-${Date.now()}-${index}`,
+        preview: page.preview,
+        timestamp: Date.now(),
+        sizeBytes: page.sizeBytes,
+      });
 
       let formDataPatch: any;
       if (activeTab === 'dni-front') {
-        formDataPatch = { dni: { front: { photo, extraction: res.extraction } } };
+        formDataPatch = { dni: { front: { photo: buildPhoto(preparedPages[0]), extraction } } };
       } else if (activeTab === 'dni-back') {
-        formDataPatch = { dni: { back: { photo, extraction: res.extraction } } };
+        formDataPatch = { dni: { back: { photo: buildPhoto(preparedPages[0]), extraction } } };
       } else if (activeTab === 'ibi') {
-        formDataPatch = { ibi: { photo, extraction: res.extraction } };
+        formDataPatch = { ibi: { photo: buildPhoto(preparedPages[0]), extraction } };
       } else {
         const existingPages = project.formData?.electricityBill?.pages ?? [];
         formDataPatch = {
           electricityBill: {
-            pages: [...existingPages, { photo, extraction: res.extraction }],
+            pages: [
+              ...existingPages,
+              ...preparedPages.map((page, index) => ({
+                photo: buildPhoto(page, index),
+                extraction,
+              })),
+            ],
           },
         };
       }
@@ -686,7 +730,7 @@ function AdminUploadModal({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,application/pdf"
+                accept="image/jpeg,image/png,application/pdf"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -734,16 +778,17 @@ function AdminUploadModal({
 
 function ProjectTableRow({
   project,
+  summary,
   token,
   onRefresh,
 }: {
   project: any;
+  summary: DashboardProjectSummary;
   token: string;
   onRefresh: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const summary = getDashboardProjectSummary(project);
   const documents = summary.documents;
   const byKey = new Map(documents.map((item) => [item.key, item]));
   const allDocs = [...documents, ...summary.electricityPages];
@@ -802,7 +847,7 @@ function ProjectTableRow({
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="flex flex-col gap-2 min-w-[130px]">
           <a
-            href={`/?code=${project.code}`}
+            href={`/?code=${project.code}${project.accessToken ? `&token=${encodeURIComponent(project.accessToken)}` : ''}`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center"
@@ -1224,15 +1269,19 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     void runInitialLoad();
   }, [token]);
 
-  const filtered = [...projects]
-    .filter((project) => {
+  const projectsWithSummary = useMemo(
+    () => projects.map((project) => ({ project, summary: getDashboardProjectSummary(project) })),
+    [projects]
+  );
+
+  const filtered = useMemo(() => projectsWithSummary
+    .filter(({ project, summary }) => {
       if (filter === 'submitted' && project.submissionCount === 0) return false;
       if (filter === 'pending' && project.submissionCount > 0) return false;
 
       if (!deferredSearch.trim()) return true;
 
       const query = deferredSearch.toLowerCase();
-      const summary = getDashboardProjectSummary(project);
 
       return (
         project.customerName?.toLowerCase().includes(query)
@@ -1244,10 +1293,10 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
       );
     })
     .sort((left, right) => {
-      const leftDate = new Date(getDashboardProjectSummary(left).lastUpdated || 0).getTime();
-      const rightDate = new Date(getDashboardProjectSummary(right).lastUpdated || 0).getTime();
+      const leftDate = new Date(left.summary.lastUpdated || 0).getTime();
+      const rightDate = new Date(right.summary.lastUpdated || 0).getTime();
       return rightDate - leftDate;
-    });
+    }), [deferredSearch, filter, projectsWithSummary]);
 
   const totalSubmitted = projects.filter((project) => project.submissionCount > 0).length;
   const totalPending = projects.length - totalSubmitted;
@@ -1381,10 +1430,11 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.map((project) => (
+                      {filtered.map(({ project, summary }) => (
                         <ProjectTableRow
                           key={project.code}
                           project={project}
+                          summary={summary}
                           token={token}
                           onRefresh={load}
                         />
