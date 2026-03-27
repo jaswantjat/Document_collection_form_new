@@ -135,6 +135,13 @@ interface PreparedAdminPage {
   sizeBytes: number;
 }
 
+function getIbiPages(ibi: any): any[] {
+  if (Array.isArray(ibi?.pages) && ibi.pages.length > 0) {
+    return ibi.pages;
+  }
+  return ibi?.photo ? [ibi.photo] : [];
+}
+
 async function prepareAdminUploadPages(files: File[]): Promise<PreparedAdminPage[]> {
   const preparedPages: PreparedAdminPage[] = [];
 
@@ -667,7 +674,8 @@ function AdminUploadModal({
       } else if (activeTab === 'dni-back') {
         formDataPatch = { dni: { back: { photo: buildPhoto(preparedPages[0]), extraction } } };
       } else if (activeTab === 'ibi') {
-        formDataPatch = { ibi: { photo: buildPhoto(preparedPages[0]), extraction } };
+        const storedPages = preparedPages.map((page, index) => buildPhoto(page, index));
+        formDataPatch = { ibi: { photo: storedPages[0], pages: storedPages, extraction } };
       } else {
         const existingPages = project.formData?.electricityBill?.pages ?? [];
         formDataPatch = {
@@ -1004,24 +1012,41 @@ export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string
 }
 
 export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string }) {
-  if (!ibi?.photo) return null;
+  const pages = getIbiPages(ibi);
+  if (pages.length === 0) return null;
 
   const data = ibi.extraction?.extractedData;
-  const asset = ibi.photo?.preview ? {
-    key: 'ibi',
-    label: 'IBI / Escritura',
-    dataUrl: ibi.photo.preview,
-    mimeType: extensionFromMimeType(undefined, ibi.photo.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
-  } : null;
+  const assets = pages
+    .filter((page: any) => page?.preview)
+    .map((page: any, index: number) => ({
+      key: `ibi-${index}`,
+      label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
+      dataUrl: page.preview,
+      mimeType: extensionFromMimeType(undefined, page.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
+    }));
+  const primaryAsset = assets[0] || null;
 
   return (
     <div className="space-y-3">
       <SectionHeading icon={FileText} label="IBI / Escritura" />
       <div className="grid lg:grid-cols-[220px_1fr] gap-4">
         <div className="space-y-2">
-          {asset && <AssetButtons asset={asset} projectCode={projectCode} />}
-          {asset ? (
-            <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-56" />
+          {assets.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {assets.map((asset, index) => (
+                <div key={asset.key} className="flex items-center gap-2">
+                  {assets.length > 1 && (
+                    <span className="text-[11px] font-semibold text-gray-500 min-w-12">
+                      {`Pág. ${index + 1}`}
+                    </span>
+                  )}
+                  <AssetButtons asset={asset} projectCode={projectCode} />
+                </div>
+              ))}
+            </div>
+          )}
+          {primaryAsset ? (
+            <DocImage src={primaryAsset.dataUrl} alt={primaryAsset.label} className="w-full h-56" />
           ) : (
             <div className="w-full h-56 rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center">
               <span className="text-sm text-gray-300">Sin archivo</span>

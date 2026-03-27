@@ -53,7 +53,7 @@ function getAcceptedDocumentSlotState(formData: FormData, slotKey: DocumentSlotK
   const accepted =
     (slotKey === 'dniFront' && !!formData.dni.front.photo)
     || (slotKey === 'dniBack' && !!formData.dni.back.photo)
-    || (slotKey === 'ibi' && !!formData.ibi.photo);
+    || (slotKey === 'ibi' && (!!formData.ibi.photo || formData.ibi.pages.length > 0));
 
   return accepted ? { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null } : emptyProcessingState();
 }
@@ -85,7 +85,7 @@ function normalizeElectricityPages(saved: any): DocSlot[] {
 
 export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot() },
-  ibi: { photo: null, extraction: null },
+  ibi: { photo: null, pages: [], extraction: null },
   electricityBill: { pages: [] },
   electricalPanel: { photos: [] },
   roof: { photos: [], lengthM: '', widthM: '', roofType: '', orientation: '' },
@@ -134,6 +134,8 @@ function normalizeFormData(savedFormData?: FormData | null): FormData {
     ibi: {
       ...initialFormData.ibi,
       ...savedFormData?.ibi,
+      pages: savedFormData?.ibi?.pages
+        ?? (savedFormData?.ibi?.photo ? [savedFormData.ibi.photo] : initialFormData.ibi.pages),
     },
     electricityBill: {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
@@ -193,7 +195,7 @@ export function getFormItems(_productType: ProductType): FormItem[] {
       label: 'IBI / Escritura',
       section: 'property-docs',
       required: false,
-      isComplete: (fd) => !!fd.ibi.photo,
+      isComplete: (fd) => !!fd.ibi.photo || fd.ibi.pages.length > 0,
     },
     {
       id: 'electricity',
@@ -289,17 +291,16 @@ export const useFormState = (
   }, [preserveRepresentationSignatures]);
 
   // IBI
-  const setIBIPhoto = useCallback((photo: UploadedPhoto | null) => {
+  const setIBIDocument = useCallback((pages: UploadedPhoto[], extraction: AIExtraction | null) => {
+    const primaryPhoto = pages[0] ?? null;
     setFormData(prev => ({
       ...prev,
-      ibi: { ...prev.ibi, photo, extraction: photo ? prev.ibi.extraction : null },
-      representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
-    }));
-  }, [preserveRepresentationSignatures]);
-  const setIBIExtraction = useCallback((extraction: AIExtraction | null) => {
-    setFormData(prev => ({
-      ...prev,
-      ibi: { ...prev.ibi, extraction },
+      ibi: {
+        ...prev.ibi,
+        photo: primaryPhoto,
+        pages,
+        extraction: primaryPhoto ? extraction : null,
+      },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
   }, [preserveRepresentationSignatures]);
@@ -463,7 +464,7 @@ export const useFormState = (
     formData, errors, documentProcessing, electricityProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
-    setIBIPhoto, setIBIExtraction,
+    setIBIDocument,
     addElectricityPage, removeElectricityPage, setElectricityPageProcessing,
     setElectricalPanelPhotos,
     updateRoof, updateInstallationSpace, updateRadiators,

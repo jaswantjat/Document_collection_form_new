@@ -28,8 +28,7 @@ interface Props {
   onDNIFrontExtractionChange: (extraction: AIExtraction | null) => void;
   onDNIBackPhotoChange: (photo: UploadedPhoto | null) => void;
   onDNIBackExtractionChange: (extraction: AIExtraction | null) => void;
-  onIBIPhotoChange: (photo: UploadedPhoto | null) => void;
-  onIBIExtractionChange: (extraction: AIExtraction | null) => void;
+  onIBIDocumentChange: (pages: UploadedPhoto[], extraction: AIExtraction | null) => void;
   onAddElectricityPage: (photo: UploadedPhoto, extraction: AIExtraction) => void;
   onRemoveElectricityPage: (index: number) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
@@ -40,11 +39,10 @@ interface Props {
 interface DocCardProps {
   title: string;
   hint: string;
-  data: DocSlot;
+  data: IBIData;
   slotKey: DocumentSlotKey;
   processing: DocumentProcessingState;
-  onPhotoChange: (p: UploadedPhoto | null) => void;
-  onExtractionChange: (e: AIExtraction | null) => void;
+  onDocumentChange: (pages: UploadedPhoto[], extraction: AIExtraction | null) => void;
   onProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
 }
 
@@ -147,9 +145,9 @@ function computeValidationWarnings(
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
-function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtractionChange, onProcessingChange }: DocCardProps) {
+function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onProcessingChange }: DocCardProps) {
   const processFiles = useCallback(async (files: File[]) => {
-    const hadAcceptedDocument = !!data.photo;
+    const hadAcceptedDocument = !!data.photo || data.pages.length > 0;
     onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
 
     try {
@@ -225,8 +223,13 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         return;
       }
 
-      onPhotoChange(createUploadedPhoto(firstPage.file, firstPage.preview, firstPage.width, firstPage.height));
-      onExtractionChange({
+      const storedPages = preparedPages.map((page) => createUploadedPhoto(
+        page.file,
+        page.preview,
+        page.width,
+        page.height
+      ));
+      onDocumentChange(storedPages, {
         ...res.extraction,
         needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
         confirmedByUser: true,
@@ -241,16 +244,16 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
         pendingPreview: null,
       });
     }
-  }, [data.photo, onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
+  }, [data.pages.length, data.photo, onDocumentChange, onProcessingChange, slotKey]);
 
   const reset = useCallback(() => {
-    onPhotoChange(null);
-    onExtractionChange(null);
+    onDocumentChange([], null);
     onProcessingChange(slotKey, { status: 'idle', pendingPreview: null });
-  }, [onExtractionChange, onPhotoChange, onProcessingChange, slotKey]);
+  }, [onDocumentChange, onProcessingChange, slotKey]);
 
   const extractedData = data.extraction?.extractedData || {};
-  const accepted = !!data.photo;
+  const pageCount = data.pages.length;
+  const accepted = pageCount > 0;
   const isBusy = processing.status === 'validating' || processing.status === 'extracting';
   // Only show red error when there is NO accepted doc (fresh failure, not a replacement failure)
   const showError = !!processing.errorMessage && !isBusy && !accepted;
@@ -261,7 +264,16 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
     <div className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
       <div className="flex items-center justify-between">
         <p className={`font-semibold ${accepted ? 'text-gray-500' : 'text-gray-900'}`}>{title}</p>
-        {accepted && <CheckCircle className="w-5 h-5 text-green-500" />}
+        {accepted && (
+          <div className="flex items-center gap-2">
+            {pageCount > 1 && (
+              <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                {pageCount} páginas
+              </span>
+            )}
+            <CheckCircle className="w-5 h-5 text-green-500" />
+          </div>
+        )}
       </div>
 
       {!accepted && !isBusy && (
@@ -303,6 +315,11 @@ function DocCard({ title, hint, data, slotKey, processing, onPhotoChange, onExtr
       {accepted && (
         <div className="space-y-3">
           {data.photo?.preview && <img src={data.photo.preview} alt={title} className="w-full h-28 object-cover rounded-xl opacity-80" />}
+          {pageCount > 1 && (
+            <p className="text-xs text-gray-500">
+              Se han guardado {pageCount} páginas para este documento.
+            </p>
+          )}
           {showReplacementNote && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -656,22 +673,23 @@ function ElectricityCard({ pages, onAddPage, onRemovePage, onBusyChange }: Elect
     setPendingItems(prev => [...prev, ...newItems]);
 
     // Step 1: validate + get previews + compress all files in parallel
-    type ValidFile = { file: File; id: string; preview: string; base64: string; width?: number; height?: number };
-    const validFiles: ValidFile[] = [];
+    type ValidFile = { file: File; id: string; preview: string; base64: string; width: number | undefined; height: number | undefined };
 
-    await Promise.all(files.map(async (file, i) => {
+    const validFileResults: Array<ValidFile | null> = await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
-        return;
+        return null;
       }
       const preview = await fileToPreview(file);
       const raw = await fileToBase64(file);
       const base64 = await compressImageForAI(raw);
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
-      validFiles.push({ file, id, preview, base64, width: check.width, height: check.height });
+      return { file, id, preview, base64, width: check.width, height: check.height };
     }));
+
+    const validFiles = validFileResults.filter((item): item is ValidFile => item !== null);
 
     if (validFiles.length === 0) return;
 
@@ -897,8 +915,7 @@ export function PropertyDocsSection({
   onDNIFrontExtractionChange,
   onDNIBackPhotoChange,
   onDNIBackExtractionChange,
-  onIBIPhotoChange,
-  onIBIExtractionChange,
+  onIBIDocumentChange,
   onAddElectricityPage,
   onRemoveElectricityPage,
   onDocumentProcessingChange,
@@ -990,11 +1007,10 @@ export function PropertyDocsSection({
           <DocCard
             title="IBI o escritura"
             hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
-            data={{ photo: ibi.photo, extraction: ibi.extraction }}
+            data={ibi}
             slotKey="ibi"
             processing={documentProcessing.ibi}
-            onPhotoChange={onIBIPhotoChange}
-            onExtractionChange={onIBIExtractionChange}
+            onDocumentChange={onIBIDocumentChange}
             onProcessingChange={onDocumentProcessingChange}
           />
         )}

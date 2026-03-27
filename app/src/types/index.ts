@@ -74,6 +74,7 @@ export interface DNIData {
 
 export interface IBIData {
   photo: UploadedPhoto | null;
+  pages: UploadedPhoto[];
   extraction: AIExtraction | null;
 }
 

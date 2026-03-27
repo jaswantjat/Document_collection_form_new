@@ -1,20 +1,21 @@
-import { useState, useEffect, useEffectEvent } from 'react';
+import { lazy, Suspense, useState, useEffect, useEffectEvent } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import { useFormState } from '@/hooks/useFormState';
 import { fetchProject } from '@/services/api';
 import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
-import { ProvinceSelectionSection } from '@/sections/ProvinceSelectionSection';
-import { RepresentationSection } from '@/sections/RepresentationSection';
-import { ReviewSection } from '@/sections/ReviewSection';
-import { SuccessSection } from '@/sections/SuccessSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
-import { Dashboard } from '@/pages/Dashboard';
-import { DashboardLogin } from '@/pages/DashboardLogin';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
+
+const ProvinceSelectionSection = lazy(() => import('@/sections/ProvinceSelectionSection').then((module) => ({ default: module.ProvinceSelectionSection })));
+const RepresentationSection = lazy(() => import('@/sections/RepresentationSection').then((module) => ({ default: module.RepresentationSection })));
+const ReviewSection = lazy(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
+const SuccessSection = lazy(() => import('@/sections/SuccessSection').then((module) => ({ default: module.SuccessSection })));
+const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const DashboardLogin = lazy(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
 
 // ── Dashboard wrapper (handles login gate) ────────────────────────────────────
 function DashboardApp() {
@@ -22,11 +23,15 @@ function DashboardApp() {
     () => sessionStorage.getItem('dashboard_token')
   );
 
-  if (!token) {
-    return <DashboardLogin onLogin={setToken} />;
-  }
-
-  return <Dashboard token={token} onLogout={() => setToken(null)} />;
+  return (
+    <Suspense fallback={<LoadingSection />}>
+      {!token ? (
+        <DashboardLogin onLogin={setToken} />
+      ) : (
+        <Dashboard token={token} onLogout={() => setToken(null)} />
+      )}
+    </Suspense>
+  );
 }
 
 // ── Helpers for smart section routing ─────────────────────────────────────────
@@ -35,7 +40,7 @@ function hasPropertyDocsDone(formData: FormData | null): boolean {
   return !!(
     formData.dni?.front?.photo
     && formData.dni?.back?.photo
-    && formData.ibi?.photo
+    && (formData.ibi?.photo || formData.ibi?.pages?.length)
     && formData.electricityBill?.pages?.length
   );
 }
@@ -164,7 +169,7 @@ function FormApp() {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
-    setIBIPhoto, setIBIExtraction,
+    setIBIDocument,
     addElectricityPage, removeElectricityPage,
     setLocation,
     setRepresentation,
@@ -223,8 +228,7 @@ function FormApp() {
             onDNIFrontExtractionChange={setDNIFrontExtraction}
             onDNIBackPhotoChange={setDNIBackPhoto}
             onDNIBackExtractionChange={setDNIBackExtraction}
-            onIBIPhotoChange={setIBIPhoto}
-            onIBIExtractionChange={setIBIExtraction}
+            onIBIDocumentChange={setIBIDocument}
             onAddElectricityPage={addElectricityPage}
             onRemoveElectricityPage={removeElectricityPage}
             onDocumentProcessingChange={setDocumentProcessingState}
@@ -298,7 +302,11 @@ function FormApp() {
         position="top-center"
         toastOptions={{ style: { background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '12px' } }}
       />
-      <main>{renderSection()}</main>
+      <main>
+        <Suspense fallback={<LoadingSection />}>
+          {renderSection()}
+        </Suspense>
+      </main>
     </div>
   );
 }

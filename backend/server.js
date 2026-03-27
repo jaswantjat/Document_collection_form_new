@@ -201,6 +201,13 @@ function getElectricityPages(formData) {
   return pages;
 }
 
+function getIbiPages(formData) {
+  if (Array.isArray(formData?.ibi?.pages) && formData.ibi.pages.length > 0) {
+    return formData.ibi.pages;
+  }
+  return formData?.ibi?.photo ? [formData.ibi.photo] : [];
+}
+
 function getFirstElectricityData(formData) {
   const pages = getElectricityPages(formData);
   const merged = {};
@@ -276,7 +283,7 @@ function buildDashboardSummary(project) {
     {
       key: 'ibi',
       label: 'IBI / Escritura',
-      present: !!formData?.ibi?.photo?.preview,
+      present: getIbiPages(formData).length > 0,
       needsManualReview: !!formData?.ibi?.extraction?.needsManualReview,
     },
     ...electricityDocs,
@@ -666,9 +673,12 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
   };
 
   if (fd) {
+    const ibiPages = getIbiPages(fd);
     addBase64File('DNI_frontal', fd.dni?.front?.photo?.preview, '1_documentos');
     addBase64File('DNI_trasera', fd.dni?.back?.photo?.preview, '1_documentos');
-    addBase64File('IBI', fd.ibi?.photo?.preview, '1_documentos');
+    ibiPages.forEach((page, i) => {
+      addBase64File(ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`, page?.preview, '1_documentos');
+    });
 
     const getElecPages = (formData) => {
       const eb = formData.electricityBill;
@@ -717,9 +727,12 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
   };
 
   if (fd) {
+    const ibiPages = getIbiPages(fd);
     addDataUrlFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'document');
     addDataUrlFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'document');
-    addDataUrlFile('IBI', fd.ibi?.photo?.preview, 'document');
+    ibiPages.forEach((page, index) => {
+      addDataUrlFile(ibiPages.length === 1 ? 'IBI' : `IBI_${index + 1}`, page?.preview, 'document');
+    });
     getElectricityPages(fd).forEach((page, index) => {
       addDataUrlFile(`Factura_luz_${index + 1}`, page?.photo?.preview, 'document');
     });

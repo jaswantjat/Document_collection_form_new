@@ -92,6 +92,13 @@ function getElectricityPages(formData: any): any[] {
   return pages;
 }
 
+function getIbiPages(formData: any): any[] {
+  if (Array.isArray(formData?.ibi?.pages) && formData.ibi.pages.length > 0) {
+    return formData.ibi.pages;
+  }
+  return formData?.ibi?.photo ? [formData.ibi.photo] : [];
+}
+
 function mergeElectricityData(pages: any[]): Record<string, any> {
   const merged: Record<string, any> = {};
   for (const page of pages) {
@@ -180,6 +187,8 @@ function toAssetItem(key: string, label: string, dataUrl: string | null | undefi
 
 export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
   const formData = project?.formData || {};
+  const ibiPages = getIbiPages(formData);
+  const primaryIbiPage = ibiPages[0] || null;
 
   const staticDocs: DashboardDocumentItem[] = [
     {
@@ -206,9 +215,9 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: Boolean(formData?.ibi?.photo?.preview),
-      dataUrl: formData?.ibi?.photo?.preview || null,
-      mimeType: getMimeType(formData?.ibi?.photo?.preview),
+      present: Boolean(primaryIbiPage?.preview),
+      dataUrl: primaryIbiPage?.preview || null,
+      mimeType: getMimeType(primaryIbiPage?.preview),
       needsManualReview: Boolean(formData?.ibi?.extraction?.needsManualReview),
       extractedData: formData?.ibi?.extraction?.extractedData || null,
     },
@@ -304,13 +313,23 @@ export function getDashboardPhotoGroups(project: any): DashboardAssetGroup[] {
 }
 
 export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] {
-  const documents = getDashboardDocuments(project)
-    .filter((item) => item.present && item.dataUrl)
+  const formData = project?.formData || {};
+  const primaryDocuments = getDashboardDocuments(project)
+    .filter((item) => item.present && item.dataUrl && item.key !== 'ibi')
     .map((item) => ({
       key: item.key,
       label: item.label,
       dataUrl: item.dataUrl as string,
       mimeType: item.mimeType,
+    }));
+
+  const ibiItems = getIbiPages(formData)
+    .filter((page: any) => page?.preview)
+    .map((page: any, index: number) => ({
+      key: `ibi-${index}`,
+      label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
+      dataUrl: page.preview as string,
+      mimeType: getMimeType(page.preview),
     }));
 
   const electricityItems = getDashboardElectricityPages(project)
@@ -326,7 +345,7 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
   const finalSignatures = getDashboardFinalSignatureAssets(project);
 
   return [
-    { key: 'documents', label: 'Documentos', items: [...documents, ...electricityItems] },
+    { key: 'documents', label: 'Documentos', items: [...primaryDocuments, ...ibiItems, ...electricityItems] },
     { key: 'photos', label: 'Fotos del inmueble', items: photoGroups.flatMap((group) => group.items) },
     { key: 'final-signatures', label: 'Firmas finales', items: finalSignatures },
   ].filter((group) => group.items.length > 0);
