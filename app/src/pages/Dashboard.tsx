@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -34,6 +34,7 @@ import {
   type DashboardDocumentItem,
   type DashboardSignedPdfItem,
   type DashboardProjectSummary,
+  getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
 import { getStoredRenderedDocument, renderSignedDocumentOverlay } from '@/lib/signedDocumentOverlays';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
@@ -988,6 +989,150 @@ function AdminUploadModal({
   );
 }
 
+function ProjectDetailModal({
+  projectCode,
+  token,
+  loadProjectDetail,
+  onClose,
+}: {
+  projectCode: string;
+  token: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  onClose: () => void;
+}) {
+  const [project, setProject] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const detail = await loadProjectDetail(projectCode);
+        if (!cancelled) setProject(detail);
+      } catch (err) {
+        console.error('Project detail load failed:', err);
+        if (!cancelled) setError('No se pudo cargar el expediente.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProjectDetail, projectCode]);
+
+  const summary = useMemo(
+    () => (project ? getDashboardProjectSummary(project) : null),
+    [project]
+  );
+
+  return (
+    <div className="fixed inset-0 z-[220] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-gray-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[11px] font-bold text-eltex-blue bg-eltex-blue-light px-2 py-1 rounded-lg">
+                {projectCode}
+              </span>
+              {project?.productType && <ProductBadge type={project.productType} />}
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">
+              {summary?.customerDisplayName || project?.customerName || 'Expediente'}
+            </h2>
+            <p className="text-sm text-gray-500">
+              {summary?.address || 'Sin dirección disponible'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {project && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await downloadProjectZip(project, token);
+                  } catch (err) {
+                    console.error('Project ZIP download failed:', err);
+                    alert('No se pudo descargar el ZIP del expediente.');
+                  }
+                }}
+                className="h-9 rounded-lg px-3 inline-flex items-center gap-2 border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span className="text-sm font-semibold">Descargar ZIP</span>
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {loading && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+              <span className="text-sm text-blue-800">Cargando detalle del expediente...</span>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
+              <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+              <span className="text-sm text-red-800">{error}</span>
+            </div>
+          )}
+
+          {!loading && !error && project && summary && (
+            <div className="space-y-6">
+              {summary.warnings.length > 0 && (
+                <div className="space-y-2">
+                  {summary.warnings.map((warning) => (
+                    <div
+                      key={warning.key}
+                      className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-700">{warning.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-4 gap-3">
+                <InfoCard icon={Clock} label="Última actividad" value={formatDate(summary.lastUpdated)} />
+                <InfoCard icon={User} label="Asesor" value={project.assessor || '—'} />
+                <InfoCard icon={LayoutDashboard} label="Ubicación" value={locationLabel(summary.location)} />
+                <InfoCard icon={CheckCircle} label="Envíos" value={String(project.submissionCount || 0)} />
+              </div>
+
+              <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
+              <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
+              <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
+              <SignedDocumentsSection project={project} items={summary.signedDocuments} />
+              <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
+              <DownloadGroupsSection groups={summary.downloadGroups} projectCode={project.code} />
+              {summary.photoGroups.map((group) => (
+                <PhotoGallery key={group.key} group={group} projectCode={project.code} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectTableRow({
   project,
   summary,
@@ -1003,6 +1148,7 @@ function ProjectTableRow({
 }) {
   const [downloading, setDownloading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const documents = summary.documents;
   const byKey = new Map(documents.map((item) => [item.key, item]));
   const allDocs = [...documents, ...summary.electricityPages];
@@ -1060,6 +1206,14 @@ function ProjectTableRow({
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="flex flex-col gap-2 min-w-[130px]">
+          <button
+            type="button"
+            onClick={() => setShowDetail(true)}
+            className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
+          >
+            <Eye className="w-3 h-3" />
+            Ver expediente
+          </button>
           <a
             href={`/?code=${project.code}${project.accessToken ? `&token=${encodeURIComponent(project.accessToken)}` : ''}&source=assessor`}
             target="_blank"
@@ -1100,6 +1254,15 @@ function ProjectTableRow({
         loadProjectDetail={loadProjectDetail}
         onClose={() => setShowUpload(false)}
         onRefresh={onRefresh}
+      />,
+      document.body
+    )}
+    {showDetail && createPortal(
+      <ProjectDetailModal
+        projectCode={project.code}
+        token={token}
+        loadProjectDetail={loadProjectDetail}
+        onClose={() => setShowDetail(false)}
       />,
       document.body
     )}
@@ -1513,13 +1676,13 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
   const deferredSearch = useDeferredValue(search);
   const detailCacheRef = useRef<Map<string, any>>(new Map());
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await dashboardLogout(token);
     sessionStorage.removeItem('dashboard_token');
     onLogout();
-  };
+  }, [onLogout, token]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
 
@@ -1539,13 +1702,9 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [handleLogout, token]);
 
-  const runInitialLoad = useEffectEvent(async () => {
-    await load();
-  });
-
-  const loadProjectDetail = useEffectEvent(async (projectCode: string) => {
+  const loadProjectDetail = useCallback(async (projectCode: string) => {
     const cached = detailCacheRef.current.get(projectCode);
     if (cached) return cached;
 
@@ -1561,11 +1720,11 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     }
 
     throw new Error(response.message || response.error || 'PROJECT_LOAD_FAILED');
-  });
+  }, [handleLogout, token]);
 
   useEffect(() => {
-    void runInitialLoad();
-  }, [token]);
+    void load();
+  }, [load]);
 
   const projectsWithSummary = useMemo(
     () => projects.map((project) => ({ project, summary: project.summary as DashboardProjectSummary })),
