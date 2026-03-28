@@ -574,21 +574,56 @@ app.post('/api/upload', requireDashboardAuth, upload.single('file'), (req, res) 
 
 // ── Dashboard auth ─────────────────────────────────────────────────────────────
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || (!isProduction ? 'eltex2025' : null);
-const dashboardSessions = new Set();
+const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const DASHBOARD_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const DASHBOARD_LOGIN_MAX_ATTEMPTS = 10;
+const dashboardSessions = new Map();
+const dashboardLoginAttempts = new Map();
+
+function purgeExpiredDashboardSessions() {
+  const now = Date.now();
+  for (const [token, expiresAt] of dashboardSessions.entries()) {
+    if (expiresAt <= now) dashboardSessions.delete(token);
+  }
+}
+
+function getLoginAttemptEntry(ip) {
+  const now = Date.now();
+  const existing = dashboardLoginAttempts.get(ip);
+  if (!existing || existing.resetAt <= now) {
+    const fresh = { count: 0, resetAt: now + DASHBOARD_LOGIN_WINDOW_MS };
+    dashboardLoginAttempts.set(ip, fresh);
+    return fresh;
+  }
+  return existing;
+}
 
 if (isProduction && !DASHBOARD_PASSWORD) {
   console.warn('⚠️  DASHBOARD_PASSWORD not set; dashboard login is disabled until configured.');
 }
 
 app.post('/api/dashboard/login', (req, res) => {
+  purgeExpiredDashboardSessions();
   if (!DASHBOARD_PASSWORD) {
     return res.status(503).json({ success: false, message: 'Dashboard login is not configured.' });
   }
+
+  const clientIp = req.ip || 'unknown';
+  const attempts = getLoginAttemptEntry(clientIp);
+  if (attempts.count >= DASHBOARD_LOGIN_MAX_ATTEMPTS) {
+    return res.status(429).json({ success: false, message: 'Demasiados intentos. Inténtalo de nuevo más tarde.' });
+  }
+
   const { password } = req.body;
   if (!password) return res.status(400).json({ success: false, message: 'Contraseña requerida.' });
-  if (password !== DASHBOARD_PASSWORD) return res.status(401).json({ success: false, message: 'Contraseña incorrecta.' });
+  if (password !== DASHBOARD_PASSWORD) {
+    attempts.count += 1;
+    return res.status(401).json({ success: false, message: 'Contraseña incorrecta.' });
+  }
+
+  dashboardLoginAttempts.delete(clientIp);
   const token = uuidv4();
-  dashboardSessions.add(token);
+  dashboardSessions.set(token, Date.now() + DASHBOARD_SESSION_TTL_MS);
   res.json({ success: true, token });
 });
 
@@ -599,9 +634,16 @@ app.post('/api/dashboard/logout', (req, res) => {
 });
 
 function requireDashboardAuth(req, res, next) {
+  purgeExpiredDashboardSessions();
   const token = req.headers['x-dashboard-token'];
-  if (!token || !dashboardSessions.has(token)) {
+  const expiresAt = token ? dashboardSessions.get(token) : null;
+  if (!token || !expiresAt) {
     return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Acceso no autorizado.' });
+  }
+
+  if (expiresAt <= Date.now()) {
+    dashboardSessions.delete(token);
+    return res.status(401).json({ success: false, error: 'SESSION_EXPIRED', message: 'La sesión del dashboard ha caducado.' });
   }
   next();
 }
