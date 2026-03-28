@@ -34,6 +34,8 @@ This document collection form app is ready for deployment on Railway.com.
    - Go to your project's "Variables" tab
    - Add `OPENROUTER_API_KEY` with your actual API key
    - Add `DASHBOARD_PASSWORD` with a strong password
+   - Add `STIRLING_PDF_API_KEY` so PDF → image conversion works for uploaded PDFs
+   - Add `AUTOCROPPER_URL` pointing to your deployed autocropper service URL
    - Add `PORT` = `3001` (Railway may set this automatically)
    - Optional: add `DATA_DIR=/data` explicitly if you want the path to be visible in config
    - Optional: add `SEED_SAMPLE_DATA=true` only for demo environments
@@ -65,6 +67,9 @@ The current backend already serves the production frontend from `app/dist`, so n
 
 - `OPENROUTER_API_KEY` - Your OpenRouter API key for AI extraction
 - `DASHBOARD_PASSWORD` - Required in production for dashboard access
+- `STIRLING_PDF_API_KEY` - Required for PDF → image conversion (`/api/pdf-to-images`)
+- `STIRLING_PDF_URL` - Optional custom Stirling endpoint (defaults to current hosted URL)
+- `AUTOCROPPER_URL` - Required for crop/PDF generation proxy (`/api/autocropper/*`)
 - `DATA_DIR` - Optional custom data directory. Defaults to `/data` on Railway.
 - `SEED_SAMPLE_DATA` - Optional. Set to `true` only if you want demo projects created.
 - `PORT` - Port number (default: 3001)
@@ -85,6 +90,14 @@ The current backend already serves the production frontend from `app/dist`, so n
 ### API calls fail
 - Ensure `OPENROUTER_API_KEY` is set correctly
 - Check Railway logs for error messages
+
+### PDF conversion fails
+- Ensure `STIRLING_PDF_API_KEY` is configured in Railway variables.
+- Confirm the upstream Stirling-PDF service URL is reachable.
+
+### Autocrop/cropping fails
+- Deploy the `autocropper/` service separately and set `AUTOCROPPER_URL` in backend variables.
+- Verify `GET /api/autocropper/health` returns `proxy: "connected"`.
 
 ### File upload issues
 - Railway's root filesystem is ephemeral. Confirm the service has a volume mounted at `/data`.
