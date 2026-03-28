@@ -92,6 +92,13 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function buildProjectUrl(code: string, token?: string | null, source?: 'customer' | 'assessor') {
+  const params = new URLSearchParams({ code });
+  if (token) params.set('token', token);
+  if (source === 'assessor') params.set('source', 'assessor');
+  return `/?${params.toString()}`;
+}
+
 function downloadDataUrlAsset(asset: DashboardAssetItem, projectCode: string) {
   const anchor = document.createElement('a');
   anchor.href = asset.dataUrl;
@@ -1296,11 +1303,37 @@ function ProjectTableRow({
   onRefresh: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
+  const [openingForm, setOpeningForm] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const documents = summary.documents;
   const byKey = new Map(documents.map((item) => [item.key, item]));
   const allDocs = [...documents, ...summary.electricityPages];
+
+  const handleOpenForm = async () => {
+    const popup = window.open('', '_blank');
+    setOpeningForm(true);
+
+    try {
+      const detail = await loadProjectDetail(project.code);
+      if (!detail?.accessToken) {
+        throw new Error('PROJECT_TOKEN_MISSING');
+      }
+
+      const formUrl = buildProjectUrl(project.code, detail.accessToken, 'assessor');
+      if (popup) {
+        popup.location.href = formUrl;
+      } else {
+        window.open(formUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Open project form failed:', err);
+      if (popup) popup.close();
+      alert('No se pudo abrir el formulario del expediente.');
+    } finally {
+      setOpeningForm(false);
+    }
+  };
 
   return (
     <>
@@ -1389,14 +1422,14 @@ function ProjectTableRow({
             <Eye className="w-3 h-3" />
             Ver expediente
           </button>
-          <a
-            href={`/?code=${project.code}${project.accessToken ? `&token=${encodeURIComponent(project.accessToken)}` : ''}&source=assessor`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => { void handleOpenForm(); }}
+            disabled={openingForm}
             className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center"
           >
-            Abrir formulario
-          </a>
+            {openingForm ? 'Abriendo...' : 'Abrir formulario'}
+          </button>
           <button
             type="button"
             onClick={() => setShowUpload(true)}

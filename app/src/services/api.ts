@@ -10,10 +10,12 @@ function projectHeaders(token?: string | null): HeadersInit {
 
 export async function fetchProject(
   code: string,
-  token?: string | null
+  token?: string | null,
+  options?: { signal?: AbortSignal }
 ): Promise<{ success: boolean; project?: ProjectData; error?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}`, {
     headers: token ? { 'x-project-token': token } : {},
+    signal: options?.signal,
   });
   return res.json();
 }

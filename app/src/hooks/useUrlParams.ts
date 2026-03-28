@@ -1,25 +1,9 @@
-import { useState, useEffect } from 'react';
-
 export const useUrlParams = () => {
-  const [params, setParams] = useState<{
-    projectCode: string | null;
-    source: 'customer' | 'assessor';
-  }>({
-    projectCode: null,
-    source: 'customer',
-  });
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const sp = new URLSearchParams(search);
 
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    // Support both ?code= and ?project= for backwards compat
-    const projectCode = sp.get('code') || sp.get('project');
-    const source = sp.get('source') as 'customer' | 'assessor';
-
-    setParams({
-      projectCode,
-      source: source === 'assessor' ? 'assessor' : 'customer',
-    });
-  }, []);
-
-  return params;
+  return {
+    projectCode: sp.get('code') || sp.get('project'),
+    source: sp.get('source') === 'assessor' ? 'assessor' : 'customer',
+  } as const;
 };

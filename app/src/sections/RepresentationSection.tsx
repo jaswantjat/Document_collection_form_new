@@ -10,7 +10,7 @@ import {
 } from '@/lib/signedDocumentOverlays';
 
 interface Props {
-  formData: any;
+  formData: FormData;
   location: LocationRegion | null;
   onChange: (data: RepresentationData) => void;
   onBack: () => void;
@@ -54,6 +54,7 @@ function SignedDocumentPreview({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setImageDataUrl(null);
 
     renderSignedDocumentOverlay({ formData }, kind)
       .then((image) => {
@@ -64,7 +65,10 @@ function SignedDocumentPreview({
       })
       .catch((err) => {
         console.error(`Failed to render ${kind} preview:`, err);
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setImageDataUrl(null);
+          setLoading(false);
+        }
       });
 
     return () => { cancelled = true; };

@@ -115,31 +115,53 @@ function FormApp() {
   const [loading, setLoading] = useState(!!urlCode);
   const projectFollowUpDocumentFlow = hasExistingRepresentationFlow(project?.formData ?? null);
 
-  const loadProjectFromUrl = useEffectEvent((code: string, token?: string | null) => {
-    setLoading(true);
-    fetchProject(code, token)
-      .then(res => {
-        if (res.success && res.project) {
-          setProject(res.project);
-          // Persist whichever token we have so refreshes keep working
-          const activeToken = token ?? res.project.accessToken ?? null;
-          if (activeToken) {
-            setProjectToken(activeToken);
-            storeToken(code, activeToken);
-          }
-        } else {
-          setLoadError(res.error || 'PROJECT_NOT_FOUND');
-        }
-      })
-      .catch(() => setLoadError('NETWORK_ERROR'))
-      .finally(() => setLoading(false));
-  });
-
   // If URL has a code, load it on mount
   useEffect(() => {
-    if (!urlCode) return;
+    if (!urlCode) {
+      setProject(null);
+      setProjectToken(null);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
     const token = urlToken ?? getStoredToken(urlCode);
-    void loadProjectFromUrl(urlCode, token);
+
+    setLoading(true);
+    setLoadError(null);
+
+    fetchProject(urlCode, token, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return;
+
+        if (res.success && res.project) {
+          setProject(res.project);
+
+          // Persist whichever token we have so refreshes keep working.
+          const activeToken = token ?? res.project.accessToken ?? null;
+          setProjectToken(activeToken);
+          if (activeToken) storeToken(urlCode, activeToken);
+          return;
+        }
+
+        setProject(null);
+        setProjectToken(null);
+        setLoadError(res.error || 'PROJECT_NOT_FOUND');
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
+        setProject(null);
+        setProjectToken(null);
+        setLoadError('NETWORK_ERROR');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
   }, [urlCode, urlToken]);
 
   useEffect(() => {
