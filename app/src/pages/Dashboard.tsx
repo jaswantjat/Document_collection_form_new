@@ -398,6 +398,127 @@ function AssetButtons({
   );
 }
 
+function assetFromPreview(key: string, label: string, preview: string | null | undefined): DashboardAssetItem | null {
+  if (!preview) return null;
+
+  return {
+    key,
+    label,
+    dataUrl: preview,
+    mimeType: extensionFromMimeType(undefined, preview).startsWith('p') ? 'image/png' : 'image/jpeg',
+  };
+}
+
+function getDocumentAssetsFromProject(project: any, key: string): DashboardAssetItem[] {
+  if (key === 'ibi') {
+    return getIbiPages(project?.formData?.ibi)
+      .map((page: any, index: number) => assetFromPreview(
+        `ibi-${index}`,
+        `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
+        page?.preview,
+      ))
+      .filter(Boolean) as DashboardAssetItem[];
+  }
+
+  const summary = getDashboardProjectSummary(project);
+  const item = summary.documents.find((document) => document.key === key);
+  if (!item?.dataUrl) return [];
+
+  return [{
+    key: item.key,
+    label: item.label,
+    dataUrl: item.dataUrl,
+    mimeType: item.mimeType,
+  }];
+}
+
+function getElectricityAssetsFromProject(project: any): DashboardAssetItem[] {
+  const summary = getDashboardProjectSummary(project);
+
+  return summary.electricityPages
+    .filter((item) => item.present && item.dataUrl)
+    .map((item) => ({
+      key: item.key,
+      label: item.label,
+      dataUrl: item.dataUrl as string,
+      mimeType: item.mimeType,
+    }));
+}
+
+function DeferredAssetButtons({
+  projectCode,
+  loadProjectDetail,
+  resolveAssets,
+  onOpenDetail,
+}: {
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  resolveAssets: (project: any) => DashboardAssetItem[];
+  onOpenDetail?: () => void;
+}) {
+  const [loading, setLoading] = useState<'view' | 'download' | null>(null);
+
+  const run = async (mode: 'view' | 'download') => {
+    setLoading(mode);
+    try {
+      const project = await loadProjectDetail(projectCode);
+      const assets = resolveAssets(project);
+
+      if (assets.length === 0) {
+        alert('No se encontraron archivos descargables para este documento.');
+        return;
+      }
+
+      if (mode === 'view') {
+        if (assets.length === 1) {
+          openDataUrlInNewTab(assets[0].dataUrl);
+        } else if (onOpenDetail) {
+          onOpenDetail();
+        } else {
+          openDataUrlInNewTab(assets[0].dataUrl);
+        }
+        return;
+      }
+
+      assets.forEach((asset) => downloadDataUrlAsset(asset, projectCode));
+    } catch (err) {
+      console.error('Deferred asset action failed:', err);
+      alert('No se pudo acceder a los archivos del documento.');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={loading !== null}
+        onClick={(event) => {
+          event.stopPropagation();
+          void run('view');
+        }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        title="Ver archivo"
+      >
+        {loading === 'view' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+      </button>
+      <button
+        type="button"
+        disabled={loading !== null}
+        onClick={(event) => {
+          event.stopPropagation();
+          void run('download');
+        }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        title="Descargar archivo"
+      >
+        {loading === 'download' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
+
 function SignedPdfButtons({
   projectCode,
   item,
@@ -564,8 +685,14 @@ function AutocropperButton({
 
 function DocumentTableCell({
   item,
+  projectCode,
+  loadProjectDetail,
+  onOpenDetail,
 }: {
   item?: DashboardDocumentItem;
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  onOpenDetail: () => void;
 }) {
   if (!item) {
     return <span className="text-sm text-gray-300">—</span>;
@@ -592,6 +719,12 @@ function DocumentTableCell({
           Revisar
         </div>
       )}
+      <DeferredAssetButtons
+        projectCode={projectCode}
+        loadProjectDetail={loadProjectDetail}
+        resolveAssets={(project) => getDocumentAssetsFromProject(project, item.key)}
+        onOpenDetail={onOpenDetail}
+      />
     </div>
   );
 }
@@ -674,7 +807,17 @@ function StatusCell({
   );
 }
 
-function ElectricityTableCell({ pages }: { pages: DashboardDocumentItem[] }) {
+function ElectricityTableCell({
+  pages,
+  projectCode,
+  loadProjectDetail,
+  onOpenDetail,
+}: {
+  pages: DashboardDocumentItem[];
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  onOpenDetail: () => void;
+}) {
   const uploaded = pages.filter(p => p.present);
   if (uploaded.length === 0) {
     return (
@@ -699,6 +842,12 @@ function ElectricityTableCell({ pages }: { pages: DashboardDocumentItem[] }) {
           {manualReview} revisar
         </div>
       )}
+      <DeferredAssetButtons
+        projectCode={projectCode}
+        loadProjectDetail={loadProjectDetail}
+        resolveAssets={getElectricityAssetsFromProject}
+        onOpenDetail={onOpenDetail}
+      />
     </div>
   );
 }
@@ -1189,11 +1338,37 @@ function ProjectTableRow({
         <p className="text-sm text-gray-800 leading-relaxed">{summary.address || '—'}</p>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell item={byKey.get('dniFront') as DashboardDocumentItem} /></td>
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell item={byKey.get('dniBack') as DashboardDocumentItem} /></td>
-      <td className="px-4 py-3 align-top border-b border-gray-100"><DocumentTableCell item={byKey.get('ibi') as DashboardDocumentItem} /></td>
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <ElectricityTableCell pages={summary.electricityPages} />
+        <DocumentTableCell
+          item={byKey.get('dniFront') as DashboardDocumentItem}
+          projectCode={project.code}
+          loadProjectDetail={loadProjectDetail}
+          onOpenDetail={() => setShowDetail(true)}
+        />
+      </td>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <DocumentTableCell
+          item={byKey.get('dniBack') as DashboardDocumentItem}
+          projectCode={project.code}
+          loadProjectDetail={loadProjectDetail}
+          onOpenDetail={() => setShowDetail(true)}
+        />
+      </td>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <DocumentTableCell
+          item={byKey.get('ibi') as DashboardDocumentItem}
+          projectCode={project.code}
+          loadProjectDetail={loadProjectDetail}
+          onOpenDetail={() => setShowDetail(true)}
+        />
+      </td>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <ElectricityTableCell
+          pages={summary.electricityPages}
+          projectCode={project.code}
+          loadProjectDetail={loadProjectDetail}
+          onOpenDetail={() => setShowDetail(true)}
+        />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
