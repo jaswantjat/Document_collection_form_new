@@ -453,12 +453,9 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Backend is running', timestamp: new Date().toISOString() });
 });
 
-// Get project by code (public read — code alone is sufficient as identifier)
-app.get('/api/project/:code', (req, res) => {
-  const code = req.params.code;
-  const project = database.projects[code];
-  if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
-  res.json({ success: true, project: serializeProject(project) });
+// Get project by code (protected by project access token)
+app.get('/api/project/:code', requireProjectToken, (req, res) => {
+  res.json({ success: true, project: serializeProject(req.project) });
 });
 
 // Look up project by phone number
@@ -568,8 +565,8 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
 });
 
-// Upload file
-app.post('/api/upload', upload.single('file'), (req, res) => {
+// Generic file upload endpoint is admin-only; customer flows use structured save APIs.
+app.post('/api/upload', requireDashboardAuth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió archivo.' });
   const fileUrl = `/uploads/${req.file.filename}`;
   res.json({ success: true, fileUrl, filename: req.file.filename, size: req.file.size, mimetype: req.file.mimetype });
@@ -1938,7 +1935,7 @@ app.listen(PORT, () => {
     .map((code) => database.projects[code])
     .filter(Boolean);
 
-  if (availableTestProjects.length > 0) {
+  if (!isProduction && availableTestProjects.length > 0) {
     console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar)');
     console.log('Test phones: +34612345678 | +34623456789 | +34655443322');
     availableTestProjects.forEach((project) => {
