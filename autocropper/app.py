@@ -60,6 +60,25 @@ def encode_to_base64(img: np.ndarray, format: str = '.jpg', quality: int = 90) -
     return f"data:image/jpeg;base64,{img_b64}"
 
 
+def resize_for_detection(img: np.ndarray, max_dim: int = 1400) -> Tuple[np.ndarray, float]:
+    """
+    Resize the image for contour detection while keeping track of the scale so
+    detected corners can be mapped back to the original image.
+    """
+    height, width = img.shape[:2]
+    longest_side = max(height, width)
+    if longest_side <= max_dim:
+        return img.copy(), 1.0
+
+    scale = max_dim / float(longest_side)
+    resized = cv2.resize(
+        img,
+        (int(width * scale), int(height * scale)),
+        interpolation=cv2.INTER_AREA,
+    )
+    return resized, scale
+
+
 def order_corners(pts: np.ndarray) -> np.ndarray:
     """
     Order corner points in consistent order: top-left, top-right, bottom-right, bottom-left
@@ -82,61 +101,196 @@ def order_corners(pts: np.ndarray) -> np.ndarray:
     return np.array([tl, tr, br, bl], dtype=np.float32)
 
 
-def find_document_edges(img: np.ndarray) -> Optional[np.ndarray]:
+def get_detection_profile(document_type: str) -> Dict[str, float]:
     """
-    Find document edges in an image using edge detection and contour finding.
+    Detection thresholds vary by document family.
+    - Bills / IBI / escritura should occupy a large portion of the frame.
+    - DNI/NIE may be either a small card or a full page certificate.
+    """
+    if document_type in ('electricity', 'ibi'):
+        return {
+            'min_area_ratio': 0.12,
+            'aspect_min': 1.15,
+            'aspect_max': 2.10,
+            'prefer_large_area': 1.6,
+        }
 
-    Returns:
-        Four corner points of the document (ordered), or None if no document found
+    return {
+        'min_area_ratio': 0.02,
+        'aspect_min': 1.10,
+        'aspect_max': 2.30,
+        'prefer_large_area': 1.15,
+    }
+
+
+def build_detection_masks(img: np.ndarray) -> List[np.ndarray]:
     """
-    # Convert to grayscale
+    Generate multiple masks because different documents fail under different
+    lighting/background conditions.
+    """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Apply Gaussian blur to reduce noise
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Edge mask
+    edges = cv2.Canny(blurred, 40, 140)
+    edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=2)
+    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)), iterations=2)
 
-    # Apply Canny edge detection
-    # Lower threshold = 50, upper threshold = 150
-    edges = cv2.Canny(gray, 50, 150)
+    # Bright/low-saturation paper mask for printed pages
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    bright_mask = cv2.inRange(hsv, (0, 0, 115), (180, 95, 255))
+    bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11)), iterations=2)
+    bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=1)
 
-    # Dilate edges to close gaps
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    edges = cv2.dilate(edges, kernel, iterations=2)
+    # Adaptive threshold fallback for low-contrast cards/pages
+    adaptive = cv2.adaptiveThreshold(
+        blurred,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        15,
+    )
+    adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)), iterations=2)
 
-    # Find contours
-    contours, _ = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return [edges, bright_mask, adaptive]
 
-    if not contours:
+
+def contour_to_corners(contour: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Convert any promising contour into a quadrilateral candidate.
+    """
+    if contour is None or len(contour) < 4:
         return None
 
-    # Find the largest contour by area
-    largest_contour = max(contours, key=cv2.contourArea)
-    contour_area = cv2.contourArea(largest_contour)
+    perimeter = cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+    if len(approx) == 4:
+      return order_corners(approx.reshape(4, 2).astype(np.float32))
 
-    # Filter out very small contours (less than 5% of image area)
-    img_area = img.shape[0] * img.shape[1]
-    if contour_area < img_area * 0.05:
+    rect = cv2.minAreaRect(contour)
+    box = cv2.boxPoints(rect)
+    return order_corners(box.astype(np.float32))
+
+
+def evaluate_contour(contour: np.ndarray, img_shape: Tuple[int, int, int], profile: Dict[str, float]) -> Optional[Dict[str, Any]]:
+    """
+    Evaluate a contour as a document candidate.
+    """
+    image_h, image_w = img_shape[:2]
+    image_area = float(image_h * image_w)
+    contour_area = cv2.contourArea(contour)
+    if contour_area <= 0:
         return None
 
-    # Approximate the contour to a polygon
-    epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-    approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+    area_ratio = contour_area / image_area
+    if area_ratio < profile['min_area_ratio']:
+        return None
 
-    # We need a quadrilateral (4 corners)
-    if len(approx) != 4:
-        # If not exactly 4 points, try to get the convex hull and approximate again
-        hull = cv2.convexHull(largest_contour)
-        epsilon = 0.02 * cv2.arcLength(hull, True)
-        approx = cv2.approxPolyDP(hull, epsilon, True)
-        if len(approx) != 4:
-            # Still not 4 points, try to find 4 extreme points
-            return find_extreme_corners(largest_contour)
+    rect = cv2.minAreaRect(contour)
+    (center_x, center_y), (width, height), _ = rect
+    if width < 5 or height < 5:
+        return None
 
-    # Reshape to (4, 2)
-    corners = approx.reshape(4, 2).astype(np.float32)
+    box_area = float(width * height)
+    fill_ratio = contour_area / max(box_area, 1.0)
+    aspect = max(width, height) / max(min(width, height), 1.0)
 
-    # Order corners consistently
-    return order_corners(corners)
+    aspect_penalty = 0.0
+    if aspect < profile['aspect_min']:
+        aspect_penalty = profile['aspect_min'] - aspect
+    elif aspect > profile['aspect_max']:
+        aspect_penalty = aspect - profile['aspect_max']
+
+    center_dx = abs(center_x - image_w / 2.0) / max(image_w / 2.0, 1.0)
+    center_dy = abs(center_y - image_h / 2.0) / max(image_h / 2.0, 1.0)
+    center_penalty = (center_dx + center_dy) * 0.35
+
+    x, y, bounding_w, bounding_h = cv2.boundingRect(contour)
+    extent = contour_area / max(bounding_w * bounding_h, 1.0)
+
+    # Reject contours that are effectively the entire image boundary.
+    if bounding_w / image_w > 0.985 and bounding_h / image_h > 0.985:
+        return None
+
+    margin_left = x / max(image_w, 1.0)
+    margin_top = y / max(image_h, 1.0)
+    margin_right = (image_w - (x + bounding_w)) / max(image_w, 1.0)
+    margin_bottom = (image_h - (y + bounding_h)) / max(image_h, 1.0)
+    border_touches = sum(1 for margin in (margin_left, margin_top, margin_right, margin_bottom) if margin < 0.01)
+    border_penalty = border_touches * 0.28
+
+    score = (
+        area_ratio * 8.0 * profile['prefer_large_area']
+        + fill_ratio * 1.6
+        + extent * 1.0
+        - aspect_penalty * 2.2
+        - center_penalty
+        - border_penalty
+    )
+
+    return {
+        'contour': contour,
+        'score': score,
+        'area_ratio': area_ratio,
+        'fill_ratio': fill_ratio,
+        'aspect': aspect,
+        'border_touches': border_touches,
+    }
+
+
+def find_document_candidate(img: np.ndarray, document_type: str = 'dni') -> Optional[Dict[str, Any]]:
+    """
+    Return the best detected document candidate with metadata so the caller can
+    decide whether perspective warping is actually safe.
+    """
+    profile = get_detection_profile(document_type)
+    resized, scale = resize_for_detection(img)
+
+    best_candidate: Optional[Dict[str, Any]] = None
+    seen_boxes = set()
+
+    for mask in build_detection_masks(resized):
+        contours, _ = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:25]
+
+        for contour in contours:
+            candidate = evaluate_contour(contour, resized.shape, profile)
+            if not candidate or candidate['score'] <= 0:
+                continue
+
+            corners = contour_to_corners(contour)
+            if corners is None:
+                continue
+
+            signature = tuple(int(v) for v in corners.flatten())
+            if signature in seen_boxes:
+                continue
+            seen_boxes.add(signature)
+
+            if best_candidate is None or candidate['score'] > best_candidate['score']:
+                candidate['corners'] = corners
+                best_candidate = candidate
+
+    if best_candidate is None:
+        return None
+
+    if scale != 1.0:
+        best_candidate['corners'] = best_candidate['corners'] / scale
+
+    best_candidate['corners'] = order_corners(best_candidate['corners'].astype(np.float32))
+    return best_candidate
+
+
+def find_document_edges(img: np.ndarray, document_type: str = 'dni') -> Optional[np.ndarray]:
+    """
+    Find document edges by evaluating multiple contour extraction strategies and
+    scoring the candidates, instead of blindly taking the largest contour.
+    """
+    candidate = find_document_candidate(img, document_type=document_type)
+    if not candidate:
+        return None
+    return candidate['corners']
 
 
 def find_extreme_corners(contour: np.ndarray) -> Optional[np.ndarray]:
@@ -226,7 +380,107 @@ def crop_to_rectangle(img: np.ndarray, corners: np.ndarray) -> np.ndarray:
     return img[y1:y2, x1:x2]
 
 
-def detect_and_crop_document(img: np.ndarray, use_perspective: bool = True) -> np.ndarray:
+def find_background_crop(img: np.ndarray, document_type: str) -> Optional[np.ndarray]:
+    """
+    Conservative fallback: detect a large region that differs from the dominant
+    border/background color. Useful for page photos on desks/tables.
+    """
+    image_h, image_w = img.shape[:2]
+    border = max(8, int(min(image_h, image_w) * 0.03))
+
+    border_samples = np.concatenate([
+        img[:border, :, :].reshape(-1, 3),
+        img[-border:, :, :].reshape(-1, 3),
+        img[:, :border, :].reshape(-1, 3),
+        img[:, -border:, :].reshape(-1, 3),
+    ], axis=0)
+    border_color = np.median(border_samples.astype(np.float32), axis=0)
+
+    diff = np.linalg.norm(img.astype(np.float32) - border_color, axis=2)
+    border_diff = np.linalg.norm(border_samples.astype(np.float32) - border_color, axis=1)
+    threshold = max(22.0, float(np.percentile(border_diff, 95)) * 1.8)
+    foreground = (diff > threshold).astype(np.uint8) * 255
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, kernel, iterations=2)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=1)
+
+    contours, _ = cv2.findContours(foreground.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    profile = get_detection_profile(document_type)
+    best_crop = None
+    best_score = -1.0
+    image_area = float(image_h * image_w)
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w < 10 or h < 10:
+            continue
+
+        area_ratio = (w * h) / image_area
+        if area_ratio < profile['min_area_ratio']:
+            continue
+
+        if w / image_w > 0.985 and h / image_h > 0.985:
+            continue
+
+        aspect = max(w, h) / max(min(w, h), 1.0)
+        if aspect < profile['aspect_min'] * 0.8 or aspect > profile['aspect_max'] * 1.4:
+            continue
+
+        score = area_ratio - abs(aspect - ((profile['aspect_min'] + profile['aspect_max']) / 2.0)) * 0.03
+        if score > best_score:
+            best_score = score
+            best_crop = img[max(0, y - 8):min(image_h, y + h + 8), max(0, x - 8):min(image_w, x + w + 8)]
+
+    return best_crop
+
+
+def normalize_orientation(img: np.ndarray, document_type: str) -> np.ndarray:
+    """
+    Keep the detected document orientation as-is. Real user uploads include
+    both portrait and landscape pages, and the service does not have a robust
+    orientation detector yet.
+    """
+    return img
+
+
+def should_use_perspective(candidate: Dict[str, Any], document_type: str) -> bool:
+    """
+    Perspective correction is only safe when the boundary is trustworthy.
+    Tight or partial-frame documents should avoid aggressive warping.
+    """
+    if document_type == 'dni':
+        return (
+            candidate['score'] >= 1.35
+            and candidate['fill_ratio'] >= 0.78
+            and candidate['border_touches'] <= 1
+            and candidate['area_ratio'] <= 0.82
+        )
+
+    return (
+        candidate['score'] >= 1.2
+        and candidate['fill_ratio'] >= 0.55
+    )
+
+
+def should_use_candidate_crop(candidate: Dict[str, Any], document_type: str) -> bool:
+    """
+    Bounding-box crop is safer than a warp, but still skip it when the
+    candidate is basically the entire frame.
+    """
+    if candidate['area_ratio'] >= 0.985:
+        return False
+
+    if document_type == 'dni':
+        return candidate['score'] >= 0.9 and candidate['fill_ratio'] >= 0.65
+
+    return candidate['score'] >= 0.6
+
+
+def detect_and_crop_document(img: np.ndarray, document_type: str = 'dni', use_perspective: bool = True) -> np.ndarray:
     """
     Main function: detect document in image and return cropped version
 
@@ -237,23 +491,24 @@ def detect_and_crop_document(img: np.ndarray, use_perspective: bool = True) -> n
     Returns:
         Cropped and perspective-corrected image, or original if no document detected
     """
-    corners = find_document_edges(img)
+    candidate = find_document_candidate(img, document_type=document_type)
 
-    if corners is not None:
-        # Document found
-        if use_perspective:
+    if candidate is not None:
+        corners = candidate['corners']
+        if use_perspective and should_use_perspective(candidate, document_type):
             try:
-                # Apply perspective transform for proper alignment
-                return four_point_transform(img, corners)
+                return normalize_orientation(four_point_transform(img, corners), document_type)
             except Exception:
-                # Fall back to simple crop if perspective transform fails
-                return crop_to_rectangle(img, corners)
-        else:
-            # Simple crop without perspective correction
-            return crop_to_rectangle(img, corners)
-    else:
-        # No document detected - return original
-        return img
+                pass
+
+        if should_use_candidate_crop(candidate, document_type):
+            return normalize_orientation(crop_to_rectangle(img, corners), document_type)
+
+    background_crop = find_background_crop(img, document_type)
+    if background_crop is not None:
+        return normalize_orientation(background_crop, document_type)
+
+    return normalize_orientation(img, document_type)
 
 
 def create_pdf_from_images(images: List[np.ndarray]) -> str:
@@ -351,7 +606,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'autocropper',
-        'version': '0.4.0',
+        'version': '0.4.1',
         'features': FEATURES
     })
 
@@ -401,7 +656,7 @@ def process_documents():
                     continue
 
                 # Detect and crop document
-                cropped = detect_and_crop_document(img)
+                cropped = detect_and_crop_document(img, document_type=document_type)
                 cropped_cv2_images.append(cropped)
 
                 # Encode back to base64
