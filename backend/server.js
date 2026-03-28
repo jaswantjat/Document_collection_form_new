@@ -57,6 +57,17 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 app.use(express.json({ limit: '25mb' }));
 app.use('/uploads', express.static(uploadDir));
 
+// Lightweight health endpoint for Railway and external uptime checks.
+// Keep this before any frontend proxy/static fallbacks so it always returns JSON.
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'document-collection-backend',
+    timestamp: new Date().toISOString(),
+    environment: isProduction ? 'production' : 'development',
+  });
+});
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -835,7 +846,7 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
 // ── PDF → Images via Stirling-PDF API ──────────────────────────────────────────
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-const STIRLING_PDF_URL = 'https://s-pdf-production-ed78.up.railway.app/api/v1/convert/pdf/img';
+const STIRLING_PDF_URL = process.env.STIRLING_PDF_URL || 'https://s-pdf-production-ed78.up.railway.app/api/v1/convert/pdf/img';
 
 function getStirlingApiKey() {
   const key = process.env.STIRLING_PDF_API_KEY;
@@ -851,9 +862,6 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
     }
 
     const apiKey = getStirlingApiKey();
-    if (!apiKey) {
-      return res.status(500).json({ success: false, message: 'Servicio de conversión de PDF no configurado.' });
-    }
 
     // Build multipart request for Stirling-PDF
     const boundary = `----FormBoundary${Date.now()}`;
@@ -883,8 +891,8 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
     const stirlingRes = await fetch(STIRLING_PDF_URL, {
       method: 'POST',
       headers: {
-        'X-API-KEY': apiKey,
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        ...(apiKey ? { 'X-API-KEY': apiKey } : {}),
       },
       body: bodyParts,
     });
@@ -892,6 +900,13 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
     if (!stirlingRes.ok) {
       const errText = await stirlingRes.text().catch(() => '');
       console.error(`[pdf-to-images] Stirling-PDF error ${stirlingRes.status}:`, errText.slice(0, 200));
+      const missingKey = !apiKey && (stirlingRes.status === 401 || stirlingRes.status === 403);
+      if (missingKey) {
+        return res.status(500).json({
+          success: false,
+          message: 'Servicio de conversión de PDF no configurado (falta STIRLING_PDF_API_KEY).'
+        });
+      }
       return res.status(502).json({ success: false, message: `El servicio de conversión de PDF devolvió un error (${stirlingRes.status}).` });
     }
 
@@ -929,6 +944,14 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
 
   } catch (err) {
     console.error('[pdf-to-images] Unexpected error:', err);
+    const message = err instanceof Error ? err.message : '';
+    const likelyUpstreamConnectivityIssue = /fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(message);
+    if (likelyUpstreamConnectivityIssue) {
+      return res.status(502).json({
+        success: false,
+        message: 'No se pudo conectar con el servicio de conversión de PDF. Inténtalo de nuevo en unos minutos.'
+      });
+    }
     res.status(500).json({ success: false, message: 'Error inesperado al convertir el PDF.' });
   }
 });
