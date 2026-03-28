@@ -17,4 +17,4 @@ nixpkgs.python311Packages.pip = "inherit"
 nixpkgs.python311Packages.numpy = "inherit"
 
 [start]
-command = "gunicorn --bind 0.0.0.0:5000 app:app --timeout 120 --workers 1 --worker-class sync"
+command = "sh -c 'gunicorn --bind 0.0.0.0:${PORT:-5000} app:app --timeout 120 --workers 1 --worker-class sync'"
