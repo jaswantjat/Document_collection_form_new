@@ -16,6 +16,7 @@ import {
   Loader2,
   LogOut,
   PenLine,
+  Phone,
   RefreshCw,
   Search,
   Sun,
@@ -37,7 +38,7 @@ import {
   type DashboardProjectSummary,
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
-import { getStoredRenderedDocument, renderSignedDocumentOverlay } from '@/lib/signedDocumentOverlays';
+import { getStoredRenderedDocument, renderSignedDocumentOverlay, SIGNED_DOCUMENT_TEMPLATE_VERSION } from '@/lib/signedDocumentOverlays';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type { StoredDocumentFile } from '@/types';
 import { compressImageForAI, createStoredDocumentFile, fileToBase64, mergeStoredDocumentFiles } from '@/lib/photoValidation';
@@ -229,8 +230,11 @@ function downloadCSV(token: string) {
 }
 
 async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem) {
-  const overlay = getStoredRenderedDocument(project, item.key)?.imageDataUrl
-    || await renderSignedDocumentOverlay(project, item.key);
+  const stored = getStoredRenderedDocument(project, item.key);
+  const overlay =
+    stored?.imageDataUrl && stored.templateVersion === SIGNED_DOCUMENT_TEMPLATE_VERSION
+      ? stored.imageDataUrl
+      : await renderSignedDocumentOverlay(project, item.key);
   return () => generateImagePDF(overlay, item.filename);
 }
 
@@ -1292,11 +1296,12 @@ function ProjectDetailModal({
                 </div>
               )}
 
-              <div className="grid md:grid-cols-4 gap-3">
+              <div className="grid md:grid-cols-5 gap-3">
                 <InfoCard icon={Clock} label="Última actividad" value={formatDate(summary.lastUpdated)} />
                 <InfoCard icon={User} label="Asesor" value={project.assessor || '—'} />
                 <InfoCard icon={LayoutDashboard} label="Ubicación" value={locationLabel(summary.location)} />
                 <InfoCard icon={CheckCircle} label="Envíos" value={String(project.submissionCount || 0)} />
+                <InfoCard icon={Phone} label="Teléfono" value={project.phone || '—'} />
               </div>
 
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
@@ -1746,6 +1751,12 @@ export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCo
               <FieldRow label="Titular" value={data?.titular} />
               <FieldRow label="NIF titular" value={data?.nifTitular} />
               <FieldRow label="CUPS" value={data?.cups} />
+              {data?.cupsWarning && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span className="text-xs text-amber-800">{data.cupsWarning}</span>
+                </div>
+              )}
               <FieldRow label="Potencia (kW)" value={data?.potenciaContratada} />
               <FieldRow label="Tipo fase" value={data?.tipoFase} />
               <FieldRow label="Tarifa" value={data?.tarifaAcceso} />

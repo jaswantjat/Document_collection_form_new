@@ -362,14 +362,14 @@ function buildDashboardSummary(project) {
 
   if (location === 'cataluna') {
     signedDocuments.push(
-      { key: 'catalunaIva', label: 'PDF IVA Cataluña', filename: 'iva_10_cataluna_firmado.pdf', present: !!representation.ivaCertificateSignature },
-      { key: 'catalunaGeneralitat', label: 'PDF Generalitat', filename: 'declaracio_generalitat_firmada.pdf', present: !!representation.generalitatSignature },
-      { key: 'catalunaRepresentacio', label: 'PDF Autorització', filename: 'autoritzacio_representacio_firmada.pdf', present: !!representation.representacioSignature }
+      { key: 'cataluna-iva', label: 'IVA 10% Cataluña', filename: 'iva_10_cataluna_firmado.pdf', present: !!representation.ivaCertificateSignature },
+      { key: 'cataluna-generalitat', label: 'Declaració Generalitat', filename: 'declaracio_generalitat_firmada.pdf', present: !!representation.generalitatSignature },
+      { key: 'cataluna-representacio', label: 'Autorització de representació', filename: 'autoritzacio_representacio_firmada.pdf', present: !!representation.representacioSignature }
     );
   } else if (location === 'madrid' || location === 'valencia') {
     signedDocuments.push(
-      { key: 'spainIva', label: 'PDF IVA España', filename: 'iva_10_espana_firmado.pdf', present: !!representation.ivaCertificateEsSignature },
-      { key: 'spainPoder', label: 'PDF Poder', filename: 'poder_representacion_firmado.pdf', present: !!representation.poderRepresentacioSignature }
+      { key: 'spain-iva', label: 'IVA 10% España', filename: 'iva_10_espana_firmado.pdf', present: !!representation.ivaCertificateEsSignature },
+      { key: 'spain-poder', label: 'Poder de representación', filename: 'poder_representacion_firmado.pdf', present: !!representation.poderRepresentacioSignature }
     );
   }
 
