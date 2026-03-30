@@ -52,8 +52,8 @@ export function ProvinceSelectionSection({
     (!data.isCompany || (data.companyName.trim() !== '' && data.companyNIF.trim() !== ''));
 
   return (
-    <div className="min-h-screen bg-white p-5 pb-28">
-      <div className="max-w-sm mx-auto space-y-5">
+    <div className="min-h-screen bg-white flex flex-col">
+      <div className="flex-1 px-5 pt-5 pb-28 max-w-sm mx-auto w-full space-y-5">
 
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Ubicación</h1>
@@ -244,21 +244,22 @@ export function ProvinceSelectionSection({
           </div>
         )}
 
-        {/* ── Navigation ─────────────────────────────────────────── */}
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={onBack} className="btn-secondary flex items-center gap-1.5 px-5">
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 px-4 py-3 safe-area-bottom sm:static sm:border-0 sm:bg-transparent sm:px-5 sm:pb-5">
+        <div className="max-w-sm mx-auto flex gap-3">
+          <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={onContinue}
             disabled={!canContinue}
-            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Continuar <ArrowRight className="w-4 h-4" />
           </button>
         </div>
-
       </div>
     </div>
   );

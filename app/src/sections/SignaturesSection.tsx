@@ -174,8 +174,8 @@ export function SignaturesSection({
   });
 
   return (
-    <div className="min-h-screen bg-white p-5 pb-28">
-      <div className="max-w-sm mx-auto space-y-5">
+    <div className="min-h-screen bg-white flex flex-col">
+      <div className="flex-1 px-5 pt-5 pb-28 max-w-sm mx-auto w-full space-y-5">
 
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Firmas</h1>
@@ -202,11 +202,14 @@ export function SignaturesSection({
           Ref. {project.code} · {today}
         </p>
 
-        <div className="flex gap-3">
-          <button type="button" onClick={onBack} className="btn-secondary px-5">
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 px-4 py-3 safe-area-bottom sm:static sm:border-0 sm:bg-transparent sm:px-5 sm:pb-5">
+        <div className="max-w-sm mx-auto flex gap-3">
+          <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <button type="button" onClick={onContinue} className="btn-primary flex-1 flex items-center justify-center gap-2">
+          <button type="button" onClick={onContinue} className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5">
             Continuar <ArrowRight className="w-4 h-4" />
           </button>
         </div>
