@@ -1227,16 +1227,17 @@ function normalizeIdentityExtraction(item) {
     ? normalized.side
     : null;
 
-  if (explicitBackCue && !hasIdentityCore) {
+  // Address data only appears on the back of a Spanish DNI/NIE — strongest signal
+  if (hasAddressData) {
     side = 'back';
   } else if (identityDocumentKind === 'nie-certificate') {
     side = 'front';
-  } else if (hasIdentityCore) {
-    side = 'front';
-  } else if (hasAddressData) {
+  } else if (explicitBackCue) {
     side = 'back';
-  } else if (!side && identityDocumentKind === 'nie-card') {
-    side = 'back';
+  } else if (!side) {
+    // Only infer side when the AI didn't specify one
+    if (hasIdentityCore) side = 'front';
+    else if (identityDocumentKind === 'nie-card') side = 'back';
   }
 
   normalized.identityDocumentKind = identityDocumentKind;
