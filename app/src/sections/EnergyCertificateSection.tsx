@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
-import { SignaturePad } from '@/components/SignaturePad';
 import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
 import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
 import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia.png';
@@ -20,10 +19,10 @@ interface Props {
 type StepKey = 'housing' | 'thermal' | 'additional' | 'final';
 
 const STEPS: Array<{ key: StepKey; title: string; description: string }> = [
-  { key: 'housing', title: 'Características de la Vivienda', description: 'Datos básicos del inmueble y de sus huecos.' },
-  { key: 'thermal', title: 'Características de la Instalación Térmica', description: 'Tipo de equipo, combustible y climatización.' },
-  { key: 'additional', title: 'Equipamiento e información adicional', description: 'Producto vendido e instalación fotovoltaica.' },
-  { key: 'final', title: 'Resumen y firma', description: 'Revisa el certificado energético y firma para guardarlo.' },
+  { key: 'housing', title: 'Características de la Vivienda', description: 'Completa solo los datos que tengas del inmueble.' },
+  { key: 'thermal', title: 'Características de la Instalación Térmica', description: 'Añade la información disponible del equipo y climatización.' },
+  { key: 'additional', title: 'Equipamiento e información adicional', description: 'Producto vendido e instalación fotovoltaica, si aplica.' },
+  { key: 'final', title: 'Resumen y confirmación', description: 'Revisa el certificado energético antes de guardarlo.' },
 ];
 
 const HEIGHT_OPTIONS = [
@@ -81,8 +80,8 @@ const AIR_TYPE_OPTIONS = [
   { value: 'frio', label: 'Frío' },
 ] as const;
 
-function isFilled(value: string | null | undefined) {
-  return typeof value === 'string' ? value.trim() !== '' : value != null;
+function keepOnlyRenderError(errors: Record<string, string>): Record<string, string> {
+  return errors.finalRender ? { finalRender: errors.finalRender } : {};
 }
 
 function createInProgressState(data: EnergyCertificateData): EnergyCertificateData {
@@ -93,62 +92,6 @@ function createInProgressState(data: EnergyCertificateData): EnergyCertificateDa
     completedAt: null,
     renderedDocument: null,
   };
-}
-
-function validateStep(step: StepKey, data: EnergyCertificateData): Record<string, string> {
-  const errors: Record<string, string> = {};
-
-  if (step === 'housing' || step === 'final') {
-    if (!isFilled(data.housing.cadastralReference)) errors.housingCadastralReference = 'La referencia catastral es obligatoria.';
-    if (!isFilled(data.housing.habitableAreaM2)) errors.housingHabitableAreaM2 = 'Indica la superficie habitable.';
-    if (!isFilled(data.housing.floorCount)) errors.housingFloorCount = 'Indica el número de plantas.';
-    if (!data.housing.averageFloorHeight) errors.housingAverageFloorHeight = 'Selecciona la altura libre media.';
-    if (!isFilled(data.housing.bedroomCount)) errors.housingBedroomCount = 'Indica el número de dormitorios.';
-    if (!data.housing.windowFrameMaterial) errors.housingWindowFrameMaterial = 'Selecciona el material de los marcos.';
-    if (!isFilled(data.housing.doorMaterial)) errors.housingDoorMaterial = 'Indica el material de las puertas.';
-    if (!data.housing.windowGlassType) errors.housingWindowGlassType = 'Selecciona el tipo de vidrio.';
-    const allDoorCountsFilled = Object.values(data.housing.doorsByOrientation).every(isFilled);
-    const allWindowCountsFilled = Object.values(data.housing.windowsByOrientation).every(isFilled);
-    if (!allDoorCountsFilled || !allWindowCountsFilled) {
-      errors.housingOpenings = 'Completa el número de puertas y ventanas en todas las orientaciones.';
-    }
-    if (data.housing.hasShutters == null) errors.housingHasShutters = 'Indica si las ventanas tienen persiana.';
-    if (data.housing.hasShutters && !isFilled(data.housing.shutterWindowCount)) {
-      errors.housingShutterWindowCount = 'Indica el número de ventanas con persianas.';
-    }
-  }
-
-  if (step === 'thermal' || step === 'final') {
-    if (!data.thermal.thermalInstallationType) errors.thermalInstallationType = 'Selecciona el tipo de instalación térmica.';
-    if (!data.thermal.boilerFuelType) errors.thermalBoilerFuelType = 'Selecciona el combustible del equipo.';
-    if (!isFilled(data.thermal.equipmentDetails)) errors.thermalEquipmentDetails = 'Indica marca y año del equipo.';
-    if (data.thermal.hasAirConditioning == null) errors.thermalHasAirConditioning = 'Indica si tiene aire acondicionado.';
-    if (data.thermal.hasAirConditioning && !data.thermal.airConditioningType) {
-      errors.thermalAirConditioningType = 'Selecciona el tipo de aire acondicionado.';
-    }
-    if (data.thermal.hasAirConditioning && !isFilled(data.thermal.airConditioningDetails)) {
-      errors.thermalAirConditioningDetails = 'Indica marca y año del aire acondicionado.';
-    }
-    if (!data.thermal.heatingEmitterType) errors.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción.';
-    if (data.thermal.heatingEmitterType !== 'suelo-radiante' && !data.thermal.radiatorMaterial) {
-      errors.thermalRadiatorMaterial = 'Selecciona el material de radiadores.';
-    }
-  }
-
-  if (step === 'additional' || step === 'final') {
-    if (!data.additional.soldProduct) errors.additionalSoldProduct = 'Selecciona el producto vendido.';
-    if (data.additional.isExistingCustomer == null) errors.additionalIsExistingCustomer = 'Indica si es cliente de Eltex.';
-    if (data.additional.hasSolarPanels == null) errors.additionalHasSolarPanels = 'Indica si cuenta con placas solares.';
-    if (data.additional.hasSolarPanels && !isFilled(data.additional.solarPanelDetails)) {
-      errors.additionalSolarPanelDetails = 'Indica número de placas, potencia y fecha.';
-    }
-  }
-
-  if (step === 'final' && !data.customerSignature) {
-    errors.customerSignature = 'La firma del cliente es obligatoria para completar el certificado.';
-  }
-
-  return errors;
 }
 
 function Field({
@@ -227,7 +170,7 @@ function SegmentedOptions({
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold text-gray-800">{label}</p>
-      <div className={`grid gap-2 ${columns === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <div className={`grid gap-2 ${columns === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
         {options.map((option) => {
           const active = value === option.value;
           return (
@@ -353,9 +296,7 @@ export function EnergyCertificateSection({
   };
 
   const goNext = () => {
-    const nextErrors = validateStep(currentStep.key, data);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    setErrors((prev) => keepOnlyRenderError(prev));
     setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
   };
 
@@ -380,16 +321,7 @@ export function EnergyCertificateSection({
   };
 
   const completeSurvey = async () => {
-    const nextErrors = validateStep('final', data);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      if (Object.keys(nextErrors).some((key) => key.startsWith('housing'))) setStepIndex(0);
-      else if (Object.keys(nextErrors).some((key) => key.startsWith('thermal'))) setStepIndex(1);
-      else if (Object.keys(nextErrors).some((key) => key.startsWith('additional'))) setStepIndex(2);
-      else setStepIndex(3);
-      return;
-    }
-
+    setErrors((prev) => keepOnlyRenderError(prev));
     setCompleting(true);
     try {
       const completedDraft: EnergyCertificateData = {
@@ -420,9 +352,9 @@ export function EnergyCertificateSection({
   };
 
   return (
-    <div className="min-h-screen bg-white p-5 pb-10">
+    <div className="min-h-screen bg-white px-4 py-5 pb-10 sm:p-5">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Certificado energético</h1>
             <p className="text-sm text-gray-500 mt-1">{currentStep.description}</p>
@@ -430,13 +362,13 @@ export function EnergyCertificateSection({
           <button
             type="button"
             onClick={skipSurvey}
-            className="text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-left text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors sm:text-right"
           >
             Saltar ahora
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {STEPS.map((step, index) => {
             const active = index === stepIndex;
             const done = index < stepIndex;
@@ -469,7 +401,7 @@ export function EnergyCertificateSection({
 
         {currentStep.key === 'housing' && (
           <div className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field
                 label="Referencia Catastral de la Vivienda"
                 value={data.housing.cadastralReference}
@@ -512,7 +444,7 @@ export function EnergyCertificateSection({
               columns={3}
             />
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-gray-800">Nº PUERTAS Exterior</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -547,7 +479,7 @@ export function EnergyCertificateSection({
             </div>
             {errors.housingOpenings && <p className="text-sm text-red-500">{errors.housingOpenings}</p>}
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <SegmentedOptions
                 label="Material de los marcos de las ventanas"
                 options={FRAME_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -603,7 +535,7 @@ export function EnergyCertificateSection({
           <div className="space-y-6">
             <div className="space-y-2">
               <p className="text-sm font-semibold text-gray-800">Tipo de instalación térmica</p>
-              <div className="grid md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {THERMAL_INSTALLATION_OPTIONS.map((option) => {
                   const active = data.thermal.thermalInstallationType === option.value;
                   return (
@@ -644,7 +576,7 @@ export function EnergyCertificateSection({
               error={errors.thermalEquipmentDetails}
             />
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <YesNoField
                 label="¿Tienes Aire Acondicionado?"
                 value={data.thermal.hasAirConditioning}
@@ -676,7 +608,7 @@ export function EnergyCertificateSection({
               error={errors.thermalAirConditioningType}
             />
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <SegmentedOptions
                 label="Tipo de Calefacción o Radiadores"
                 options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -713,7 +645,7 @@ export function EnergyCertificateSection({
               columns={3}
             />
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <YesNoField
                 label="¿Eres Cliente de Eltex?"
                 value={data.additional.isExistingCustomer}
@@ -753,7 +685,7 @@ export function EnergyCertificateSection({
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Resumen final del certificado energético</p>
                   <p className="text-sm text-gray-500 mt-1">
-                    Este documento se guardará en el expediente y será visible en el dashboard como PDF firmado.
+                    Esta vista es solo una confirmación para el cliente. El documento se guardará en el expediente y será visible en el dashboard como PDF.
                   </p>
                 </div>
               </div>
@@ -778,34 +710,25 @@ export function EnergyCertificateSection({
                 </div>
               )}
             </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-800">Firma del cliente</p>
-              <SignaturePad
-                existingSignature={data.customerSignature}
-                onSignature={(signature) => mutate((prev) => ({ ...prev, customerSignature: signature }))}
-                error={errors.customerSignature}
-              />
-            </div>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={goBack}
-            className="btn-secondary inline-flex items-center gap-2 px-5"
+            className="btn-secondary inline-flex w-full items-center justify-center gap-2 px-5 sm:w-auto"
           >
             <ArrowLeft className="w-4 h-4" />
             {stepIndex === 0 ? 'Volver' : 'Anterior'}
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex w-full items-center gap-3 sm:w-auto">
             {currentStep.key !== 'final' ? (
               <button
                 type="button"
                 onClick={goNext}
-                className="btn-primary inline-flex items-center gap-2 px-6"
+                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 sm:w-auto"
               >
                 Siguiente
                 <ArrowRight className="w-4 h-4" />
@@ -815,10 +738,10 @@ export function EnergyCertificateSection({
                 type="button"
                 onClick={() => void completeSurvey()}
                 disabled={completing || renderingPreview}
-                className="btn-primary inline-flex items-center gap-2 px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
               >
                 {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Completar certificado
+                Confirmar certificado
               </button>
             )}
           </div>

@@ -91,7 +91,7 @@ export function ReviewSection({
   const total = allItems.length;
   const energyStatus = formData.energyCertificate.status;
   const energyLabel = energyStatus === 'completed'
-    ? 'Certificado energético completado'
+    ? 'Certificado energético confirmado'
     : energyStatus === 'skipped'
       ? 'Certificado energético omitido'
       : null;
@@ -104,7 +104,7 @@ export function ReviewSection({
       const renderedRepresentation = await ensureRenderedDocuments(formData);
       let renderedFormData = renderedRepresentation;
 
-      if (renderedRepresentation.energyCertificate.status === 'completed' && renderedRepresentation.energyCertificate.customerSignature) {
+      if (renderedRepresentation.energyCertificate.status === 'completed') {
         const renderedDocument = await createRenderedEnergyCertificateAsset({
           project,
           formData: renderedRepresentation,
@@ -309,7 +309,7 @@ export function ReviewSection({
             <div className="flex-1 min-w-0">
               <p className="text-sm text-gray-600">
                 {energyCertificateStatus === 'completed'
-                  ? 'Certificado energético — completado'
+                  ? 'Certificado energético — confirmado'
                   : energyCertificateStatus === 'skipped'
                     ? 'Certificado energético — saltado por cliente'
                     : 'Certificado energético — pendiente'}
