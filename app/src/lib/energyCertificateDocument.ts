@@ -1,15 +1,25 @@
 import type { AIExtraction, FormData, ProjectData, RenderedDocumentAsset } from '@/types';
-import energyCertificateSummaryTemplate from '@/assets/energy-certificate/energy-certificate-summary.jpg';
 
-export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-03-30.1';
+export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-04-01.1';
 
-const TEMPLATE_SRC = energyCertificateSummaryTemplate;
-const PAGE_SIZE = { width: 2481, height: 3509 };
-const TEXT_COLOR = '#1f2937';
-const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
+// ─── Canvas constants ─────────────────────────────────────────────────────────
+const W = 2480;   // A4 at 300 DPI
+const H = 3508;
+const M = 100;    // page margin
+const TW = W - M * 2; // table width = 2280
 
-type Box = readonly [number, number, number, number];
+const LC = 960;   // label column width
+const VC = TW - LC; // value column width = 1320
+const RH = 78;    // standard row height
+const BORDER = '#c8cfe0';
+const BLUE = '#3B46FF';
+const LABEL_BG = '#f5f7ff';
+const WHITE = '#ffffff';
+const DARK = '#111827';
+const MED = '#374151';
+const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
+// ─── Type helpers ─────────────────────────────────────────────────────────────
 type EnergyCertificateSourceProject = Partial<Pick<ProjectData, 'customerName' | 'phone' | 'email' | 'assessor'>>;
 type EnergyCertificateRenderSource =
   | FormData
@@ -18,327 +28,447 @@ type EnergyCertificateRenderSource =
       project?: EnergyCertificateSourceProject | null;
     });
 
-function isFormData(source: EnergyCertificateRenderSource | null | undefined): source is FormData {
-  return !!source && typeof source === 'object' && 'dni' in source && 'representation' in source;
+function isFormData(s: EnergyCertificateRenderSource | null | undefined): s is FormData {
+  return !!s && typeof s === 'object' && 'dni' in s && 'representation' in s;
 }
-
-function getSourceFormData(source: EnergyCertificateRenderSource | null | undefined): FormData {
-  return (isFormData(source) ? source : source?.formData ?? {}) as FormData;
+function getSourceFormData(s: EnergyCertificateRenderSource | null | undefined): FormData {
+  return (isFormData(s) ? s : s?.formData ?? {}) as FormData;
 }
-
-function getSourceProject(source: EnergyCertificateRenderSource | null | undefined): EnergyCertificateSourceProject {
-  if (!source || isFormData(source)) return {};
-  return source.project ?? source;
+function getSourceProject(s: EnergyCertificateRenderSource | null | undefined): EnergyCertificateSourceProject {
+  if (!s || isFormData(s)) return {};
+  return s.project ?? s;
 }
-
 function getExtractionData(
   extraction?: { extractedData?: AIExtraction['extractedData'] | null } | null
 ): AIExtraction['extractedData'] {
   return extraction?.extractedData ?? {};
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+// ─── Label helpers ────────────────────────────────────────────────────────────
+function boolLabel(v: boolean | null | undefined) {
+  if (v === true) return 'SI';
+  if (v === false) return 'NO';
+  return '';
+}
+function soldProductLabel(v: FormData['energyCertificate']['additional']['soldProduct']) {
+  const MAP: Record<string, string> = {
+    'solo-paneles': 'Solo Paneles Solares',
+    'solo-aerotermia': 'Solo Aerotermia',
+    'paneles-y-aerotermia': 'Paneles Solares y Aerotermia',
+    'ampliacion': 'Ampliación',
+    'ampliacion-y-aerotermia': 'Ampliación y Aerotermia',
+  };
+  return (v && MAP[v]) || '';
+}
+function heightLabel(v: FormData['energyCertificate']['housing']['averageFloorHeight']) {
+  if (v === '<2.7m') return 'Menos de 2,7m';
+  if (v === '2.7-3.2m') return 'Entre 2,7m y 3,2m';
+  if (v === '>3.2m') return 'Más de 3,2m';
+  return '';
+}
+function thermalTypeLabel(v: FormData['energyCertificate']['thermal']['thermalInstallationType']) {
+  const MAP: Record<string, string> = {
+    'termo-electrico': 'Termo Eléctrico (Sólo ACS)',
+    'calentador': 'Calentador (Sólo ACS)',
+    'caldera': 'Caldera (ACS y calefacción)',
+    'aerotermia': 'Aerotermia',
+  };
+  return (v && MAP[v]) || '';
+}
+function fuelLabel(v: FormData['energyCertificate']['thermal']['boilerFuelType']) {
+  const MAP: Record<string, string> = { gas: 'Gas', gasoil: 'Gasoil', electricidad: 'Electricidad', aerotermia: 'Aerotermia' };
+  return (v && MAP[v]) || '';
+}
+function heatingTypeLabel(v: FormData['energyCertificate']['thermal']['heatingEmitterType']) {
+  const MAP: Record<string, string> = {
+    'radiadores-agua': 'Radiadores de Agua',
+    'radiadores-electricos': 'Radiadores eléctricos',
+    'suelo-radiante': 'Suelo Radiante',
+  };
+  return (v && MAP[v]) || '';
+}
+function radiatorMaterialLabel(v: FormData['energyCertificate']['thermal']['radiatorMaterial']) {
+  if (v === 'hierro-fundido') return 'Hierro fundido';
+  if (v === 'aluminio') return 'Aluminio';
+  if (v === 'no-aplica') return 'No aplica';
+  return '';
+}
+function airTypeLabel(v: FormData['energyCertificate']['thermal']['airConditioningType']) {
+  if (v === 'frio-calor') return 'Frío y Calor';
+  if (v === 'frio') return 'Frío';
+  return '';
+}
+
+// ─── Canvas drawing primitives ────────────────────────────────────────────────
+function setFont(ctx: CanvasRenderingContext2D, size: number, weight: number | string = 400, color = DARK) {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  ctx.fillStyle = color;
+}
+
+function loadImg(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => resolve(null);
     img.src = src;
   });
 }
 
-function scaledX(x: number, actualWidth: number) {
-  return (x / PAGE_SIZE.width) * actualWidth;
-}
-
-function scaledY(y: number, actualHeight: number) {
-  return (y / PAGE_SIZE.height) * actualHeight;
-}
-
-function setFont(ctx: CanvasRenderingContext2D, sizePx: number, weight = 600) {
-  ctx.font = `${weight} ${sizePx}px ${FONT_FAMILY}`;
-  ctx.fillStyle = TEXT_COLOR;
-}
-
-function drawTextFit(
+function drawRoundRect(
   ctx: CanvasRenderingContext2D,
-  text: string,
-  box: Box,
-  actualWidth: number,
-  actualHeight: number,
-  baseFontSize: number,
-  align: CanvasTextAlign = 'left'
+  x: number, y: number, w: number, h: number,
+  r: number,
+  fill?: string,
+  strokeColor?: string,
+  strokeWidth = 2
 ) {
-  if (!text) return;
-
-  const x1 = scaledX(box[0], actualWidth);
-  const y1 = scaledY(box[1], actualHeight);
-  const x2 = scaledX(box[2], actualWidth);
-  const y2 = scaledY(box[3], actualHeight);
-  const maxWidth = Math.max(x2 - x1 - 8, 32);
-  const fontFloor = Math.max(baseFontSize * 0.72, 24);
-  let fontSize = baseFontSize;
-
-  setFont(ctx, fontSize);
-  while (ctx.measureText(text).width > maxWidth && fontSize > fontFloor) {
-    fontSize -= 1;
-    setFont(ctx, fontSize);
-  }
-
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = align;
-  const drawX = align === 'center' ? (x1 + x2) / 2 : x1 + 4;
-  const drawY = (y1 + y2) / 2;
-  ctx.fillText(text, drawX, drawY, maxWidth);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (strokeColor) { ctx.strokeStyle = strokeColor; ctx.lineWidth = strokeWidth; ctx.stroke(); }
 }
 
-function drawMatrixValue(
+function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
-  actualWidth: number,
-  actualHeight: number,
-  fontSize: number
+  maxW: number,
+  size: number,
+  weight: number | string = 400,
+  color = DARK,
+  align: CanvasTextAlign = 'left'
 ) {
   if (!text) return;
-  setFont(ctx, fontSize);
-  ctx.textAlign = 'center';
+  setFont(ctx, size, weight, color);
+  ctx.textAlign = align;
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, scaledX(x, actualWidth), scaledY(y, actualHeight));
+  // Auto-shrink if too wide
+  let fs = size;
+  while (ctx.measureText(text).width > maxW && fs > size * 0.65) {
+    fs -= 1;
+    setFont(ctx, fs, weight, color);
+  }
+  ctx.fillText(text, x, y, maxW);
 }
 
-async function drawSignature(
+// Draw one table row (bordered, label-bg on left, white on right)
+function drawRow(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  label: string, value: string,
+  h = RH,
+  labelW = LC,
+  valueW = VC,
+  isHeader = false
+) {
+  const labelBg = isHeader ? BLUE : LABEL_BG;
+  const labelColor = isHeader ? WHITE : MED;
+
+  // Label cell
+  ctx.fillStyle = labelBg;
+  ctx.fillRect(x, y, labelW, h);
+
+  // Value cell
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(x + labelW, y, valueW, h);
+
+  // Borders
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, labelW, h);
+  ctx.strokeRect(x + labelW, y, valueW, h);
+
+  // Label text
+  const labelFontSize = 38;
+  const valueFontSize = 40;
+  const labelWeight = isHeader ? 700 : 500;
+  drawText(ctx, label, x + 18, y + h / 2, labelW - 30, labelFontSize, labelWeight, labelColor);
+  drawText(ctx, value, x + labelW + 18, y + h / 2, valueW - 30, valueFontSize, 600, DARK);
+}
+
+// Draw the windows/doors orientation matrix (3-row section)
+function drawMatrixSection(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  labelW: number,
+  totalW: number,
+  windows: Record<string, string>,
+  doors: Record<string, string>
+) {
+  const valueW = totalW - labelW;
+  const colCount = 8; // 4 windows + 4 doors
+  const colW = valueW / colCount;
+
+  const rowA = 50;  // header: "Ventanas" | "Puertas"
+  const rowB = 52;  // col headers: N | S | E | O
+  const rowC = 78;  // values
+
+  const dirs = ['N', 'S', 'E', 'O'] as const;
+  const dirKeys = { N: 'north', S: 'south', E: 'east', O: 'west' } as const;
+
+  // ── Row A: group headers ────────────────────────────────────────────────────
+  // Label cell (spans 3 rows via background)
+  ctx.fillStyle = LABEL_BG;
+  ctx.fillRect(x, y, labelW, rowA + rowB + rowC);
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, labelW, rowA + rowB + rowC);
+
+  // "Ventanas" header cell (spans 4 cols)
+  ctx.fillStyle = '#eef0fb';
+  ctx.fillRect(x + labelW, y, colW * 4, rowA);
+  ctx.strokeRect(x + labelW, y, colW * 4, rowA);
+  drawText(ctx, 'Ventanas', x + labelW + colW * 2, y + rowA / 2, colW * 4 - 20, 34, 700, MED, 'center');
+
+  // "Puertas" header cell (spans 4 cols)
+  ctx.fillStyle = '#eef0fb';
+  ctx.fillRect(x + labelW + colW * 4, y, colW * 4, rowA);
+  ctx.strokeRect(x + labelW + colW * 4, y, colW * 4, rowA);
+  drawText(ctx, 'Puertas', x + labelW + colW * 6, y + rowA / 2, colW * 4 - 20, 34, 700, MED, 'center');
+
+  // ── Row B: column direction headers ────────────────────────────────────────
+  const yB = y + rowA;
+  for (let i = 0; i < 8; i++) {
+    const cx = x + labelW + i * colW;
+    ctx.fillStyle = '#eef0fb';
+    ctx.fillRect(cx, yB, colW, rowB);
+    ctx.strokeStyle = BORDER;
+    ctx.strokeRect(cx, yB, colW, rowB);
+    const dir = dirs[i % 4];
+    drawText(ctx, dir, cx + colW / 2, yB + rowB / 2, colW - 6, 34, 700, MED, 'center');
+  }
+
+  // ── Label text ─────────────────────────────────────────────────────────────
+  drawText(ctx, 'Nº puertas y ventanas', x + 18, y + (rowA + rowB + rowC) / 2, labelW - 30, 36, 500, MED);
+
+  // ── Row C: values ──────────────────────────────────────────────────────────
+  const yC = y + rowA + rowB;
+  for (let i = 0; i < 8; i++) {
+    const cx = x + labelW + i * colW;
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(cx, yC, colW, rowC);
+    ctx.strokeStyle = BORDER;
+    ctx.strokeRect(cx, yC, colW, rowC);
+    const isWindow = i < 4;
+    const key = dirKeys[dirs[i % 4]];
+    const val = isWindow ? (windows[key] || '') : (doors[key] || '');
+    drawText(ctx, val, cx + colW / 2, yC + rowC / 2, colW - 10, 40, 600, DARK, 'center');
+  }
+
+  return rowA + rowB + rowC;
+}
+
+// ─── Signature rendering helper ───────────────────────────────────────────────
+async function drawSignatureImg(
   ctx: CanvasRenderingContext2D,
   dataUrl: string | null | undefined,
-  box: Box
+  x: number, y: number, w: number, h: number
 ) {
   if (!dataUrl) return;
-  const image = await loadImage(dataUrl);
-  const x = scaledX(box[0], ctx.canvas.width);
-  const y = scaledY(box[1], ctx.canvas.height);
-  const width = scaledX(box[2] - box[0], ctx.canvas.width);
-  const height = scaledY(box[3] - box[1], ctx.canvas.height);
-  ctx.drawImage(image, x, y, width, height);
+  const img = await loadImg(dataUrl);
+  if (img) ctx.drawImage(img, x, y, w, h);
 }
 
-async function renderTemplate(draw: (ctx: CanvasRenderingContext2D) => Promise<void> | void) {
-  const template = await loadImage(TEMPLATE_SRC);
-  const canvas = document.createElement('canvas');
-  canvas.width = template.naturalWidth;
-  canvas.height = template.naturalHeight;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas context unavailable');
-
-  ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
-  await draw(ctx);
-  return canvas.toDataURL('image/jpeg', 0.92);
-}
-
-function boolLabel(value: boolean | null | undefined) {
-  if (value === true) return 'SI';
-  if (value === false) return 'NO';
-  return '';
-}
-
-function soldProductLabel(value: FormData['energyCertificate']['additional']['soldProduct']) {
-  if (value === 'solo-paneles') return 'Solo Paneles Solares';
-  if (value === 'solo-aerotermia') return 'Solo Aerotermia';
-  if (value === 'paneles-y-aerotermia') return 'Paneles Solares y Aerotermia';
-  if (value === 'ampliacion') return 'Ampliación';
-  if (value === 'ampliacion-y-aerotermia') return 'Ampliación y Aerotermia';
-  return '';
-}
-
-function heightLabel(value: FormData['energyCertificate']['housing']['averageFloorHeight']) {
-  if (value === '<2.7m') return 'Menos de 2,7m';
-  if (value === '2.7-3.2m') return 'Entre 2,7m y 3,2m';
-  if (value === '>3.2m') return 'Más de 3,2m';
-  return '';
-}
-
-function thermalTypeLabel(value: FormData['energyCertificate']['thermal']['thermalInstallationType']) {
-  if (value === 'termo-electrico') return 'Termo Eléctrico (Sólo ACS)';
-  if (value === 'calentador') return 'Calentador (Sólo ACS)';
-  if (value === 'caldera') return 'Caldera (ACS y calefacción)';
-  if (value === 'aerotermia') return 'Aerotermia';
-  return '';
-}
-
-function fuelLabel(value: FormData['energyCertificate']['thermal']['boilerFuelType']) {
-  if (value === 'gas') return 'Gas';
-  if (value === 'gasoil') return 'Gasoil';
-  if (value === 'electricidad') return 'Electricidad';
-  if (value === 'aerotermia') return 'Aerotermia';
-  return '';
-}
-
-function heatingTypeLabel(value: FormData['energyCertificate']['thermal']['heatingEmitterType']) {
-  if (value === 'radiadores-agua') return 'Radiadores de Agua';
-  if (value === 'radiadores-electricos') return 'Radiadores eléctricos';
-  if (value === 'suelo-radiante') return 'Suelo Radiante';
-  return '';
-}
-
-function radiatorMaterialLabel(value: FormData['energyCertificate']['thermal']['radiatorMaterial']) {
-  if (value === 'hierro-fundido') return 'Hierro fundido';
-  if (value === 'aluminio') return 'Aluminio';
-  if (value === 'no-aplica') return 'No aplica';
-  return '';
-}
-
-function airTypeLabel(value: FormData['energyCertificate']['thermal']['airConditioningType']) {
-  if (value === 'frio-calor') return 'Frío y Calor';
-  if (value === 'frio') return 'Frío';
-  return '';
-}
-
+// ─── Build snapshot from source ───────────────────────────────────────────────
 function snapshotFromSource(source: EnergyCertificateRenderSource | null | undefined) {
   const formData = getSourceFormData(source);
   const dniFront = getExtractionData(formData?.dni?.front?.extraction);
   const dniBack = getExtractionData(formData?.dni?.back?.extraction);
   const ibi = getExtractionData(formData?.ibi?.extraction);
   const ebPages = formData?.electricityBill?.pages || [];
-  const ebData = ebPages.map((page) => getExtractionData(page?.extraction));
-  const eb0 = ebData[0] || {};
+  const eb0 = getExtractionData(ebPages[0]?.extraction);
   const project = getSourceProject(source);
 
   return {
     formData,
-    customerName: dniFront.fullName || eb0.titular || ibi.titular || project?.customerName || '',
-    address: eb0.direccionSuministro || dniBack.address || ibi.direccion || '',
-    phone: project?.phone || '',
-    email: project?.email || '',
-    dniNumber: dniFront.dniNumber || eb0.nifTitular || ibi.titularNif || '',
-    assessor: project?.assessor || '',
+    customerName: String(dniFront.fullName || eb0.titular || ibi.titular || project?.customerName || ''),
+    address: String(eb0.direccionSuministro || dniBack.address || ibi.direccion || ''),
+    phone: String(project?.phone || ''),
+    email: String(project?.email || ''),
+    dniNumber: String(dniFront.dniNumber || eb0.nifTitular || ibi.titularNif || ''),
+    assessor: String(project?.assessor || ''),
     today: new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' })).toLocaleString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     }),
   };
 }
 
-const FIELD_BOXES = {
-  customerName: [1245, 329, 2100, 395] as Box,
-  isExistingCustomer: [1245, 408, 2100, 474] as Box,
-  address: [1245, 488, 2100, 554] as Box,
-  phone: [1245, 566, 2100, 632] as Box,
-  email: [1245, 647, 2100, 713] as Box,
-  dniNumber: [1245, 726, 2100, 792] as Box,
-  assessor: [1245, 805, 2100, 872] as Box,
-  formDate: [1245, 885, 2100, 951] as Box,
-  soldProduct: [1245, 964, 2100, 1030] as Box,
-  cadastralReference: [1245, 1364, 2100, 1430] as Box,
-  habitableAreaM2: [1245, 1443, 2100, 1508] as Box,
-  floorCount: [1245, 1522, 2100, 1588] as Box,
-  averageFloorHeight: [1245, 1601, 2100, 1668] as Box,
-  bedroomCount: [1245, 1680, 2100, 1747] as Box,
-  windowFrameMaterial: [1245, 1955, 2100, 2032] as Box,
-  doorMaterial: [1245, 2036, 2100, 2113] as Box,
-  windowGlassType: [1245, 2117, 2100, 2194] as Box,
-  hasShutters: [1245, 2198, 2100, 2275] as Box,
-  shutterWindowCount: [1245, 2279, 2100, 2361] as Box,
-  thermalInstallationType: [1245, 2365, 2100, 2442] as Box,
-  boilerFuelType: [1245, 2446, 2100, 2523] as Box,
-  equipmentDetails: [1245, 2527, 2100, 2604] as Box,
-  heatingEmitterType: [1245, 2608, 2100, 2685] as Box,
-  radiatorMaterial: [1245, 2689, 2100, 2771] as Box,
-  hasAirConditioning: [1245, 2775, 2100, 2853] as Box,
-  airConditioningDetails: [1245, 2857, 2100, 2934] as Box,
-  hasSolarPanels: [1245, 2938, 2100, 3015] as Box,
-  solarPanelDetails: [1245, 3019, 2100, 3096] as Box,
-  signature: [1045, 3215, 1900, 3415] as Box,
-} as const;
+// ─── Main render function ─────────────────────────────────────────────────────
+async function buildCertificateCanvas(
+  source: EnergyCertificateRenderSource | null | undefined
+): Promise<string> {
+  const snap = snapshotFromSource(source);
+  const energy = snap.formData.energyCertificate;
+  const h = energy.housing;
+  const t = energy.thermal;
+  const a = energy.additional;
 
-const MATRIX_CELLS = {
-  windowsNorth: [1465, 1908],
-  windowsSouth: [1560, 1908],
-  windowsEast: [1658, 1908],
-  windowsWest: [1754, 1908],
-  doorsNorth: [1848, 1908],
-  doorsSouth: [1944, 1908],
-  doorsEast: [2038, 1908],
-  doorsWest: [2106, 1908],
-} as const;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
 
+  // ── Page background ─────────────────────────────────────────────────────────
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  const HDR_Y = 65;
+  const HDR_H = 115;
+
+  // Blue badge
+  drawRoundRect(ctx, M, HDR_Y, 1540, HDR_H, 10, BLUE);
+  setFont(ctx, 52, 800, WHITE);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FORMULARIO CERTIFICADO ENERGÉTICO', M + 30, HDR_Y + HDR_H / 2);
+
+  // Logo (try to load from local public folder)
+  const logo = await loadImg('/eltex-logo.png');
+  if (logo) {
+    const logoH = 80;
+    const logoW = Math.round((logo.naturalWidth / logo.naturalHeight) * logoH);
+    const logoX = W - M - logoW;
+    const logoY = HDR_Y + (HDR_H - logoH) / 2;
+    ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+  } else {
+    // Text fallback
+    setFont(ctx, 72, 800, DARK);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('eltex+', W - M, HDR_Y + HDR_H / 2);
+  }
+
+  // ── Table 1: Personal data ───────────────────────────────────────────────────
+  const T1_Y = HDR_Y + HDR_H + 55;
+  const rows1: Array<[string, string]> = [
+    ['Nombre y apellido', snap.customerName],
+    ['¿Es cliente?', boolLabel(a.isExistingCustomer)],
+    ['Dirección', snap.address],
+    ['Teléfono', snap.phone],
+    ['Email', snap.email],
+    ['DNI/NIE', snap.dniNumber],
+    ['Asesor', snap.assessor],
+    ['Fecha del formulario', snap.today],
+    ['¿Qué producto se está vendiendo?', soldProductLabel(a.soldProduct)],
+  ];
+
+  let cy = T1_Y;
+  for (const [label, value] of rows1) {
+    drawRow(ctx, M, cy, label, value);
+    cy += RH;
+  }
+
+  // ── Table 2: Property & energy data ──────────────────────────────────────────
+  const T2_Y = cy + 65;
+  cy = T2_Y;
+
+  const rows2a: Array<[string, string]> = [
+    ['Referencia catastral de la vivienda', h.cadastralReference],
+    ['Superficie habitable útil de la vivienda', h.habitableAreaM2 ? `${h.habitableAreaM2} m²` : ''],
+    ['Número de plantas de la vivienda', h.floorCount],
+    ['Altura libre media de las plantas', heightLabel(h.averageFloorHeight)],
+    ['Número de dormitorios', h.bedroomCount],
+  ];
+
+  for (const [label, value] of rows2a) {
+    drawRow(ctx, M, cy, label, value);
+    cy += RH;
+  }
+
+  // ── Windows / doors orientation matrix ──────────────────────────────────────
+  const matrixH = drawMatrixSection(
+    ctx, M, cy, LC, TW,
+    h.windowsByOrientation as Record<string, string>,
+    h.doorsByOrientation as Record<string, string>
+  );
+  cy += matrixH;
+
+  // ── Remaining rows ──────────────────────────────────────────────────────────
+  const airDetails = t.hasAirConditioning
+    ? [airTypeLabel(t.airConditioningType), t.airConditioningDetails].filter(Boolean).join(' — ')
+    : 'No aplica';
+
+  const rows2b: Array<[string, string]> = [
+    ['Material de los marcos de la ventana', h.windowFrameMaterial || ''],
+    ['Material de las puertas', h.doorMaterial],
+    ['Tipo de vidrio de las ventanas', h.windowGlassType || ''],
+    ['¿Las ventanas tienen persiana?', boolLabel(h.hasShutters)],
+    ['Número de ventanas con persianas', h.shutterWindowCount],
+    ['Equipo de la instalación térmica', thermalTypeLabel(t.thermalInstallationType)],
+    ['Combustible de la caldera', fuelLabel(t.boilerFuelType)],
+    ['Detalles del equipo (marca y año)', t.equipmentDetails],
+    ['Tipo de emisor de calefacción', heatingTypeLabel(t.heatingEmitterType)],
+    ['Material de radiadores', radiatorMaterialLabel(t.radiatorMaterial)],
+    ['¿Tiene aire acondicionado?', boolLabel(t.hasAirConditioning)],
+    ['Detalles del aire (marca y año)', airDetails],
+    ['¿Cuenta con placas solares?', boolLabel(a.hasSolarPanels)],
+    ['Nº de paneles y potencia de cada uno', a.hasSolarPanels ? a.solarPanelDetails : 'No aplica'],
+  ];
+
+  for (const [label, value] of rows2b) {
+    drawRow(ctx, M, cy, label, value);
+    cy += RH;
+  }
+
+  // ── Signature row ────────────────────────────────────────────────────────────
+  cy += 60;
+  const SIG_H = 200;
+  const SIG_LABEL = 'Firma del cliente';
+
+  drawRow(ctx, M, cy, SIG_LABEL, '', SIG_H);
+
+  if (energy.customerSignature) {
+    await drawSignatureImg(
+      ctx,
+      energy.customerSignature,
+      M + LC + 20,
+      cy + 10,
+      VC - 40,
+      SIG_H - 20
+    );
+  }
+
+  // ── Footer line ───────────────────────────────────────────────────────────────
+  cy += SIG_H + 40;
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(M, cy);
+  ctx.lineTo(W - M, cy);
+  ctx.stroke();
+
+  setFont(ctx, 28, 400, '#9ca3af');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`Expediente generado por Eltex · ${snap.today}`, W / 2, cy + 28);
+
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+// ─── Public API (same signatures as before) ───────────────────────────────────
 export async function renderEnergyCertificateOverlay(
   source: EnergyCertificateRenderSource | null | undefined
 ): Promise<string> {
-  const snapshot = snapshotFromSource(source);
-  const energy = snapshot.formData.energyCertificate;
-
-  return renderTemplate(async (ctx) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const baseFont = width * 0.014;
-    const matrixFont = width * 0.0125;
-
-    drawTextFit(ctx, snapshot.customerName, FIELD_BOXES.customerName, width, height, baseFont);
-    drawTextFit(ctx, boolLabel(energy.additional.isExistingCustomer), FIELD_BOXES.isExistingCustomer, width, height, baseFont);
-    drawTextFit(ctx, snapshot.address, FIELD_BOXES.address, width, height, baseFont);
-    drawTextFit(ctx, snapshot.phone, FIELD_BOXES.phone, width, height, baseFont);
-    drawTextFit(ctx, snapshot.email, FIELD_BOXES.email, width, height, baseFont);
-    drawTextFit(ctx, snapshot.dniNumber, FIELD_BOXES.dniNumber, width, height, baseFont);
-    drawTextFit(ctx, snapshot.assessor, FIELD_BOXES.assessor, width, height, baseFont);
-    drawTextFit(ctx, snapshot.today, FIELD_BOXES.formDate, width, height, baseFont);
-    drawTextFit(ctx, soldProductLabel(energy.additional.soldProduct), FIELD_BOXES.soldProduct, width, height, baseFont * 0.96);
-
-    drawTextFit(ctx, energy.housing.cadastralReference, FIELD_BOXES.cadastralReference, width, height, baseFont * 0.95);
-    drawTextFit(ctx, energy.housing.habitableAreaM2, FIELD_BOXES.habitableAreaM2, width, height, baseFont);
-    drawTextFit(ctx, energy.housing.floorCount, FIELD_BOXES.floorCount, width, height, baseFont);
-    drawTextFit(ctx, heightLabel(energy.housing.averageFloorHeight), FIELD_BOXES.averageFloorHeight, width, height, baseFont * 0.95);
-    drawTextFit(ctx, energy.housing.bedroomCount, FIELD_BOXES.bedroomCount, width, height, baseFont);
-
-    drawMatrixValue(ctx, energy.housing.windowsByOrientation.north, MATRIX_CELLS.windowsNorth[0], MATRIX_CELLS.windowsNorth[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.windowsByOrientation.south, MATRIX_CELLS.windowsSouth[0], MATRIX_CELLS.windowsSouth[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.windowsByOrientation.east, MATRIX_CELLS.windowsEast[0], MATRIX_CELLS.windowsEast[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.windowsByOrientation.west, MATRIX_CELLS.windowsWest[0], MATRIX_CELLS.windowsWest[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.doorsByOrientation.north, MATRIX_CELLS.doorsNorth[0], MATRIX_CELLS.doorsNorth[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.doorsByOrientation.south, MATRIX_CELLS.doorsSouth[0], MATRIX_CELLS.doorsSouth[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.doorsByOrientation.east, MATRIX_CELLS.doorsEast[0], MATRIX_CELLS.doorsEast[1], width, height, matrixFont);
-    drawMatrixValue(ctx, energy.housing.doorsByOrientation.west, MATRIX_CELLS.doorsWest[0], MATRIX_CELLS.doorsWest[1], width, height, matrixFont);
-
-    drawTextFit(ctx, energy.housing.windowFrameMaterial || '', FIELD_BOXES.windowFrameMaterial, width, height, baseFont);
-    drawTextFit(ctx, energy.housing.doorMaterial, FIELD_BOXES.doorMaterial, width, height, baseFont);
-    drawTextFit(ctx, energy.housing.windowGlassType || '', FIELD_BOXES.windowGlassType, width, height, baseFont);
-    drawTextFit(ctx, boolLabel(energy.housing.hasShutters), FIELD_BOXES.hasShutters, width, height, baseFont);
-    drawTextFit(ctx, energy.housing.shutterWindowCount, FIELD_BOXES.shutterWindowCount, width, height, baseFont);
-
-    drawTextFit(ctx, thermalTypeLabel(energy.thermal.thermalInstallationType), FIELD_BOXES.thermalInstallationType, width, height, baseFont * 0.95);
-    drawTextFit(ctx, fuelLabel(energy.thermal.boilerFuelType), FIELD_BOXES.boilerFuelType, width, height, baseFont);
-    drawTextFit(ctx, energy.thermal.equipmentDetails, FIELD_BOXES.equipmentDetails, width, height, baseFont * 0.9);
-    drawTextFit(ctx, heatingTypeLabel(energy.thermal.heatingEmitterType), FIELD_BOXES.heatingEmitterType, width, height, baseFont * 0.95);
-    drawTextFit(ctx, radiatorMaterialLabel(energy.thermal.radiatorMaterial), FIELD_BOXES.radiatorMaterial, width, height, baseFont);
-    drawTextFit(ctx, boolLabel(energy.thermal.hasAirConditioning), FIELD_BOXES.hasAirConditioning, width, height, baseFont);
-
-    const airDetails = energy.thermal.hasAirConditioning
-      ? [airTypeLabel(energy.thermal.airConditioningType), energy.thermal.airConditioningDetails].filter(Boolean).join(' — ')
-      : 'No aplica';
-    drawTextFit(ctx, airDetails, FIELD_BOXES.airConditioningDetails, width, height, baseFont * 0.88);
-
-    drawTextFit(ctx, boolLabel(energy.additional.hasSolarPanels), FIELD_BOXES.hasSolarPanels, width, height, baseFont);
-    drawTextFit(
-      ctx,
-      energy.additional.hasSolarPanels ? energy.additional.solarPanelDetails : 'No aplica',
-      FIELD_BOXES.solarPanelDetails,
-      width,
-      height,
-      baseFont * 0.88
-    );
-
-    if (energy.customerSignature) {
-      await drawSignature(ctx, energy.customerSignature, FIELD_BOXES.signature);
-    }
-  });
+  return buildCertificateCanvas(source);
 }
 
 export async function createRenderedEnergyCertificateAsset(
   source: EnergyCertificateRenderSource | null | undefined
 ): Promise<RenderedDocumentAsset> {
-  const imageDataUrl = await renderEnergyCertificateOverlay(source);
+  const imageDataUrl = await buildCertificateCanvas(source);
   return {
     imageDataUrl,
     generatedAt: new Date().toISOString(),

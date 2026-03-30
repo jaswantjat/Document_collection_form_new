@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Certificate Preview</title>
+  <style>
+    body { margin: 0; background: #555; display: flex; justify-content: center; padding: 20px; }
+    canvas { max-width: 800px; width: 100%; box-shadow: 0 4px 32px rgba(0,0,0,0.4); }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const W = 2480, H = 3508, M = 100;
+const TW = W - M * 2;
+const LC = 960, VC = TW - LC;
+const RH = 78;
+const BLUE = '#3B46FF';
+const LABEL_BG = '#f5f7ff';
+const WHITE = '#ffffff';
+const DARK = '#111827';
+const MED = '#374151';
+const BORDER = '#c8cfe0';
+const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+const canvas = document.getElementById('c');
+canvas.width = W;
+canvas.height = H;
+const ctx = canvas.getContext('2d');
+
+function setFont(size, weight = 400, color = DARK) {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  ctx.fillStyle = color;
+}
+
+function drawText(text, x, y, maxW, size, weight = 400, color = DARK, align = 'left') {
+  if (!text) return;
+  setFont(size, weight, color);
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  let fs = size;
+  while (ctx.measureText(text).width > maxW && fs > size * 0.65) { fs--; setFont(fs, weight, color); }
+  ctx.fillText(text, x, y, maxW);
+}
+
+function drawRoundRect(x, y, w, h, r, fill, strokeColor, strokeWidth = 2) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (strokeColor) { ctx.strokeStyle = strokeColor; ctx.lineWidth = strokeWidth; ctx.stroke(); }
+}
+
+function drawRow(x, y, label, value, h = RH, labelW = LC, valueW = VC) {
+  ctx.fillStyle = LABEL_BG; ctx.fillRect(x, y, labelW, h);
+  ctx.fillStyle = WHITE;    ctx.fillRect(x + labelW, y, valueW, h);
+  ctx.strokeStyle = BORDER; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, labelW, h);
+  ctx.strokeRect(x + labelW, y, valueW, h);
+  drawText(label, x + 18, y + h / 2, labelW - 30, 38, 500, MED);
+  drawText(value, x + labelW + 18, y + h / 2, valueW - 30, 40, 600, DARK);
+}
+
+function drawMatrixSection(x, y, windows, doors) {
+  const colCount = 8;
+  const colW = VC / colCount;
+  const rowA = 50, rowB = 52, rowC = 78;
+  const dirs = ['N', 'S', 'E', 'O'];
+  const dirKeys = { N: 'north', S: 'south', E: 'east', O: 'west' };
+
+  ctx.fillStyle = LABEL_BG; ctx.fillRect(x, y, LC, rowA + rowB + rowC);
+  ctx.strokeStyle = BORDER; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, LC, rowA + rowB + rowC);
+
+  ctx.fillStyle = '#eef0fb'; ctx.fillRect(x + LC, y, colW * 4, rowA);
+  ctx.strokeRect(x + LC, y, colW * 4, rowA);
+  drawText('Ventanas', x + LC + colW * 2, y + rowA / 2, colW * 4 - 20, 34, 700, MED, 'center');
+
+  ctx.fillStyle = '#eef0fb'; ctx.fillRect(x + LC + colW * 4, y, colW * 4, rowA);
+  ctx.strokeRect(x + LC + colW * 4, y, colW * 4, rowA);
+  drawText('Puertas', x + LC + colW * 6, y + rowA / 2, colW * 4 - 20, 34, 700, MED, 'center');
+
+  const yB = y + rowA;
+  for (let i = 0; i < 8; i++) {
+    const cx = x + LC + i * colW;
+    ctx.fillStyle = '#eef0fb'; ctx.fillRect(cx, yB, colW, rowB);
+    ctx.strokeStyle = BORDER; ctx.strokeRect(cx, yB, colW, rowB);
+    drawText(dirs[i % 4], cx + colW / 2, yB + rowB / 2, colW - 6, 34, 700, MED, 'center');
+  }
+
+  drawText('Nº puertas y ventanas', x + 18, y + (rowA + rowB + rowC) / 2, LC - 30, 36, 500, MED);
+
+  const yC = y + rowA + rowB;
+  for (let i = 0; i < 8; i++) {
+    const cx = x + LC + i * colW;
+    ctx.fillStyle = WHITE; ctx.fillRect(cx, yC, colW, rowC);
+    ctx.strokeStyle = BORDER; ctx.strokeRect(cx, yC, colW, rowC);
+    const key = dirKeys[dirs[i % 4]];
+    const val = i < 4 ? (windows[key] || '') : (doors[key] || '');
+    drawText(val, cx + colW / 2, yC + rowC / 2, colW - 10, 40, 600, DARK, 'center');
+  }
+
+  return rowA + rowB + rowC;
+}
+
+async function render() {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  const HDR_Y = 65, HDR_H = 115;
+  drawRoundRect(M, HDR_Y, 1540, HDR_H, 10, BLUE);
+  setFont(52, 800, WHITE);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('FORMULARIO CERTIFICADO ENERGÉTICO', M + 30, HDR_Y + HDR_H / 2);
+
+  // Logo
+  const logo = new Image();
+  logo.src = '/eltex-logo.png';
+  await new Promise(r => { logo.onload = r; logo.onerror = r; });
+  if (logo.naturalWidth) {
+    const lH = 80, lW = Math.round((logo.naturalWidth / logo.naturalHeight) * lH);
+    ctx.drawImage(logo, W - M - lW, HDR_Y + (HDR_H - lH) / 2, lW, lH);
+  }
+
+  // ── Table 1 ─────────────────────────────────────
+  let cy = HDR_Y + HDR_H + 55;
+  const rows1 = [
+    ['Nombre y apellido', 'García Fernández, Carlos'],
+    ['¿Es cliente?', 'SI'],
+    ['Dirección', 'Calle Mayor, 12, 3ºB, 28013 Madrid'],
+    ['Teléfono', '+34 612 345 678'],
+    ['Email', 'carlos.garcia@email.com'],
+    ['DNI/NIE', '12345678A'],
+    ['Asesor', 'Laura Martínez'],
+    ['Fecha del formulario', '01/04/2026 10:45'],
+    ['¿Qué producto se está vendiendo?', 'Paneles Solares y Aerotermia'],
+  ];
+  for (const [l, v] of rows1) { drawRow(M, cy, l, v); cy += RH; }
+
+  // ── Table 2 ─────────────────────────────────────
+  cy += 65;
+  const rows2a = [
+    ['Referencia catastral de la vivienda', '1234567VK0000001'],
+    ['Superficie habitable útil de la vivienda', '98 m²'],
+    ['Número de plantas de la vivienda', '2'],
+    ['Altura libre media de las plantas', 'Entre 2,7m y 3,2m'],
+    ['Número de dormitorios', '3'],
+  ];
+  for (const [l, v] of rows2a) { drawRow(M, cy, l, v); cy += RH; }
+
+  const mh = drawMatrixSection(M, cy,
+    { north: '3', south: '5', east: '2', west: '1' },
+    { north: '1', south: '2', east: '0', west: '1' }
+  );
+  cy += mh;
+
+  const rows2b = [
+    ['Material de los marcos de la ventana', 'Aluminio'],
+    ['Material de las puertas', 'Madera'],
+    ['Tipo de vidrio de las ventanas', 'Doble acristalamiento'],
+    ['¿Las ventanas tienen persiana?', 'SI'],
+    ['Número de ventanas con persianas', '6'],
+    ['Equipo de la instalación térmica', 'Caldera (ACS y calefacción)'],
+    ['Combustible de la caldera', 'Gas'],
+    ['Detalles del equipo (marca y año)', 'Junkers GB172 — 2019'],
+    ['Tipo de emisor de calefacción', 'Radiadores de Agua'],
+    ['Material de radiadores', 'Aluminio'],
+    ['¿Tiene aire acondicionado?', 'SI'],
+    ['Detalles del aire (marca y año)', 'Frío y Calor — Daikin 2022'],
+    ['¿Cuenta con placas solares?', 'NO'],
+    ['Nº de paneles y potencia de cada uno', 'No aplica'],
+  ];
+  for (const [l, v] of rows2b) { drawRow(M, cy, l, v); cy += RH; }
+
+  // ── Signature ───────────────────────────────────
+  cy += 60;
+  drawRow(M, cy, 'Firma del cliente', '', 200);
+
+  // ── Footer ──────────────────────────────────────
+  cy += 200 + 40;
+  ctx.strokeStyle = BORDER; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(M, cy); ctx.lineTo(W - M, cy); ctx.stroke();
+  setFont(28, 400, '#9ca3af');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('Expediente generado por Eltex · 01/04/2026 10:45', W / 2, cy + 28);
+}
+
+render().catch(console.error);
+</script>
+</body>
+</html>
