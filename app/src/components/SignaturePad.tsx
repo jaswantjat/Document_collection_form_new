@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { gsap } from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { Eraser, Check, Pen } from 'lucide-react';
 
 interface SignaturePadProps {
@@ -46,14 +47,14 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     }
   }, [existingSignature]);
 
-  // Animation on mount
-  useEffect(() => {
+  // Animation on mount — useGSAP automatically kills the tween on unmount
+  useGSAP(() => {
     gsap.fromTo(
       containerRef.current,
       { opacity: 0, y: 10 },
       { opacity: 1, y: 0, duration: 0.4, ease: 'expo.out' }
     );
-  }, []);
+  }, { scope: containerRef });
 
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -151,7 +152,8 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     setHasLocalSignature(false);
     onSignature(null);
 
-    // Animate clear
+    // Animate clear — kill any previous tween on this element first
+    gsap.killTweensOf(canvas);
     gsap.fromTo(
       canvas,
       { opacity: 0.5 },
