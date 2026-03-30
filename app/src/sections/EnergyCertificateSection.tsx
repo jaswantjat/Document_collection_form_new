@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
 import { SignaturePad } from '@/components/SignaturePad';
+import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
+import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
+import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia.png';
+import thermalTermoElectricoImage from '@/assets/energy-certificate/thermal-termo-electrico.png';
 import { createRenderedEnergyCertificateAsset, renderEnergyCertificateOverlay } from '@/lib/energyCertificateDocument';
 import type { EnergyCertificateData, FormData, ProjectData } from '@/types';
 
@@ -29,10 +33,10 @@ const HEIGHT_OPTIONS = [
 ] as const;
 
 const THERMAL_INSTALLATION_OPTIONS = [
-  { value: 'termo-electrico', label: 'Termo Eléctrico (Sólo ACS)', image: '/energy-certificate-assets/thermal-termo-electrico.png' },
-  { value: 'calentador', label: 'Calentador (Sólo ACS)', image: '/energy-certificate-assets/thermal-calentador.png' },
-  { value: 'caldera', label: 'Caldera (ACS y calefacción)', image: '/energy-certificate-assets/thermal-caldera.png' },
-  { value: 'aerotermia', label: 'Aerotermia', image: '/energy-certificate-assets/thermal-aerotermia.png' },
+  { value: 'termo-electrico', label: 'Termo Eléctrico (Sólo ACS)', image: thermalTermoElectricoImage },
+  { value: 'calentador', label: 'Calentador (Sólo ACS)', image: thermalCalentadorImage },
+  { value: 'caldera', label: 'Caldera (ACS y calefacción)', image: thermalCalderaImage },
+  { value: 'aerotermia', label: 'Aerotermia', image: thermalAerotermiaImage },
 ] as const;
 
 const FUEL_OPTIONS = [

@@ -1,8 +1,9 @@
 import type { AIExtraction, FormData, ProjectData, RenderedDocumentAsset } from '@/types';
+import energyCertificateSummaryTemplate from '@/assets/energy-certificate/energy-certificate-summary.jpg';
 
 export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-03-30.1';
 
-const TEMPLATE_SRC = '/energy-certificate-assets/energy-certificate-summary.jpg';
+const TEMPLATE_SRC = energyCertificateSummaryTemplate;
 const PAGE_SIZE = { width: 2481, height: 3509 };
 const TEXT_COLOR = '#1f2937';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
@@ -221,15 +222,15 @@ function snapshotFromSource(source: EnergyCertificateRenderSource | null | undef
 }
 
 const FIELD_BOXES = {
-  customerName: [1245, 488, 2100, 554] as Box,
-  isExistingCustomer: [1245, 566, 2100, 632] as Box,
-  address: [1245, 647, 2100, 713] as Box,
-  phone: [1245, 726, 2100, 792] as Box,
-  email: [1245, 805, 2100, 872] as Box,
-  dniNumber: [1245, 885, 2100, 951] as Box,
-  assessor: [1245, 964, 2100, 1030] as Box,
-  formDate: [1245, 1045, 2100, 1110] as Box,
-  soldProduct: [1245, 1124, 2100, 1191] as Box,
+  customerName: [1245, 329, 2100, 395] as Box,
+  isExistingCustomer: [1245, 408, 2100, 474] as Box,
+  address: [1245, 488, 2100, 554] as Box,
+  phone: [1245, 566, 2100, 632] as Box,
+  email: [1245, 647, 2100, 713] as Box,
+  dniNumber: [1245, 726, 2100, 792] as Box,
+  assessor: [1245, 805, 2100, 872] as Box,
+  formDate: [1245, 885, 2100, 951] as Box,
+  soldProduct: [1245, 964, 2100, 1030] as Box,
   cadastralReference: [1245, 1364, 2100, 1430] as Box,
   habitableAreaM2: [1245, 1443, 2100, 1508] as Box,
   floorCount: [1245, 1522, 2100, 1588] as Box,
@@ -240,15 +241,15 @@ const FIELD_BOXES = {
   windowGlassType: [1245, 2207, 2100, 2272] as Box,
   hasShutters: [1245, 2286, 2100, 2351] as Box,
   shutterWindowCount: [1245, 2364, 2100, 2432] as Box,
-  thermalInstallationType: [1245, 2445, 2100, 2510] as Box,
-  boilerFuelType: [1245, 2524, 2100, 2589] as Box,
-  equipmentDetails: [1245, 2603, 2100, 2670] as Box,
-  heatingEmitterType: [1245, 2682, 2100, 2748] as Box,
-  radiatorMaterial: [1245, 2762, 2100, 2827] as Box,
-  hasAirConditioning: [1245, 2841, 2100, 2908] as Box,
-  airConditioningDetails: [1245, 2921, 2100, 2988] as Box,
-  hasSolarPanels: [1245, 3000, 2100, 3067] as Box,
-  solarPanelDetails: [1245, 3079, 2100, 3146] as Box,
+  thermalInstallationType: [1245, 2364, 2100, 2432] as Box,
+  boilerFuelType: [1245, 2445, 2100, 2510] as Box,
+  equipmentDetails: [1245, 2524, 2100, 2589] as Box,
+  heatingEmitterType: [1245, 2603, 2100, 2670] as Box,
+  radiatorMaterial: [1245, 2682, 2100, 2748] as Box,
+  hasAirConditioning: [1245, 2762, 2100, 2827] as Box,
+  airConditioningDetails: [1245, 2841, 2100, 2908] as Box,
+  hasSolarPanels: [1245, 2921, 2100, 2988] as Box,
+  solarPanelDetails: [1245, 3000, 2100, 3067] as Box,
   signature: [1045, 3215, 1900, 3415] as Box,
 } as const;
 
@@ -257,10 +258,10 @@ const MATRIX_CELLS = {
   windowsSouth: [1560, 1908],
   windowsEast: [1658, 1908],
   windowsWest: [1754, 1908],
-  doorsNorth: [1947, 1908],
-  doorsSouth: [2045, 1908],
-  doorsEast: [2142, 1908],
-  doorsWest: [2239, 1908],
+  doorsNorth: [1848, 1908],
+  doorsSouth: [1944, 1908],
+  doorsEast: [2038, 1908],
+  doorsWest: [2106, 1908],
 } as const;
 
 export async function renderEnergyCertificateOverlay(
