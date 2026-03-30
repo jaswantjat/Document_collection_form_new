@@ -82,19 +82,12 @@ export function ReviewSection({
       section: 'property-docs',
     },
   ];
-  const energyCertificateStatus = formData.energyCertificate.status;
-
   const pendingItems = allItems.filter(i => !i.done);
   const doneItems = allItems.filter(i => i.done);
   const allDone = pendingItems.length === 0;
   const progress = doneItems.length;
   const total = allItems.length;
   const energyStatus = formData.energyCertificate.status;
-  const energyLabel = energyStatus === 'completed'
-    ? 'Certificado energético confirmado'
-    : energyStatus === 'skipped'
-      ? 'Certificado energético omitido'
-      : null;
 
   const submit = async () => {
     if (submitting) return;
@@ -267,57 +260,56 @@ export function ReviewSection({
           </div>
         )}
 
-        {energyLabel && (
-          <button
-            type="button"
-            onClick={() => onEdit('energy-certificate')}
-            className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-              energyStatus === 'completed'
-                ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
-                : 'border-amber-200 bg-amber-50 hover:bg-amber-100'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className={`text-sm font-semibold ${energyStatus === 'completed' ? 'text-emerald-800' : 'text-amber-800'}`}>
-                  {energyLabel}
-                </p>
-                <p className={`text-xs mt-0.5 ${energyStatus === 'completed' ? 'text-emerald-600' : 'text-amber-700'}`}>
-                  {energyStatus === 'completed'
-                    ? 'Revisar o actualizar el certificado energético firmado'
-                    : 'Puedes completarlo más tarde desde este mismo enlace'}
-                </p>
-              </div>
-              <FileText className={`w-4 h-4 shrink-0 ${energyStatus === 'completed' ? 'text-emerald-500' : 'text-amber-500'}`} />
-            </div>
-          </button>
-        )}
-
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => onEdit('energy-certificate')}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-          >
-            {energyCertificateStatus === 'completed' ? (
-              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-            ) : energyCertificateStatus === 'skipped' ? (
+        <button
+          type="button"
+          onClick={() => onEdit('energy-certificate')}
+          className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+            energyStatus === 'completed'
+              ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
+              : energyStatus === 'skipped'
+                ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+                : 'border-gray-200 bg-white hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {energyStatus === 'completed' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+            ) : energyStatus === 'skipped' ? (
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-600">
-                {energyCertificateStatus === 'completed'
+              <p className={`text-sm font-semibold ${
+                energyStatus === 'completed' ? 'text-emerald-800'
+                : energyStatus === 'skipped' ? 'text-amber-800'
+                : 'text-gray-700'
+              }`}>
+                {energyStatus === 'completed'
                   ? 'Certificado energético — confirmado'
-                  : energyCertificateStatus === 'skipped'
+                  : energyStatus === 'skipped'
                     ? 'Certificado energético — saltado por cliente'
                     : 'Certificado energético — pendiente'}
               </p>
+              <p className={`text-xs mt-0.5 ${
+                energyStatus === 'completed' ? 'text-emerald-600'
+                : energyStatus === 'skipped' ? 'text-amber-700'
+                : 'text-gray-400'
+              }`}>
+                {energyStatus === 'completed'
+                  ? 'Revisar o actualizar el certificado energético firmado'
+                  : energyStatus === 'skipped'
+                    ? 'Puedes completarlo más tarde desde este mismo enlace'
+                    : 'Completa el certificado energético de la vivienda'}
+              </p>
             </div>
-            <FileText className="w-4 h-4 text-gray-300 shrink-0" />
-          </button>
-        </div>
+            <FileText className={`w-4 h-4 shrink-0 ${
+              energyStatus === 'completed' ? 'text-emerald-500'
+              : energyStatus === 'skipped' ? 'text-amber-500'
+              : 'text-gray-300'
+            }`} />
+          </div>
+        </button>
 
         {/* Processing */}
         {hasBlockingDocumentProcessing && (

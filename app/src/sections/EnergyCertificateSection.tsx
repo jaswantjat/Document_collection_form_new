@@ -285,6 +285,21 @@ export function EnergyCertificateSection({
     }
   }, [formData.ibi.extraction?.extractedData?.referenciaCatastral]);
 
+  useEffect(() => {
+    if (data.additional.soldProduct) return;
+    const defaultProduct =
+      project.productType === 'solar' ? 'solo-paneles'
+      : project.productType === 'aerothermal' ? 'solo-aerotermia'
+      : null;
+    if (defaultProduct) {
+      onChange({
+        ...data,
+        status: data.status === 'not-started' ? 'in-progress' : data.status,
+        additional: { ...data.additional, soldProduct: defaultProduct },
+      });
+    }
+  }, [project.productType]);
+
   const mutate = (updater: (prev: EnergyCertificateData) => EnergyCertificateData) => {
     const next = updater(data);
     onChange(createInProgressState(next));
