@@ -274,6 +274,17 @@ export function EnergyCertificateSection({
     };
   }, [previewSource, stepIndex]);
 
+  useEffect(() => {
+    const ibiCatastral = formData.ibi.extraction?.extractedData?.referenciaCatastral;
+    if (ibiCatastral && !data.housing.cadastralReference) {
+      onChange({
+        ...data,
+        status: data.status === 'not-started' ? 'in-progress' : data.status,
+        housing: { ...data.housing, cadastralReference: ibiCatastral },
+      });
+    }
+  }, [formData.ibi.extraction?.extractedData?.referenciaCatastral]);
+
   const mutate = (updater: (prev: EnergyCertificateData) => EnergyCertificateData) => {
     const next = updater(data);
     onChange(createInProgressState(next));
