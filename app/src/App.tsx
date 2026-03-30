@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useEffectEvent } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
-import { useFormState } from '@/hooks/useFormState';
+import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { fetchProject } from '@/services/api';
 import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
@@ -13,6 +13,7 @@ import './App.css';
 
 const ProvinceSelectionSection = lazy(() => import('@/sections/ProvinceSelectionSection').then((module) => ({ default: module.ProvinceSelectionSection })));
 const RepresentationSection = lazy(() => import('@/sections/RepresentationSection').then((module) => ({ default: module.RepresentationSection })));
+const EnergyCertificateSection = lazy(() => import('@/sections/EnergyCertificateSection').then((module) => ({ default: module.EnergyCertificateSection })));
 const ReviewSection = lazy(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
 const SuccessSection = lazy(() => import('@/sections/SuccessSection').then((module) => ({ default: module.SuccessSection })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
@@ -65,6 +66,12 @@ function hasExistingRepresentationFlow(formData: FormData | null): boolean {
   return hasRepresentationDone(formData, location);
 }
 
+function hasEnergyCertificateDecision(formData: FormData | null): boolean {
+  if (!formData) return false;
+  const status = formData.energyCertificate?.status;
+  return status === 'completed' || status === 'skipped';
+}
+
 function getInitialSection(
   project: ProjectData | null,
   urlCode: string | null
@@ -74,9 +81,12 @@ function getInitialSection(
   const fd = project.formData;
   const location = fd?.location ?? fd?.representation?.location ?? null;
   const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
+  const hasEnergyDecision = hasEnergyCertificateDecision(fd);
 
   if (followUpDocumentFlow && !hasPropertyDocsDone(fd)) return 'property-docs';
-  if (hasRepresentationDone(fd, location)) return 'review';
+  if (followUpDocumentFlow) return hasEnergyDecision ? 'review' : 'energy-certificate';
+  if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
+  if (location === 'other') return hasEnergyDecision ? 'review' : 'energy-certificate';
   if (location) return 'representation';
   if (hasPropertyDocsDone(fd)) return 'province-selection';
   return 'property-docs';
@@ -95,6 +105,13 @@ function buildProjectUrl(code: string, token?: string | null, source?: 'customer
   if (token) params.set('token', token);
   if (source === 'assessor') params.set('source', 'assessor');
   return `/?${params.toString()}`;
+}
+
+function normalizeLoadedProject(project: ProjectData): ProjectData {
+  return {
+    ...project,
+    formData: normalizeFormData(project.formData ?? null),
+  };
 }
 
 // ── Main Form App ─────────────────────────────────────────────────────────────
@@ -136,10 +153,11 @@ function FormApp() {
         if (controller.signal.aborted) return;
 
         if (res.success && res.project) {
-          setProject(res.project);
+          const normalizedProject = normalizeLoadedProject(res.project);
+          setProject(normalizedProject);
 
           // Persist whichever token we have so refreshes keep working.
-          const activeToken = token ?? res.project.accessToken ?? null;
+          const activeToken = token ?? normalizedProject.accessToken ?? null;
           setProjectToken(activeToken);
           if (activeToken) storeToken(urlCode, activeToken);
           return;
@@ -196,6 +214,7 @@ function FormApp() {
     addElectricityPages, removeElectricityPage,
     setLocation,
     setRepresentation,
+    setEnergyCertificate,
     setDocumentProcessingState,
     validatePropertyDocs,
     canSubmit,
@@ -214,8 +233,9 @@ function FormApp() {
   };
 
   const handlePhoneConfirmed = (_phone: string, foundProject: ProjectData) => {
-    setProject(foundProject);
-    const token = foundProject.accessToken || null;
+    const normalizedProject = normalizeLoadedProject(foundProject);
+    setProject(normalizedProject);
+    const token = normalizedProject.accessToken || null;
     setProjectToken(token);
     // Persist so page refresh after phone lookup doesn't hit FORBIDDEN
     if (token) storeToken(foundProject.code, token);
@@ -260,7 +280,7 @@ function FormApp() {
             onContinue={() => {
               if (!validatePropertyDocs()) return;
               if (followUpDocumentFlow) {
-                goTo('review');
+                goTo(hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate');
                 return;
               }
               goTo('province-selection');
@@ -278,7 +298,9 @@ function FormApp() {
             onBack={() => goTo('property-docs')}
             onContinue={() => {
               const loc = formData.location ?? formData.representation?.location ?? null;
-              goTo(loc === 'other' ? 'review' : 'representation');
+              goTo(loc === 'other'
+                ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
+                : 'representation');
             }}
           />
         );
@@ -290,12 +312,30 @@ function FormApp() {
             location={formData.location ?? formData.representation.location ?? null}
             onChange={setRepresentation}
             onBack={() => goTo('province-selection')}
+            onContinue={() => goTo('energy-certificate')}
+          />
+        );
+
+      case 'energy-certificate':
+        return (
+          <EnergyCertificateSection
+            project={project}
+            formData={formData}
+            data={formData.energyCertificate}
+            onChange={setEnergyCertificate}
+            onBack={() => {
+              if (followUpDocumentFlow) {
+                goTo('property-docs');
+                return;
+              }
+              const energyLoc = formData.location ?? formData.representation?.location ?? null;
+              goTo(energyLoc === 'other' ? 'province-selection' : 'representation');
+            }}
             onContinue={() => goTo('review')}
           />
         );
 
       case 'review': {
-        const reviewLoc = formData.location ?? formData.representation?.location ?? null;
         return (
           <ReviewSection
             project={project}
@@ -307,7 +347,7 @@ function FormApp() {
             onEdit={(s) => goTo(s as Section)}
             onSuccess={() => goTo('success')}
             projectToken={projectToken}
-            onBack={() => goTo(followUpDocumentFlow ? 'property-docs' : reviewLoc === 'other' ? 'province-selection' : 'representation')}
+            onBack={() => goTo('energy-certificate')}
           />
         );
       }

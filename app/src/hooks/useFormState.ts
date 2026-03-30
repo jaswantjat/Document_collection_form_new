@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
-  StoredDocumentFile,
+  StoredDocumentFile, EnergyCertificateData,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
 import { saveProgress } from '@/services/api';
@@ -89,6 +89,43 @@ export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [] },
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
   electricityBill: { pages: [], originalPdfs: [] },
+  energyCertificate: {
+    status: 'not-started',
+    housing: {
+      cadastralReference: '',
+      habitableAreaM2: '',
+      floorCount: '',
+      averageFloorHeight: null,
+      bedroomCount: '',
+      doorsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowFrameMaterial: null,
+      doorMaterial: '',
+      windowGlassType: null,
+      hasShutters: null,
+      shutterWindowCount: '',
+    },
+    thermal: {
+      thermalInstallationType: null,
+      boilerFuelType: null,
+      equipmentDetails: '',
+      hasAirConditioning: null,
+      airConditioningType: null,
+      airConditioningDetails: '',
+      heatingEmitterType: null,
+      radiatorMaterial: null,
+    },
+    additional: {
+      soldProduct: null,
+      isExistingCustomer: null,
+      hasSolarPanels: null,
+      solarPanelDetails: '',
+    },
+    customerSignature: null,
+    renderedDocument: null,
+    completedAt: null,
+    skippedAt: null,
+  },
   signatures: { customerSignature: null, repSignature: null },
   representation: {
     location: null,
@@ -119,7 +156,7 @@ function mergeDocSlot(base: DocSlot, slot?: Partial<DocSlot> | null): DocSlot {
   };
 }
 
-function normalizeFormData(savedFormData?: FormData | null): FormData {
+export function normalizeFormData(savedFormData?: FormData | null): FormData {
   const normalizedLocation = savedFormData?.location ?? savedFormData?.representation?.location ?? null;
 
   return {
@@ -140,6 +177,30 @@ function normalizeFormData(savedFormData?: FormData | null): FormData {
     electricityBill: {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
       originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
+    },
+    energyCertificate: {
+      ...initialFormData.energyCertificate,
+      ...savedFormData?.energyCertificate,
+      housing: {
+        ...initialFormData.energyCertificate.housing,
+        ...savedFormData?.energyCertificate?.housing,
+        doorsByOrientation: {
+          ...initialFormData.energyCertificate.housing.doorsByOrientation,
+          ...savedFormData?.energyCertificate?.housing?.doorsByOrientation,
+        },
+        windowsByOrientation: {
+          ...initialFormData.energyCertificate.housing.windowsByOrientation,
+          ...savedFormData?.energyCertificate?.housing?.windowsByOrientation,
+        },
+      },
+      thermal: {
+        ...initialFormData.energyCertificate.thermal,
+        ...savedFormData?.energyCertificate?.thermal,
+      },
+      additional: {
+        ...initialFormData.energyCertificate.additional,
+        ...savedFormData?.energyCertificate?.additional,
+      },
     },
     signatures: {
       ...initialFormData.signatures,
@@ -226,12 +287,17 @@ export const useFormState = (
     if (!projectCode) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const cleanData = JSON.parse(JSON.stringify(formData, (key, value) => {
+      const cleanData = JSON.parse(JSON.stringify(formData, (_key, value) => {
         if (value instanceof File) return undefined;
-        // Strip large rendered document images — dashboard re-renders on demand
-        if (key === 'imageDataUrl' && typeof value === 'string' && value.startsWith('data:image/')) return undefined;
         return value;
       }));
+      if (cleanData?.representation?.renderedDocuments) {
+        for (const asset of Object.values(cleanData.representation.renderedDocuments as Record<string, { imageDataUrl?: string }>)) {
+          if (asset && typeof asset === 'object' && 'imageDataUrl' in asset) {
+            delete asset.imageDataUrl;
+          }
+        }
+      }
       saveProgress(projectCode, cleanData, projectToken).catch(() => {});
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
@@ -373,6 +439,13 @@ export const useFormState = (
     });
   }, []);
 
+  const setEnergyCertificate = useCallback((energyCertificate: EnergyCertificateData) => {
+    setFormData((prev) => ({
+      ...prev,
+      energyCertificate,
+    }));
+  }, []);
+
   // Location
   const setLocation = useCallback((location: 'cataluna' | 'madrid' | 'valencia' | 'other') => {
     setFormData(prev => {
@@ -465,6 +538,7 @@ export const useFormState = (
     addElectricityPages, removeElectricityPage, setElectricityPageProcessing,
     setLocation,
     setRepresentation,
+    setEnergyCertificate,
     setDocumentProcessingState,
     validatePropertyDocs, validateRepresentation,
     getProgress, canSubmit, setErrors,

@@ -287,6 +287,10 @@ function computeDashboardWarnings(formData) {
   return warnings;
 }
 
+function getEnergyCertificate(formData) {
+  return formData?.energyCertificate || null;
+}
+
 function buildDashboardSummary(project) {
   const formData = project?.formData || null;
   const snapshot = getProjectSnapshot(formData);
@@ -347,6 +351,14 @@ function buildDashboardSummary(project) {
 
   const signedDocuments = [];
   const representation = formData?.representation || {};
+  const energyCertificate = getEnergyCertificate(formData);
+  const energyCertificateStatus = energyCertificate?.status || (
+    energyCertificate?.renderedDocument?.imageDataUrl
+      ? 'completed'
+      : energyCertificate?.skippedAt
+        ? 'skipped'
+        : 'not-started'
+  );
 
   if (location === 'cataluna') {
     signedDocuments.push(
@@ -363,6 +375,7 @@ function buildDashboardSummary(project) {
 
   const allDocuments = [...documents, ...electricityDocs];
   const warnings = computeDashboardWarnings(formData);
+  const energyCertificatePresent = energyCertificateStatus === 'completed';
 
   return {
     lastUpdated:
@@ -380,6 +393,12 @@ function buildDashboardSummary(project) {
     documents,
     electricityPages: electricityDocs,
     signedDocuments,
+    energyCertificate: {
+      status: energyCertificateStatus,
+      present: energyCertificatePresent,
+      completedAt: energyCertificate?.completedAt || null,
+      skippedAt: energyCertificate?.skippedAt || null,
+    },
     finalSignatures: [],
     photoGroups: [],
     downloadGroups: [],
@@ -392,6 +411,8 @@ function buildDashboardSummary(project) {
       signedFormsTotal: signedDocuments.length,
       pdfsAvailable: signedDocuments.filter((d) => d.present).length,
       pdfsTotal: signedDocuments.length,
+      energyCertificatePresent,
+      energyCertificateTotal: 1,
       finalSignaturesPresent: 0,
       finalSignaturesTotal: 0,
       documentsRemaining: allDocuments.filter((d) => !d.present).length,
@@ -771,7 +792,7 @@ app.put('/api/project/:code/admin-formdata', requireDashboardAuth, (req, res) =>
 });
 
 // ── Download all project files as a ZIP ───────────────────────────────────────
-app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
+app.get('/api/project/:code/download-zip', requireDashboardAuth, async (req, res) => {
   const project = database.projects[req.params.code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND' });
 
@@ -788,6 +809,13 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
     const buffer = Buffer.from(base64Data, 'base64');
     const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
     zip.addFile(`${folder}/${safeName}.${ext}`, buffer);
+  };
+
+  const addRenderedPdfFile = async (label, imageDataUrl, folder) => {
+    const pdfBuffer = await renderedImageToPdfBuffer(imageDataUrl);
+    if (!pdfBuffer) return;
+    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    zip.addFile(`${folder}/${safeName}.pdf`, pdfBuffer);
   };
 
   const addStoredFiles = (label, files, folder) => {
@@ -817,6 +845,11 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, (req, res) => {
       addBase64File(`Factura_luz_${i + 1}`, page?.photo?.preview, '1_documentos');
     });
     addStoredFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, '1_documentos');
+
+    const energyCertificate = fd.energyCertificate;
+    if (energyCertificate?.renderedDocument?.imageDataUrl) {
+      await addRenderedPdfFile('Certificado_energetico', energyCertificate.renderedDocument.imageDataUrl, '2_certificados');
+    }
   }
 
   const zipBuffer = zip.toBuffer();
@@ -874,6 +907,7 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
     addDataUrlFile('Firma_representacio_cat', fd.representation?.representacioSignature, 'signed-form-signature');
     addDataUrlFile('Firma_iva_es', fd.representation?.ivaCertificateEsSignature, 'signed-form-signature');
     addDataUrlFile('Firma_poder_es', fd.representation?.poderRepresentacioSignature, 'signed-form-signature');
+    addDataUrlFile('Certificado_energetico', fd.energyCertificate?.renderedDocument?.imageDataUrl, 'generated-document');
     addDataUrlFile('Firma_cliente', fd.signatures?.customerSignature, 'final-signature');
     addDataUrlFile('Firma_comercial', fd.signatures?.repSignature, 'final-signature');
   }
@@ -1716,6 +1750,25 @@ async function drawPercentSignature(page, pdfDoc, dataUrl, leftPct, topPct, widt
     width,
     height,
   });
+}
+
+async function renderedImageToPdfBuffer(imageDataUrl) {
+  if (!imageDataUrl || typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
+    return null;
+  }
+
+  const imageBytes = dataUrlToBuffer(imageDataUrl);
+  if (!imageBytes) return null;
+
+  const pdfDoc = await PDFDocument.create();
+  const image = imageDataUrl.startsWith('data:image/png')
+    ? await pdfDoc.embedPng(imageBytes)
+    : await pdfDoc.embedJpg(imageBytes);
+
+  const { width, height } = image.scale(1);
+  const page = pdfDoc.addPage([width, height]);
+  page.drawImage(image, { x: 0, y: 0, width, height });
+  return Buffer.from(await pdfDoc.save());
 }
 
 // Helper: Get current date in Catalan format

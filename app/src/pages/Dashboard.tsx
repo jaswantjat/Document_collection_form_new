@@ -32,6 +32,7 @@ import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
   type DashboardDocumentItem,
+  type DashboardEnergyCertificateSummary,
   type DashboardSignedPdfItem,
   type DashboardProjectSummary,
   getDashboardProjectSummary,
@@ -231,6 +232,14 @@ async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem)
   const overlay = getStoredRenderedDocument(project, item.key)?.imageDataUrl
     || await renderSignedDocumentOverlay(project, item.key);
   return () => generateImagePDF(overlay, item.filename);
+}
+
+async function buildEnergyCertificatePdfFactory(project: any) {
+  const asset = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl;
+  if (!asset) {
+    throw new Error('ENERGY_CERTIFICATE_NOT_READY');
+  }
+  return () => generateImagePDF(asset, `${project.code}_certificado-energetico.pdf`);
 }
 
 async function downloadProjectZip(project: any, token: string) {
@@ -770,10 +779,12 @@ function SignedPdfsTableCell({
 function StatusCell({
   allDocs,
   submissionCount,
+  energyCertificate,
   warnings,
 }: {
   allDocs: DashboardDocumentItem[];
   submissionCount: number;
+  energyCertificate?: DashboardEnergyCertificateSummary;
   warnings: import('@/lib/dashboardProject').DashboardWarning[];
 }) {
   const pending = allDocs.filter(d => !d.present);
@@ -798,6 +809,22 @@ function StatusCell({
       {submissionCount > 0 && (
         <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
           <CheckCircle className="w-3 h-3" /> {submissionCount} envío{submissionCount !== 1 ? 's' : ''}
+        </div>
+      )}
+      {energyCertificate && (
+        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+          energyCertificate.status === 'completed'
+            ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+            : energyCertificate.status === 'skipped'
+              ? 'text-gray-600 bg-gray-50 border-gray-200'
+              : 'text-amber-700 bg-amber-50 border-amber-200'
+        }`}>
+          {energyCertificate.status === 'completed' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+          {energyCertificate.status === 'completed'
+            ? 'Certificado energético'
+            : energyCertificate.status === 'skipped'
+              ? 'Certificado energético omitido'
+              : 'Certificado energético pendiente'}
         </div>
       )}
       {warnings.length > 0 && (
@@ -1276,6 +1303,7 @@ function ProjectDetailModal({
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
               <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
               <SignedDocumentsSection project={project} items={summary.signedDocuments} />
+              <EnergyCertificatePanel project={project} energyCertificate={summary.energyCertificate} />
               <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
               <DownloadGroupsSection groups={summary.downloadGroups} projectCode={project.code} />
               {summary.photoGroups.map((group) => (
@@ -1409,7 +1437,12 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <StatusCell allDocs={allDocs} submissionCount={project.submissionCount} warnings={summary.warnings} />
+        <StatusCell
+          allDocs={allDocs}
+          submissionCount={project.submissionCount}
+          energyCertificate={summary.energyCertificate}
+          warnings={summary.warnings}
+        />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
@@ -1834,6 +1867,97 @@ export function SignedDocumentsSection({
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function EnergyCertificatePanel({
+  project,
+  energyCertificate,
+}: {
+  project: any;
+  energyCertificate: DashboardEnergyCertificateSummary;
+}) {
+  if (!energyCertificate) return null;
+
+  const asset = energyCertificate.asset || null;
+
+  return (
+    <div className="space-y-3">
+      <SectionHeading icon={Sun} label="Certificado energético" />
+      <div className={`rounded-xl border p-4 space-y-3 ${
+        energyCertificate.status === 'completed'
+          ? 'border-emerald-200 bg-emerald-50/70'
+          : energyCertificate.status === 'skipped'
+            ? 'border-gray-200 bg-gray-50'
+            : 'border-amber-200 bg-amber-50/70'
+      }`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Estado</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {energyCertificate.status === 'completed'
+                ? 'Documento completado y disponible como PDF'
+                : energyCertificate.status === 'skipped'
+                  ? 'El cliente lo omitió'
+                  : 'Pendiente de completar'}
+            </p>
+          </div>
+          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+            energyCertificate.status === 'completed'
+              ? 'bg-emerald-100 text-emerald-700'
+              : energyCertificate.status === 'skipped'
+                ? 'bg-gray-100 text-gray-600'
+                : 'bg-amber-100 text-amber-700'
+          }`}>
+            {energyCertificate.status === 'completed' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+            {energyCertificate.label}
+          </span>
+        </div>
+
+        {asset ? (
+          <>
+            <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-auto rounded-xl border border-gray-200 bg-white" />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                    await viewPDFInNewTab(pdfFactory);
+                  } catch (err) {
+                    console.error('Energy certificate view failed:', err);
+                    alert('No se pudo visualizar el certificado energético.');
+                  }
+                }}
+                className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-3 h-3" />
+                Ver PDF
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                    const blob = await pdfFactory();
+                    downloadBlob(blob, `${project.code}_certificado-energetico.pdf`);
+                  } catch (err) {
+                    console.error('Energy certificate download failed:', err);
+                    alert('No se pudo descargar el certificado energético.');
+                  }
+                }}
+                className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5"
+              >
+                <Download className="w-3 h-3" />
+                Descargar PDF
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-gray-500">No hay PDF generado todavía.</p>
+        )}
       </div>
     </div>
   );

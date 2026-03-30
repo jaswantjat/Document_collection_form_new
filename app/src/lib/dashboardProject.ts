@@ -43,6 +43,13 @@ export interface DashboardWarning {
   message: string;
 }
 
+export interface DashboardEnergyCertificateSummary {
+  status: 'pending' | 'skipped' | 'completed';
+  label: string;
+  completedAt: string | null;
+  asset: DashboardAssetItem | null;
+}
+
 export interface DashboardProjectSummary {
   location: string | null;
   lastUpdated: string | null;
@@ -51,6 +58,7 @@ export interface DashboardProjectSummary {
   documents: DashboardDocumentItem[];
   electricityPages: DashboardDocumentItem[];
   signedDocuments: DashboardSignedPdfItem[];
+  energyCertificate: DashboardEnergyCertificateSummary;
   finalSignatures: DashboardAssetItem[];
   photoGroups: DashboardAssetGroup[];
   downloadGroups: DashboardAssetGroup[];
@@ -264,6 +272,67 @@ export function getDashboardSignedPdfItems(project: any): DashboardSignedPdfItem
   }));
 }
 
+export function getDashboardEnergyCertificateSummary(project: any): DashboardEnergyCertificateSummary {
+  const summary = project?.summary?.energyCertificate;
+  if (summary) {
+    const status =
+      summary.status === 'completed'
+        ? 'completed'
+        : summary.status === 'skipped'
+          ? 'skipped'
+          : 'pending';
+    const rendered = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl
+      || summary.asset?.dataUrl
+      || null;
+
+    return {
+      status,
+      label: status === 'completed' ? 'Completado' : status === 'skipped' ? 'Saltado por cliente' : 'Pendiente',
+      completedAt: summary.completedAt ?? null,
+      asset: status === 'completed' && rendered
+        ? toAssetItem('energy-certificate', 'Certificado energético', rendered)
+        : null,
+    };
+  }
+
+  const energy = project?.formData?.energyCertificate;
+
+  if (energy?.status === 'completed') {
+    const rendered = energy?.renderedDocument?.imageDataUrl || null;
+    return {
+      status: 'completed',
+      label: 'Completado',
+      completedAt: energy.completedAt ?? null,
+      asset: rendered ? toAssetItem('energy-certificate', 'Certificado energético', rendered) : null,
+    };
+  }
+
+  if (energy?.status === 'skipped') {
+    return {
+      status: 'skipped',
+      label: 'Saltado por cliente',
+      completedAt: null,
+      asset: null,
+    };
+  }
+
+  if (energy?.status === 'in-progress') {
+    return {
+      status: 'pending',
+      label: 'Pendiente',
+      completedAt: null,
+      asset: null,
+    };
+  }
+
+  return {
+    status: 'pending',
+    label: 'Pendiente',
+    completedAt: null,
+    asset: null,
+  };
+}
+
 export function getDashboardFinalSignatureAssets(project: any): DashboardAssetItem[] {
   const formData = project?.formData || {};
   return [
@@ -343,9 +412,12 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
 
   const photoGroups = getDashboardPhotoGroups(project);
   const finalSignatures = getDashboardFinalSignatureAssets(project);
+  const energyCertificate = getDashboardEnergyCertificateSummary(project);
+  const energyCertificateItems = energyCertificate.asset ? [energyCertificate.asset] : [];
 
   return [
     { key: 'documents', label: 'Documentos', items: [...primaryDocuments, ...ibiItems, ...electricityItems] },
+    { key: 'energy-certificate', label: 'Certificado energético', items: energyCertificateItems },
     { key: 'photos', label: 'Fotos del inmueble', items: photoGroups.flatMap((group) => group.items) },
     { key: 'final-signatures', label: 'Firmas finales', items: finalSignatures },
   ].filter((group) => group.items.length > 0);
@@ -423,6 +495,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const documents = getDashboardDocuments(project);
   const electricityPages = getDashboardElectricityPages(project);
   const signedDocuments = getDashboardSignedPdfItems(project);
+  const energyCertificate = getDashboardEnergyCertificateSummary(project);
   const finalSignatures = getDashboardFinalSignatureAssets(project);
   const photoGroups = getDashboardPhotoGroups(project);
   const downloadGroups = getDashboardDownloadGroups(project);
@@ -443,6 +516,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     documents,
     electricityPages,
     signedDocuments,
+    energyCertificate,
     finalSignatures,
     photoGroups,
     downloadGroups,

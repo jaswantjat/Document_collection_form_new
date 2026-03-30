@@ -4,6 +4,7 @@ import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, Rend
 import { submitForm } from '@/services/api';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
+import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 
 interface Props {
   project: ProjectData;
@@ -81,19 +82,42 @@ export function ReviewSection({
       section: 'property-docs',
     },
   ];
+  const energyCertificateStatus = formData.energyCertificate.status;
 
   const pendingItems = allItems.filter(i => !i.done);
   const doneItems = allItems.filter(i => i.done);
   const allDone = pendingItems.length === 0;
   const progress = doneItems.length;
   const total = allItems.length;
+  const energyStatus = formData.energyCertificate.status;
+  const energyLabel = energyStatus === 'completed'
+    ? 'Certificado energético completado'
+    : energyStatus === 'skipped'
+      ? 'Certificado energético omitido'
+      : null;
 
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
     setSubmitError('');
     try {
-      const renderedFormData = await ensureRenderedDocuments(formData);
+      const renderedRepresentation = await ensureRenderedDocuments(formData);
+      let renderedFormData = renderedRepresentation;
+
+      if (renderedRepresentation.energyCertificate.status === 'completed' && renderedRepresentation.energyCertificate.customerSignature) {
+        const renderedDocument = await createRenderedEnergyCertificateAsset({
+          project,
+          formData: renderedRepresentation,
+        });
+        renderedFormData = {
+          ...renderedRepresentation,
+          energyCertificate: {
+            ...renderedRepresentation.energyCertificate,
+            renderedDocument,
+          },
+        };
+      }
+
       const submitPayload = stripRenderedImages(renderedFormData);
       const res = await submitForm(project.code, submitPayload, source, projectToken);
       if (res.success) onSuccess();
@@ -107,18 +131,34 @@ export function ReviewSection({
 
   function stripRenderedImages(fd: FormData): FormData {
     const docs = fd.representation?.renderedDocuments;
-    if (!docs) return fd;
-    const stripped: NonNullable<FormData['representation']['renderedDocuments']> = {};
-    for (const [key, val] of Object.entries(docs) as [RenderedDocumentKey, RenderedDocumentAsset | undefined][]) {
-      if (!val) continue;
-      stripped[key] = {
-        generatedAt: val.generatedAt,
-        templateVersion: val.templateVersion,
-      };
+    const strippedRepresentation = docs ? { ...docs } : null;
+    if (strippedRepresentation) {
+      for (const [key, val] of Object.entries(strippedRepresentation) as [RenderedDocumentKey, RenderedDocumentAsset | undefined][]) {
+        if (!val) continue;
+        strippedRepresentation[key] = {
+          generatedAt: val.generatedAt,
+          templateVersion: val.templateVersion,
+        };
+      }
     }
+
+    const energyDocument = fd.energyCertificate?.renderedDocument
+      ? {
+          imageDataUrl: fd.energyCertificate.renderedDocument.imageDataUrl,
+          generatedAt: fd.energyCertificate.renderedDocument.generatedAt,
+          templateVersion: fd.energyCertificate.renderedDocument.templateVersion,
+        }
+      : null;
+
+    const stripped: NonNullable<FormData['representation']['renderedDocuments']> = {};
+    if (strippedRepresentation) Object.assign(stripped, strippedRepresentation);
     return {
       ...fd,
-      representation: { ...fd.representation, renderedDocuments: stripped },
+      representation: { ...fd.representation, renderedDocuments: strippedRepresentation ? stripped : fd.representation.renderedDocuments },
+      energyCertificate: {
+        ...fd.energyCertificate,
+        renderedDocument: energyDocument,
+      },
     };
   }
 
@@ -226,6 +266,58 @@ export function ReviewSection({
             })}
           </div>
         )}
+
+        {energyLabel && (
+          <button
+            type="button"
+            onClick={() => onEdit('energy-certificate')}
+            className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+              energyStatus === 'completed'
+                ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
+                : 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className={`text-sm font-semibold ${energyStatus === 'completed' ? 'text-emerald-800' : 'text-amber-800'}`}>
+                  {energyLabel}
+                </p>
+                <p className={`text-xs mt-0.5 ${energyStatus === 'completed' ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {energyStatus === 'completed'
+                    ? 'Revisar o actualizar el certificado energético firmado'
+                    : 'Puedes completarlo más tarde desde este mismo enlace'}
+                </p>
+              </div>
+              <FileText className={`w-4 h-4 shrink-0 ${energyStatus === 'completed' ? 'text-emerald-500' : 'text-amber-500'}`} />
+            </div>
+          </button>
+        )}
+
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => onEdit('energy-certificate')}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+          >
+            {energyCertificateStatus === 'completed' ? (
+              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+            ) : energyCertificateStatus === 'skipped' ? (
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-gray-600">
+                {energyCertificateStatus === 'completed'
+                  ? 'Certificado energético — completado'
+                  : energyCertificateStatus === 'skipped'
+                    ? 'Certificado energético — saltado por cliente'
+                    : 'Certificado energético — pendiente'}
+              </p>
+            </div>
+            <FileText className="w-4 h-4 text-gray-300 shrink-0" />
+          </button>
+        </div>
 
         {/* Processing */}
         {hasBlockingDocumentProcessing && (

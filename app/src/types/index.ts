@@ -1,6 +1,7 @@
 // Eltex Document Collection Form - Types
 
 export type ProductType = 'solar' | 'aerothermal';
+export type EnergyCertificateStatus = 'not-started' | 'in-progress' | 'skipped' | 'completed';
 
 export interface ProjectData {
   code: string;
@@ -136,12 +137,67 @@ export interface SignaturesData {
   repSignature: string | null;
 }
 
+export interface EnergyCertificateHousingData {
+  cadastralReference: string;
+  habitableAreaM2: string;
+  floorCount: string;
+  averageFloorHeight: '<2.7m' | '2.7-3.2m' | '>3.2m' | null;
+  bedroomCount: string;
+  doorsByOrientation: {
+    north: string;
+    east: string;
+    south: string;
+    west: string;
+  };
+  windowsByOrientation: {
+    north: string;
+    east: string;
+    south: string;
+    west: string;
+  };
+  windowFrameMaterial: 'madera' | 'aluminio' | 'pvc' | null;
+  doorMaterial: string;
+  windowGlassType: 'simple' | 'doble' | null;
+  hasShutters: boolean | null;
+  shutterWindowCount: string;
+}
+
+export interface EnergyCertificateThermalData {
+  thermalInstallationType: 'termo-electrico' | 'calentador' | 'caldera' | 'aerotermia' | null;
+  boilerFuelType: 'gas' | 'gasoil' | 'electricidad' | 'aerotermia' | null;
+  equipmentDetails: string;
+  hasAirConditioning: boolean | null;
+  airConditioningType: 'frio-calor' | 'frio' | null;
+  airConditioningDetails: string;
+  heatingEmitterType: 'radiadores-agua' | 'radiadores-electricos' | 'suelo-radiante' | null;
+  radiatorMaterial: 'hierro-fundido' | 'aluminio' | 'no-aplica' | null;
+}
+
+export interface EnergyCertificateAdditionalData {
+  soldProduct: 'solo-paneles' | 'solo-aerotermia' | 'paneles-y-aerotermia' | 'ampliacion' | 'ampliacion-y-aerotermia' | null;
+  isExistingCustomer: boolean | null;
+  hasSolarPanels: boolean | null;
+  solarPanelDetails: string;
+}
+
+export interface EnergyCertificateData {
+  status: EnergyCertificateStatus;
+  housing: EnergyCertificateHousingData;
+  thermal: EnergyCertificateThermalData;
+  additional: EnergyCertificateAdditionalData;
+  customerSignature: string | null;
+  renderedDocument: RenderedDocumentAsset | null;
+  completedAt: string | null;
+  skippedAt: string | null;
+}
+
 export interface FormData {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
   location?: LocationRegion;
   representation: RepresentationData;
+  energyCertificate: EnergyCertificateData;
   signatures: SignaturesData;
 }
 
@@ -157,6 +213,7 @@ export type Section =
   | 'property-docs'
   | 'province-selection'
   | 'representation'
+  | 'energy-certificate'
   | 'review'
   | 'success';
 
