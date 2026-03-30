@@ -352,13 +352,10 @@ function buildDashboardSummary(project) {
   const signedDocuments = [];
   const representation = formData?.representation || {};
   const energyCertificate = getEnergyCertificate(formData);
-  const energyCertificateStatus = energyCertificate?.status || (
-    (energyCertificate?.renderedDocument?.imageDataUrl && energyCertificate?.completedAt)
-      ? 'completed'
-      : energyCertificate?.skippedAt
-        ? 'skipped'
-        : 'not-started'
-  );
+  // Use explicit status field only; do NOT infer 'completed' from imageDataUrl presence
+  // (legacy projects without the explicit status field correctly default to 'not-started')
+  const energyCertificateStatus = energyCertificate?.status
+    || (energyCertificate?.skippedAt ? 'skipped' : 'not-started');
 
   if (location === 'cataluna') {
     signedDocuments.push(

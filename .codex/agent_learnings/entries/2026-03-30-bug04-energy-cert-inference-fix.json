@@ -1,0 +1,9 @@
+{
+  "ts_utc": "2026-03-30T17:50:00Z",
+  "category": "anti-pattern",
+  "text": "BUG-04 FIXED: backend/server.js `buildDashboardSummary` was inferring `status='completed'` from `energyCertificate.renderedDocument.imageDataUrl && energyCertificate.completedAt` as a legacy fallback. This caused false-positive 'Completado' status on the dashboard for old projects where the explicit `status` field was never saved. Fix: removed the imageDataUrl inference entirely. Now only trusts the explicit `status` field. If absent, falls back to `skippedAt ? 'skipped' : 'not-started'`. The lesson: NEVER infer state from derived artifacts; always require explicit state fields.",
+  "pointers": [
+    "backend/server.js:358-361"
+  ],
+  "issue": "BUG-04: Energy certificate false-complete from legacy imageDataUrl inference"
+}
