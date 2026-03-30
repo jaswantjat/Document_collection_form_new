@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, X } from 'lucide-react';
 import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
 import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
 import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia.png';
@@ -19,10 +19,10 @@ interface Props {
 type StepKey = 'housing' | 'thermal' | 'additional' | 'final';
 
 const STEPS: Array<{ key: StepKey; title: string; description: string }> = [
-  { key: 'housing', title: 'Características de la Vivienda', description: 'Completa solo los datos que tengas del inmueble.' },
-  { key: 'thermal', title: 'Características de la Instalación Térmica', description: 'Añade la información disponible del equipo y climatización.' },
-  { key: 'additional', title: 'Equipamiento e información adicional', description: 'Producto vendido e instalación fotovoltaica, si aplica.' },
-  { key: 'final', title: 'Resumen y confirmación', description: 'Revisa el certificado energético antes de guardarlo.' },
+  { key: 'housing', title: 'Vivienda', description: 'Completa solo los datos que tengas del inmueble.' },
+  { key: 'thermal', title: 'Instalación', description: 'Añade la información disponible del equipo y climatización.' },
+  { key: 'additional', title: 'Equipamiento', description: 'Producto vendido e instalación fotovoltaica, si aplica.' },
+  { key: 'final', title: 'Confirmación', description: 'Revisa el certificado energético antes de guardarlo.' },
 ];
 
 const HEIGHT_OPTIONS = [
@@ -117,6 +117,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        inputMode={type === 'number' ? 'numeric' : 'text'}
         className={`form-input ${error ? 'error' : ''}`}
       />
       {error && <p className="text-sm text-red-500">{error}</p>}
@@ -170,7 +171,7 @@ function SegmentedOptions({
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold text-gray-800">{label}</p>
-      <div className={`grid gap-2 ${columns === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+      <div className={`grid gap-2 ${columns === 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'}`}>
         {options.map((option) => {
           const active = value === option.value;
           return (
@@ -178,8 +179,8 @@ function SegmentedOptions({
               key={option.value}
               type="button"
               onClick={() => onChange(option.value)}
-              className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                active ? 'border-eltex-blue bg-eltex-blue text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              className={`px-3 py-3.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.97] ${
+                active ? 'border-eltex-blue bg-eltex-blue text-white' : 'border-gray-200 bg-white text-gray-600'
               }`}
             >
               {option.label}
@@ -217,8 +218,8 @@ function YesNoField({
               key={String(option.value)}
               type="button"
               onClick={() => onChange(option.value)}
-              className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                active ? 'border-eltex-blue bg-eltex-blue text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              className={`px-3 py-3.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.97] ${
+                active ? 'border-eltex-blue bg-eltex-blue text-white' : 'border-gray-200 bg-white text-gray-600'
               }`}
             >
               {option.label}
@@ -298,6 +299,7 @@ export function EnergyCertificateSection({
   const goNext = () => {
     setErrors((prev) => keepOnlyRenderError(prev));
     setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const goBack = () => {
@@ -306,6 +308,7 @@ export function EnergyCertificateSection({
       return;
     }
     setStepIndex((prev) => Math.max(prev - 1, 0));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const skipSurvey = () => {
@@ -352,134 +355,144 @@ export function EnergyCertificateSection({
   };
 
   return (
-    <div className="min-h-screen bg-white px-4 py-5 pb-10 sm:p-5">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Certificado energético</h1>
-            <p className="text-sm text-gray-500 mt-1">{currentStep.description}</p>
-          </div>
-          <button
-            type="button"
-            onClick={skipSurvey}
-            className="text-left text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors sm:text-right"
-          >
-            Saltar ahora
-          </button>
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      <div className="flex-1 px-4 pt-5 pb-28 sm:px-5 sm:pb-10">
+        <div className="max-w-2xl mx-auto space-y-5">
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {STEPS.map((step, index) => {
-            const active = index === stepIndex;
-            const done = index < stepIndex;
-            return (
-              <div
-                key={step.key}
-                className={`rounded-xl border px-3 py-3 text-sm ${
-                  active ? 'border-eltex-blue bg-eltex-blue-light/40' : done ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                    active ? 'bg-eltex-blue text-white' : done ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {done ? <CheckCircle className="w-3.5 h-3.5" /> : index + 1}
-                  </span>
-                  <span className="font-semibold text-gray-700">{step.title}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {errors.finalRender && (
-          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            {errors.finalRender}
-          </div>
-        )}
-
-        {currentStep.key === 'housing' && (
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field
-                label="Referencia Catastral de la Vivienda"
-                value={data.housing.cadastralReference}
-                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, cadastralReference: value } }))}
-                placeholder="Número de referencia catastral"
-                error={errors.housingCadastralReference}
-              />
-              <Field
-                label="Tamaño de la Vivienda (m²)"
-                value={data.housing.habitableAreaM2}
-                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, habitableAreaM2: value } }))}
-                placeholder="120"
-                error={errors.housingHabitableAreaM2}
-                type="number"
-              />
-              <Field
-                label="Número de Plantas"
-                value={data.housing.floorCount}
-                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, floorCount: value } }))}
-                placeholder="2"
-                error={errors.housingFloorCount}
-                type="number"
-              />
-              <Field
-                label="Número de dormitorios"
-                value={data.housing.bedroomCount}
-                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, bedroomCount: value } }))}
-                placeholder="3"
-                error={errors.housingBedroomCount}
-                type="number"
-              />
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Certificado energético</h1>
+              <p className="text-sm text-gray-500 mt-0.5">{currentStep.description}</p>
             </div>
+            <button
+              type="button"
+              onClick={skipSurvey}
+              className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors px-2 py-1 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+              <span className="hidden sm:inline">Saltar</span>
+            </button>
+          </div>
 
-            <SegmentedOptions
-              label="¿Cuál es la altura promedio de la planta?"
-              options={HEIGHT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              value={data.housing.averageFloorHeight}
-              onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, averageFloorHeight: value as EnergyCertificateData['housing']['averageFloorHeight'] } }))}
-              error={errors.housingAverageFloorHeight}
-              columns={3}
-            />
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-800">Nº PUERTAS Exterior</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['north', 'east', 'south', 'west'] as const).map((direction) => (
-                    <Field
-                      key={`door-${direction}`}
-                      label={direction === 'north' ? 'Norte' : direction === 'east' ? 'Este' : direction === 'south' ? 'Sur' : 'Oeste'}
-                      value={data.housing.doorsByOrientation[direction]}
-                      onChange={(value) => updateOrientationValue('doorsByOrientation', direction, value)}
-                      placeholder="0"
-                      type="number"
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-800">Nº VENTANAS Exterior</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['north', 'east', 'south', 'west'] as const).map((direction) => (
-                    <Field
-                      key={`window-${direction}`}
-                      label={direction === 'north' ? 'Norte' : direction === 'east' ? 'Este' : direction === 'south' ? 'Sur' : 'Oeste'}
-                      value={data.housing.windowsByOrientation[direction]}
-                      onChange={(value) => updateOrientationValue('windowsByOrientation', direction, value)}
-                      placeholder="0"
-                      type="number"
-                    />
-                  ))}
-                </div>
-              </div>
+          <div className="relative">
+            <div className="flex items-center justify-between">
+              {STEPS.map((step, index) => {
+                const active = index === stepIndex;
+                const done = index < stepIndex;
+                return (
+                  <div key={step.key} className="flex-1 flex flex-col items-center gap-1.5">
+                    <div className="relative flex items-center justify-center w-full">
+                      {index > 0 && (
+                        <div className={`absolute right-1/2 top-1/2 -translate-y-1/2 h-0.5 w-full ${done || active ? 'bg-eltex-blue' : 'bg-gray-200'}`} />
+                      )}
+                      <div className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all ${
+                        active ? 'bg-eltex-blue text-white ring-4 ring-eltex-blue/20 scale-110' :
+                        done ? 'bg-emerald-500 text-white' :
+                        'bg-gray-100 text-gray-400'
+                      }`}>
+                        {done ? <CheckCircle className="w-4 h-4" /> : index + 1}
+                      </div>
+                    </div>
+                    <span className={`text-xs font-semibold text-center leading-tight ${active ? 'text-eltex-blue' : done ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {step.title}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            {errors.housingOpenings && <p className="text-sm text-red-500">{errors.housingOpenings}</p>}
+          </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+          {errors.finalRender && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {errors.finalRender}
+            </div>
+          )}
+
+          {currentStep.key === 'housing' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Field
+                    label="Referencia Catastral de la Vivienda"
+                    value={data.housing.cadastralReference}
+                    onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, cadastralReference: value } }))}
+                    placeholder="Número de referencia catastral"
+                    error={errors.housingCadastralReference}
+                  />
+                </div>
+                <Field
+                  label="Tamaño (m²)"
+                  value={data.housing.habitableAreaM2}
+                  onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, habitableAreaM2: value } }))}
+                  placeholder="120"
+                  error={errors.housingHabitableAreaM2}
+                  type="number"
+                />
+                <Field
+                  label="Nº Plantas"
+                  value={data.housing.floorCount}
+                  onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, floorCount: value } }))}
+                  placeholder="2"
+                  error={errors.housingFloorCount}
+                  type="number"
+                />
+                <div className="col-span-2 sm:col-span-1">
+                  <Field
+                    label="Nº Dormitorios"
+                    value={data.housing.bedroomCount}
+                    onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, bedroomCount: value } }))}
+                    placeholder="3"
+                    error={errors.housingBedroomCount}
+                    type="number"
+                  />
+                </div>
+              </div>
+
+              <SegmentedOptions
+                label="Altura promedio de planta"
+                options={HEIGHT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.housing.averageFloorHeight}
+                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, averageFloorHeight: value as EnergyCertificateData['housing']['averageFloorHeight'] } }))}
+                error={errors.housingAverageFloorHeight}
+                columns={3}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">Nº PUERTAS Exterior</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['north', 'east', 'south', 'west'] as const).map((direction) => (
+                      <Field
+                        key={`door-${direction}`}
+                        label={direction === 'north' ? 'Norte' : direction === 'east' ? 'Este' : direction === 'south' ? 'Sur' : 'Oeste'}
+                        value={data.housing.doorsByOrientation[direction]}
+                        onChange={(value) => updateOrientationValue('doorsByOrientation', direction, value)}
+                        placeholder="0"
+                        type="number"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">Nº VENTANAS Exterior</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['north', 'east', 'south', 'west'] as const).map((direction) => (
+                      <Field
+                        key={`window-${direction}`}
+                        label={direction === 'north' ? 'Norte' : direction === 'east' ? 'Este' : direction === 'south' ? 'Sur' : 'Oeste'}
+                        value={data.housing.windowsByOrientation[direction]}
+                        onChange={(value) => updateOrientationValue('windowsByOrientation', direction, value)}
+                        placeholder="0"
+                        type="number"
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {errors.housingOpenings && <p className="text-sm text-red-500">{errors.housingOpenings}</p>}
+
               <SegmentedOptions
                 label="Material de los marcos de las ventanas"
                 options={FRAME_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -488,6 +501,7 @@ export function EnergyCertificateSection({
                 error={errors.housingWindowFrameMaterial}
                 columns={3}
               />
+
               <Field
                 label="Material de las puertas"
                 value={data.housing.doorMaterial}
@@ -495,240 +509,242 @@ export function EnergyCertificateSection({
                 placeholder="Madera"
                 error={errors.housingDoorMaterial}
               />
-            </div>
 
-            <SegmentedOptions
-              label="Tipo de vidrio de las ventanas"
-              options={GLASS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              value={data.housing.windowGlassType}
-              onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, windowGlassType: value as EnergyCertificateData['housing']['windowGlassType'] } }))}
-              error={errors.housingWindowGlassType}
-            />
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <YesNoField
-                label="¿Las ventanas tienen persiana?"
-                value={data.housing.hasShutters}
-                onChange={(value) => mutate((prev) => ({
-                  ...prev,
-                  housing: {
-                    ...prev.housing,
-                    hasShutters: value,
-                    shutterWindowCount: value ? prev.housing.shutterWindowCount : '0',
-                  },
-                }))}
-                error={errors.housingHasShutters}
-              />
-              <Field
-                label="Número de ventanas con persianas"
-                value={data.housing.shutterWindowCount}
-                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, shutterWindowCount: value } }))}
-                placeholder="0"
-                error={errors.housingShutterWindowCount}
-                type="number"
-              />
-            </div>
-          </div>
-        )}
-
-        {currentStep.key === 'thermal' && (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-800">Tipo de instalación térmica</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {THERMAL_INSTALLATION_OPTIONS.map((option) => {
-                  const active = data.thermal.thermalInstallationType === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, thermalInstallationType: option.value as EnergyCertificateData['thermal']['thermalInstallationType'] } }))}
-                      className={`rounded-2xl border-2 overflow-hidden transition-all text-left ${
-                        active ? 'border-eltex-blue shadow-md' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="aspect-[4/5] bg-gray-50">
-                        <img src={option.image} alt={option.label} className="w-full h-full object-cover" />
-                      </div>
-                      <div className={`px-3 py-3 text-sm font-semibold ${active ? 'bg-eltex-blue text-white' : 'bg-white text-gray-700'}`}>
-                        {option.label}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              {errors.thermalInstallationType && <p className="text-sm text-red-500">{errors.thermalInstallationType}</p>}
-            </div>
-
-            <SegmentedOptions
-              label="Tipo de combustión del equipo"
-              options={FUEL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              value={data.thermal.boilerFuelType}
-              onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, boilerFuelType: value as EnergyCertificateData['thermal']['boilerFuelType'] } }))}
-              error={errors.thermalBoilerFuelType}
-            />
-
-            <Field
-              label="Detalles del equipo (Marca y Año de instalación)"
-              value={data.thermal.equipmentDetails}
-              onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, equipmentDetails: value } }))}
-              placeholder="Marca y año de la instalación"
-              error={errors.thermalEquipmentDetails}
-            />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <YesNoField
-                label="¿Tienes Aire Acondicionado?"
-                value={data.thermal.hasAirConditioning}
-                onChange={(value) => mutate((prev) => ({
-                  ...prev,
-                  thermal: {
-                    ...prev.thermal,
-                    hasAirConditioning: value,
-                    airConditioningType: value ? prev.thermal.airConditioningType : null,
-                    airConditioningDetails: value ? prev.thermal.airConditioningDetails : '',
-                  },
-                }))}
-                error={errors.thermalHasAirConditioning}
-              />
-              <Field
-                label="Detalles del aire (marca y año)"
-                value={data.thermal.airConditioningDetails}
-                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningDetails: value } }))}
-                placeholder="Marca y año"
-                error={errors.thermalAirConditioningDetails}
-              />
-            </div>
-
-            <SegmentedOptions
-              label="¿Tipo de Bomba?"
-              options={AIR_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              value={data.thermal.airConditioningType}
-              onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningType: value as EnergyCertificateData['thermal']['airConditioningType'] } }))}
-              error={errors.thermalAirConditioningType}
-            />
-
-            <div className="grid gap-4 md:grid-cols-2">
               <SegmentedOptions
-                label="Tipo de Calefacción o Radiadores"
-                options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={data.thermal.heatingEmitterType}
-                onChange={(value) => mutate((prev) => ({
-                  ...prev,
-                  thermal: {
-                    ...prev.thermal,
-                    heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
-                    radiatorMaterial: value === 'suelo-radiante' ? 'no-aplica' : prev.thermal.radiatorMaterial,
-                  },
-                }))}
-                error={errors.thermalHeatingEmitterType}
+                label="Tipo de vidrio de las ventanas"
+                options={GLASS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.housing.windowGlassType}
+                onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, windowGlassType: value as EnergyCertificateData['housing']['windowGlassType'] } }))}
+                error={errors.housingWindowGlassType}
               />
-              <SegmentedOptions
-                label="Material Radiadores"
-                options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={data.thermal.heatingEmitterType === 'suelo-radiante' ? 'no-aplica' : data.thermal.radiatorMaterial}
-                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
-                error={errors.thermalRadiatorMaterial}
-              />
-            </div>
-          </div>
-        )}
 
-        {currentStep.key === 'additional' && (
-          <div className="space-y-6">
-            <SegmentedOptions
-              label="¿Qué producto/s se está vendiendo?"
-              options={SOLD_PRODUCT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              value={data.additional.soldProduct}
-              onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, soldProduct: value as EnergyCertificateData['additional']['soldProduct'] } }))}
-              error={errors.additionalSoldProduct}
-              columns={3}
-            />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <YesNoField
-                label="¿Eres Cliente de Eltex?"
-                value={data.additional.isExistingCustomer}
-                onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, isExistingCustomer: value } }))}
-                error={errors.additionalIsExistingCustomer}
-              />
-              <YesNoField
-                label="¿Cuenta con placas solares?"
-                value={data.additional.hasSolarPanels}
-                onChange={(value) => mutate((prev) => ({
-                  ...prev,
-                  additional: {
-                    ...prev.additional,
-                    hasSolarPanels: value,
-                    solarPanelDetails: value ? prev.additional.solarPanelDetails : '',
-                  },
-                }))}
-                error={errors.additionalHasSolarPanels}
-              />
-            </div>
-
-            <TextAreaField
-              label="Detalles de la Instalación Fotovoltaica (Número de placas, Potencia y Fecha de instalación)"
-              value={data.additional.solarPanelDetails}
-              onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, solarPanelDetails: value } }))}
-              placeholder="Número de placas, potencia y fecha de instalación"
-              error={errors.additionalSolarPanelDetails}
-            />
-          </div>
-        )}
-
-        {currentStep.key === 'final' && (
-          <div className="space-y-5">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 text-eltex-blue shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Resumen final del certificado energético</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Esta vista es solo una confirmación para el cliente. El documento se guardará en el expediente y será visible en el dashboard como PDF.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              {renderingPreview ? (
-                <div className="flex items-center justify-center gap-3 py-20 text-sm text-gray-500">
-                  <Loader2 className="w-5 h-5 animate-spin text-eltex-blue" />
-                  Generando vista previa del certificado...
-                </div>
-              ) : previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt="Vista previa del certificado energético"
-                  className="w-full rounded-xl border border-gray-100 shadow-sm"
+              <div className="grid grid-cols-2 gap-3">
+                <YesNoField
+                  label="¿Ventanas con persiana?"
+                  value={data.housing.hasShutters}
+                  onChange={(value) => mutate((prev) => ({
+                    ...prev,
+                    housing: {
+                      ...prev.housing,
+                      hasShutters: value,
+                      shutterWindowCount: value ? prev.housing.shutterWindowCount : '0',
+                    },
+                  }))}
+                  error={errors.housingHasShutters}
                 />
-              ) : (
-                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  No se pudo generar la vista previa del certificado.
-                </div>
-              )}
+                <Field
+                  label="Nº ventanas con persianas"
+                  value={data.housing.shutterWindowCount}
+                  onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, shutterWindowCount: value } }))}
+                  placeholder="0"
+                  error={errors.housingShutterWindowCount}
+                  type="number"
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+          {currentStep.key === 'thermal' && (
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-800">Tipo de instalación térmica</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {THERMAL_INSTALLATION_OPTIONS.map((option) => {
+                    const active = data.thermal.thermalInstallationType === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, thermalInstallationType: option.value as EnergyCertificateData['thermal']['thermalInstallationType'] } }))}
+                        className={`rounded-2xl border-2 overflow-hidden transition-all active:scale-[0.97] text-left ${
+                          active ? 'border-eltex-blue shadow-md shadow-eltex-blue/20' : 'border-gray-200'
+                        }`}
+                      >
+                        <div className="aspect-[4/3] bg-gray-50">
+                          <img src={option.image} alt={option.label} className="w-full h-full object-cover" />
+                        </div>
+                        <div className={`px-2.5 py-2.5 text-xs font-semibold leading-tight ${active ? 'bg-eltex-blue text-white' : 'bg-white text-gray-700'}`}>
+                          {option.label}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.thermalInstallationType && <p className="text-sm text-red-500">{errors.thermalInstallationType}</p>}
+              </div>
+
+              <SegmentedOptions
+                label="Tipo de combustión del equipo"
+                options={FUEL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.thermal.boilerFuelType}
+                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, boilerFuelType: value as EnergyCertificateData['thermal']['boilerFuelType'] } }))}
+                error={errors.thermalBoilerFuelType}
+              />
+
+              <Field
+                label="Detalles del equipo (Marca y Año de instalación)"
+                value={data.thermal.equipmentDetails}
+                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, equipmentDetails: value } }))}
+                placeholder="Marca y año de la instalación"
+                error={errors.thermalEquipmentDetails}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <YesNoField
+                  label="¿Aire Acondicionado?"
+                  value={data.thermal.hasAirConditioning}
+                  onChange={(value) => mutate((prev) => ({
+                    ...prev,
+                    thermal: {
+                      ...prev.thermal,
+                      hasAirConditioning: value,
+                      airConditioningType: value ? prev.thermal.airConditioningType : null,
+                      airConditioningDetails: value ? prev.thermal.airConditioningDetails : '',
+                    },
+                  }))}
+                  error={errors.thermalHasAirConditioning}
+                />
+                <Field
+                  label="Detalles (marca y año)"
+                  value={data.thermal.airConditioningDetails}
+                  onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningDetails: value } }))}
+                  placeholder="Marca y año"
+                  error={errors.thermalAirConditioningDetails}
+                />
+              </div>
+
+              <SegmentedOptions
+                label="¿Tipo de Bomba?"
+                options={AIR_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.thermal.airConditioningType}
+                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningType: value as EnergyCertificateData['thermal']['airConditioningType'] } }))}
+                error={errors.thermalAirConditioningType}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <SegmentedOptions
+                  label="Tipo de Calefacción"
+                  options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  value={data.thermal.heatingEmitterType}
+                  onChange={(value) => mutate((prev) => ({
+                    ...prev,
+                    thermal: {
+                      ...prev.thermal,
+                      heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
+                      radiatorMaterial: value === 'suelo-radiante' ? 'no-aplica' : prev.thermal.radiatorMaterial,
+                    },
+                  }))}
+                  error={errors.thermalHeatingEmitterType}
+                />
+                <SegmentedOptions
+                  label="Material Radiadores"
+                  options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  value={data.thermal.heatingEmitterType === 'suelo-radiante' ? 'no-aplica' : data.thermal.radiatorMaterial}
+                  onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
+                  error={errors.thermalRadiatorMaterial}
+                />
+              </div>
+            </div>
+          )}
+
+          {currentStep.key === 'additional' && (
+            <div className="space-y-5">
+              <SegmentedOptions
+                label="¿Qué producto/s se está vendiendo?"
+                options={SOLD_PRODUCT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.additional.soldProduct}
+                onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, soldProduct: value as EnergyCertificateData['additional']['soldProduct'] } }))}
+                error={errors.additionalSoldProduct}
+                columns={2}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <YesNoField
+                  label="¿Cliente de Eltex?"
+                  value={data.additional.isExistingCustomer}
+                  onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, isExistingCustomer: value } }))}
+                  error={errors.additionalIsExistingCustomer}
+                />
+                <YesNoField
+                  label="¿Placas solares?"
+                  value={data.additional.hasSolarPanels}
+                  onChange={(value) => mutate((prev) => ({
+                    ...prev,
+                    additional: {
+                      ...prev.additional,
+                      hasSolarPanels: value,
+                      solarPanelDetails: value ? prev.additional.solarPanelDetails : '',
+                    },
+                  }))}
+                  error={errors.additionalHasSolarPanels}
+                />
+              </div>
+
+              <TextAreaField
+                label="Detalles de la Instalación Fotovoltaica"
+                value={data.additional.solarPanelDetails}
+                onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, solarPanelDetails: value } }))}
+                placeholder="Número de placas, potencia y fecha de instalación"
+                error={errors.additionalSolarPanelDetails}
+              />
+            </div>
+          )}
+
+          {currentStep.key === 'final' && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-eltex-blue shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Resumen final del certificado energético</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Esta vista es solo una confirmación para el cliente. El documento se guardará en el expediente y será visible en el dashboard como PDF.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                {renderingPreview ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-gray-500">
+                    <Loader2 className="w-7 h-7 animate-spin text-eltex-blue" />
+                    Generando vista previa...
+                  </div>
+                ) : previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Vista previa del certificado energético"
+                    className="w-full rounded-xl border border-gray-100 shadow-sm"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    No se pudo generar la vista previa del certificado.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 px-4 py-3 safe-area-bottom sm:static sm:border-0 sm:bg-transparent sm:px-5 sm:py-4">
+        <div className="max-w-2xl mx-auto flex gap-3">
           <button
             type="button"
             onClick={goBack}
-            className="btn-secondary inline-flex w-full items-center justify-center gap-2 px-5 sm:w-auto"
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]"
           >
             <ArrowLeft className="w-4 h-4" />
-            {stepIndex === 0 ? 'Volver' : 'Anterior'}
+            <span className="hidden sm:inline">{stepIndex === 0 ? 'Volver' : 'Anterior'}</span>
           </button>
 
-          <div className="flex w-full items-center gap-3 sm:w-auto">
+          <div className="flex-1">
             {currentStep.key !== 'final' ? (
               <button
                 type="button"
                 onClick={goNext}
-                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 sm:w-auto"
+                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 py-3.5"
               >
                 Siguiente
                 <ArrowRight className="w-4 h-4" />
@@ -738,7 +754,7 @@ export function EnergyCertificateSection({
                 type="button"
                 onClick={() => void completeSurvey()}
                 disabled={completing || renderingPreview}
-                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                 Confirmar certificado

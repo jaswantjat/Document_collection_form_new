@@ -153,6 +153,11 @@
   animation: fadeInUp 0.4s ease-out forwards;
 }
 
+/* Safe area for iOS bottom bar */
+.safe-area-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
 /* Print styles */
 @media print {
   .no-print {
