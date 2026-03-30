@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react';
 import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
@@ -67,20 +67,31 @@ function createInitialDocumentProcessing(formData: FormData) {
   }, {} as Record<DocumentSlotKey, DocumentProcessingState>);
 }
 
-function normalizeElectricityPages(saved: any): DocSlot[] {
+type LegacyElectricityPage = Partial<DocSlot> | null | undefined;
+type LegacyElectricityBillData = Partial<FormData['electricityBill']> & {
+  front?: LegacyElectricityPage;
+  back?: LegacyElectricityPage;
+  pages?: LegacyElectricityPage[];
+};
+
+function normalizeElectricityPage(page: LegacyElectricityPage): DocSlot {
+  return {
+    photo: page?.photo ?? null,
+    extraction: page?.extraction ?? null,
+  };
+}
+
+function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): DocSlot[] {
   // Handle old front/back format → migrate to pages
   if (saved?.front || saved?.back) {
     const pages: DocSlot[] = [];
-    if (saved.front?.photo) pages.push({ photo: saved.front.photo, extraction: saved.front.extraction ?? null });
-    if (saved.back?.photo) pages.push({ photo: saved.back.photo, extraction: saved.back.extraction ?? null });
+    if (saved.front?.photo) pages.push(normalizeElectricityPage(saved.front));
+    if (saved.back?.photo) pages.push(normalizeElectricityPage(saved.back));
     return pages;
   }
   // New pages format
   if (Array.isArray(saved?.pages)) {
-    return saved.pages.map((p: any) => ({
-      photo: p?.photo ?? null,
-      extraction: p?.extraction ?? null,
-    }));
+    return saved.pages.map((page) => normalizeElectricityPage(page));
   }
   return [];
 }
@@ -216,7 +227,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
   };
 }
 
-export function getFormItems(_productType: ProductType): FormItem[] {
+export function getFormItems(): FormItem[] {
   const items: FormItem[] = [
     {
       id: 'dniFront',
@@ -268,18 +279,21 @@ export const useFormState = (
   const [errors, setErrors] = useState<FormErrors>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    const normalized = normalizeFormData(savedFormData);
+  const syncSavedFormData = useEffectEvent((nextSavedFormData?: FormData | null) => {
+    const normalized = normalizeFormData(nextSavedFormData);
     setFormData(normalized);
     setDocumentProcessing(createInitialDocumentProcessing(normalized));
-    // Restore accepted state for existing pages
     setElectricityProcessing(
-      normalized.electricityBill.pages.map((p) =>
-        p.photo
+      normalized.electricityBill.pages.map((page) =>
+        page.photo
           ? { status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null }
           : emptyProcessingState()
       )
     );
+  });
+
+  useEffect(() => {
+    syncSavedFormData(savedFormData);
   }, [projectCode, savedFormData]);
 
   // Auto-save with debounce
@@ -511,13 +525,13 @@ export const useFormState = (
   }, [formData.location, formData.representation]);
 
   const getProgress = useCallback(() => {
-    const items = getFormItems(productType);
+    const items = getFormItems();
     const completed = items.filter(item => item.isComplete(formData, productType)).length;
     return { completed, total: items.length, percent: Math.round((completed / items.length) * 100) };
   }, [formData, productType]);
 
   const canSubmit = useCallback((): boolean => {
-    const items = getFormItems(productType);
+    const items = getFormItems();
     return items.filter(i => i.required).every(i => i.isComplete(formData, productType));
   }, [formData, productType]);
 

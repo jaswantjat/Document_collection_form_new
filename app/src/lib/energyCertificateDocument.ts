@@ -1,4 +1,4 @@
-import type { FormData, RenderedDocumentAsset } from '@/types';
+import type { AIExtraction, FormData, ProjectData, RenderedDocumentAsset } from '@/types';
 
 export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-03-30.1';
 
@@ -9,8 +9,31 @@ const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
 
 type Box = readonly [number, number, number, number];
 
-function getSourceFormData(source: any): FormData {
-  return (source?.formData ?? source ?? {}) as FormData;
+type EnergyCertificateSourceProject = Partial<Pick<ProjectData, 'customerName' | 'phone' | 'email' | 'assessor'>>;
+type EnergyCertificateRenderSource =
+  | FormData
+  | (EnergyCertificateSourceProject & {
+      formData?: FormData | null;
+      project?: EnergyCertificateSourceProject | null;
+    });
+
+function isFormData(source: EnergyCertificateRenderSource | null | undefined): source is FormData {
+  return !!source && typeof source === 'object' && 'dni' in source && 'representation' in source;
+}
+
+function getSourceFormData(source: EnergyCertificateRenderSource | null | undefined): FormData {
+  return (isFormData(source) ? source : source?.formData ?? {}) as FormData;
+}
+
+function getSourceProject(source: EnergyCertificateRenderSource | null | undefined): EnergyCertificateSourceProject {
+  if (!source || isFormData(source)) return {};
+  return source.project ?? source;
+}
+
+function getExtractionData(
+  extraction?: { extractedData?: AIExtraction['extractedData'] | null } | null
+): AIExtraction['extractedData'] {
+  return extraction?.extractedData ?? {};
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -169,15 +192,15 @@ function airTypeLabel(value: FormData['energyCertificate']['thermal']['airCondit
   return '';
 }
 
-function snapshotFromSource(source: any) {
+function snapshotFromSource(source: EnergyCertificateRenderSource | null | undefined) {
   const formData = getSourceFormData(source);
-  const dniFront = formData?.dni?.front?.extraction?.extractedData || {};
-  const dniBack = formData?.dni?.back?.extraction?.extractedData || {};
-  const ibi = formData?.ibi?.extraction?.extractedData || {};
+  const dniFront = getExtractionData(formData?.dni?.front?.extraction);
+  const dniBack = getExtractionData(formData?.dni?.back?.extraction);
+  const ibi = getExtractionData(formData?.ibi?.extraction);
   const ebPages = formData?.electricityBill?.pages || [];
-  const ebData = ebPages.map((page: any) => page?.extraction?.extractedData || {});
+  const ebData = ebPages.map((page) => getExtractionData(page?.extraction));
   const eb0 = ebData[0] || {};
-  const project = source?.project || source || {};
+  const project = getSourceProject(source);
 
   return {
     formData,
@@ -240,7 +263,9 @@ const MATRIX_CELLS = {
   doorsWest: [2239, 1908],
 } as const;
 
-export async function renderEnergyCertificateOverlay(source: any): Promise<string> {
+export async function renderEnergyCertificateOverlay(
+  source: EnergyCertificateRenderSource | null | undefined
+): Promise<string> {
   const snapshot = snapshotFromSource(source);
   const energy = snapshot.formData.energyCertificate;
 
@@ -309,7 +334,9 @@ export async function renderEnergyCertificateOverlay(source: any): Promise<strin
   });
 }
 
-export async function createRenderedEnergyCertificateAsset(source: any): Promise<RenderedDocumentAsset> {
+export async function createRenderedEnergyCertificateAsset(
+  source: EnergyCertificateRenderSource | null | undefined
+): Promise<RenderedDocumentAsset> {
   const imageDataUrl = await renderEnergyCertificateOverlay(source);
   return {
     imageDataUrl,

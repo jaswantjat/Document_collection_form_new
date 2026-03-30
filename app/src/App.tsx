@@ -130,23 +130,25 @@ function FormApp() {
   const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
-  const projectFollowUpDocumentFlow = hasExistingRepresentationFlow(project?.formData ?? null);
+  const projectMatchesUrl = !urlCode || project?.code === urlCode;
+  const activeProject = urlCode && projectMatchesUrl ? project : null;
+  const activeProjectToken = urlCode ? projectToken : null;
+  const activeLoadError = urlCode ? loadError : null;
+  const activeLoading = !!urlCode && (loading || (!projectMatchesUrl && !loadError));
+  const projectFollowUpDocumentFlow = hasExistingRepresentationFlow(activeProject?.formData ?? null);
+  const prepareProjectLoad = useEffectEvent(() => {
+    setLoading(true);
+    setLoadError(null);
+  });
 
   // If URL has a code, load it on mount
   useEffect(() => {
-    if (!urlCode) {
-      setProject(null);
-      setProjectToken(null);
-      setLoadError(null);
-      setLoading(false);
-      return;
-    }
+    if (!urlCode) return;
 
     const controller = new AbortController();
     const token = urlToken ?? getStoredToken(urlCode);
 
-    setLoading(true);
-    setLoadError(null);
+    prepareProjectLoad();
 
     fetchProject(urlCode, token, { signal: controller.signal })
       .then((res) => {
@@ -191,6 +193,7 @@ function FormApp() {
   const [currentSection, setCurrentSection] = useState<Section | 'phone'>(
     urlCode ? 'property-docs' : 'phone'
   );
+  const activeSection: Section | 'phone' = urlCode ? currentSection : 'phone';
 
   const syncInitialSection = useEffectEvent((
     nextProject: ProjectData | null,
@@ -202,8 +205,8 @@ function FormApp() {
 
   // Determine initial section when project loads
   useEffect(() => {
-    void syncInitialSection(project, urlCode);
-  }, [project, urlCode]);
+    void syncInitialSection(activeProject, urlCode);
+  }, [activeProject, urlCode]);
 
   const {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
@@ -219,10 +222,10 @@ function FormApp() {
     validatePropertyDocs,
     canSubmit,
   } = useFormState(
-    project?.code ?? null,
-    project?.productType ?? 'solar',
-    project?.formData ?? null,
-    projectToken,
+    activeProject?.code ?? null,
+    activeProject?.productType ?? 'solar',
+    activeProject?.formData ?? null,
+    activeProjectToken,
     { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
@@ -244,7 +247,7 @@ function FormApp() {
   };
 
   const renderSection = () => {
-    if (currentSection === 'phone') {
+    if (activeSection === 'phone') {
       return (
         <PhoneSection
           onPhoneConfirmed={handlePhoneConfirmed}
@@ -253,10 +256,10 @@ function FormApp() {
       );
     }
 
-    if (loading) return <LoadingSection />;
-    if (loadError || !project) return <ErrorSection error={loadError || 'PROJECT_NOT_FOUND'} />;
+    if (activeLoading) return <LoadingSection />;
+    if (activeLoadError || !activeProject) return <ErrorSection error={activeLoadError || 'PROJECT_NOT_FOUND'} />;
 
-    switch (currentSection as Section) {
+    switch (activeSection as Section) {
       case 'property-docs':
         return (
           <PropertyDocsSection
@@ -319,7 +322,7 @@ function FormApp() {
       case 'energy-certificate':
         return (
           <EnergyCertificateSection
-            project={project}
+            project={activeProject}
             formData={formData}
             data={formData.energyCertificate}
             onChange={setEnergyCertificate}
@@ -338,7 +341,7 @@ function FormApp() {
       case 'review': {
         return (
           <ReviewSection
-            project={project}
+            project={activeProject}
             formData={formData}
             source={source}
             canSubmit={canSubmit()}
@@ -346,14 +349,14 @@ function FormApp() {
             followUpMode={followUpDocumentFlow}
             onEdit={(s) => goTo(s as Section)}
             onSuccess={() => goTo('success')}
-            projectToken={projectToken}
+            projectToken={activeProjectToken}
             onBack={() => goTo('energy-certificate')}
           />
         );
       }
 
       case 'success':
-        return <SuccessSection project={project} />;
+        return <SuccessSection project={activeProject} />;
 
       default:
         return <ErrorSection error="UNKNOWN_ERROR" />;

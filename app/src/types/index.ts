@@ -36,8 +36,13 @@ export interface StoredDocumentFile {
   sizeBytes: number;
 }
 
+export type AIExtractionValue =
+  | string
+  | null
+  | undefined;
+
 export interface AIExtraction {
-  extractedData: Record<string, any>;
+  extractedData: Record<string, AIExtractionValue>;
   confidence: number;
   isCorrectDocument: boolean;
   documentTypeDetected: string;
