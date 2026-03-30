@@ -2011,7 +2011,7 @@ if (isProduction) {
 } else {
   // Development: Proxy to Vite dev server
   app.use('/', createProxyMiddleware({
-    target: 'http://localhost:5173',
+    target: 'http://localhost:5000',
     changeOrigin: true,
     ws: true,
     logLevel: 'silent',
@@ -2023,7 +2023,7 @@ app.listen(PORT, () => {
   if (isProduction) {
     console.log('✅ Production mode: serving frontend from dist/');
   } else {
-    console.log('🔧 Development mode: proxying to Vite on port 5173');
+    console.log('🔧 Development mode: proxying to Vite on port 5000');
   }
   const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003'];
   const availableTestProjects = testCodes
