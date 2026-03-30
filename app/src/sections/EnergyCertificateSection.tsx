@@ -621,29 +621,29 @@ export function EnergyCertificateSection({
                 error={errors.thermalAirConditioningType}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <SegmentedOptions
-                  label="Tipo de Calefacción"
-                  options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                  value={data.thermal.heatingEmitterType}
-                  onChange={(value) => mutate((prev) => ({
-                    ...prev,
-                    thermal: {
-                      ...prev.thermal,
-                      heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
-                      radiatorMaterial: value === 'suelo-radiante' ? 'no-aplica' : prev.thermal.radiatorMaterial,
-                    },
-                  }))}
-                  error={errors.thermalHeatingEmitterType}
-                />
-                <SegmentedOptions
-                  label="Material Radiadores"
-                  options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                  value={data.thermal.heatingEmitterType === 'suelo-radiante' ? 'no-aplica' : data.thermal.radiatorMaterial}
-                  onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
-                  error={errors.thermalRadiatorMaterial}
-                />
-              </div>
+              <SegmentedOptions
+                label="Tipo de Calefacción"
+                options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.thermal.heatingEmitterType}
+                onChange={(value) => mutate((prev) => ({
+                  ...prev,
+                  thermal: {
+                    ...prev.thermal,
+                    heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
+                    radiatorMaterial: value === 'suelo-radiante' ? 'no-aplica' : prev.thermal.radiatorMaterial,
+                  },
+                }))}
+                error={errors.thermalHeatingEmitterType}
+                columns={3}
+              />
+              <SegmentedOptions
+                label="Material Radiadores"
+                options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                value={data.thermal.heatingEmitterType === 'suelo-radiante' ? 'no-aplica' : data.thermal.radiatorMaterial}
+                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
+                error={errors.thermalRadiatorMaterial}
+                columns={3}
+              />
             </div>
           )}
 
