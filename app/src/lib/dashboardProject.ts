@@ -48,6 +48,7 @@ export interface DashboardEnergyCertificateSummary {
   label: string;
   completedAt: string | null;
   asset: DashboardAssetItem | null;
+  needsRegeneration: boolean;
 }
 
 export interface DashboardProjectSummary {
@@ -292,6 +293,7 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
       asset: status === 'completed' && rendered
         ? toAssetItem('energy-certificate', 'Certificado energético', rendered)
         : null,
+      needsRegeneration: status === 'completed' && !rendered,
     };
   }
 
@@ -304,6 +306,7 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
       label: 'Completado',
       completedAt: energy.completedAt ?? null,
       asset: rendered ? toAssetItem('energy-certificate', 'Certificado energético', rendered) : null,
+      needsRegeneration: !rendered,
     };
   }
 
@@ -313,6 +316,7 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
       label: 'Saltado por cliente',
       completedAt: null,
       asset: null,
+      needsRegeneration: false,
     };
   }
 
@@ -322,6 +326,7 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
       label: 'Pendiente',
       completedAt: null,
       asset: null,
+      needsRegeneration: false,
     };
   }
 
@@ -330,6 +335,7 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
     label: 'Pendiente',
     completedAt: null,
     asset: null,
+    needsRegeneration: false,
   };
 }
 

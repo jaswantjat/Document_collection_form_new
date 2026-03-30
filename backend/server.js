@@ -353,7 +353,7 @@ function buildDashboardSummary(project) {
   const representation = formData?.representation || {};
   const energyCertificate = getEnergyCertificate(formData);
   const energyCertificateStatus = energyCertificate?.status || (
-    energyCertificate?.renderedDocument?.imageDataUrl
+    (energyCertificate?.renderedDocument?.imageDataUrl && energyCertificate?.completedAt)
       ? 'completed'
       : energyCertificate?.skippedAt
         ? 'skipped'
