@@ -692,18 +692,6 @@ export function EnergyCertificateSection({
 
           {currentStep.key === 'final' && (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-eltex-blue shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Resumen final del certificado energético</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Esta vista es solo una confirmación para el cliente. El documento se guardará en el expediente y será visible en el dashboard como PDF.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               <div className="rounded-2xl border border-gray-200 bg-white p-3">
                 {renderingPreview ? (
                   <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-gray-500">
