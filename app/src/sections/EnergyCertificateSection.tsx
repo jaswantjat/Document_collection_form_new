@@ -560,8 +560,8 @@ export function EnergyCertificateSection({
                           active ? 'border-eltex-blue shadow-md shadow-eltex-blue/20' : 'border-gray-200'
                         }`}
                       >
-                        <div className="aspect-[4/3] bg-gray-50">
-                          <img src={option.image} alt={option.label} className="w-full h-full object-cover" />
+                        <div className="aspect-square bg-gray-50">
+                          <img src={option.image} alt={option.label} className="w-full h-full object-contain p-2" />
                         </div>
                         <div className={`px-2.5 py-2.5 text-xs font-semibold leading-tight ${active ? 'bg-eltex-blue text-white' : 'bg-white text-gray-700'}`}>
                           {option.label}
