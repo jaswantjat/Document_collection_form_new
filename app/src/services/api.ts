@@ -123,6 +123,7 @@ export async function extractDocument(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(90000),
   });
   return res.json();
 }
@@ -143,6 +144,7 @@ export async function extractDocumentBatch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imagesBase64, documentType }),
+    signal: AbortSignal.timeout(90000),
   });
   return res.json();
 }
@@ -166,6 +168,7 @@ export async function extractDniBatch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imagesBase64 }),
+    signal: AbortSignal.timeout(90000),
   });
   return res.json();
 }
