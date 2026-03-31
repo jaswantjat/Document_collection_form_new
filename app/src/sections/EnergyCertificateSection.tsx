@@ -301,6 +301,7 @@ export function EnergyCertificateSection({
       housing: needsCatastral ? { ...data.housing, cadastralReference: ibiCatastral! } : data.housing,
       additional: needsSoldProduct ? { ...data.additional, soldProduct: defaultProduct } : data.additional,
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     formData.ibi.extraction?.manualCorrections?.referenciaCatastral,
     formData.ibi.extraction?.extractedData?.referenciaCatastral,
@@ -690,14 +691,16 @@ export function EnergyCertificateSection({
                 error={errors.thermalHeatingEmitterType}
                 columns={3}
               />
-              <SegmentedOptions
-                label="Material Radiadores"
-                options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={data.thermal.heatingEmitterType === 'suelo-radiante' ? 'no-aplica' : data.thermal.radiatorMaterial}
-                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
-                error={errors.thermalRadiatorMaterial}
-                columns={3}
-              />
+              {data.thermal.heatingEmitterType !== 'suelo-radiante' && (
+                <SegmentedOptions
+                  label="Material Radiadores"
+                  options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  value={data.thermal.radiatorMaterial}
+                  onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
+                  error={errors.thermalRadiatorMaterial}
+                  columns={3}
+                />
+              )}
             </div>
           )}
 

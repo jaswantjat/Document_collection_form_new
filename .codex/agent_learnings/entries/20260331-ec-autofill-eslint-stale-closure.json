@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-03-31T14:30:00Z",
+  "category": "pattern",
+  "issue": "Catastral autofill useEffect intentionally omits 'data' and 'onChange' from dependency array",
+  "text": "EnergyCertificateSection.tsx useEffect for catastral/soldProduct autofill deliberately omits 'data', 'formData.ibi.extraction', and 'onChange' from its dependency array. This is intentional: the effect must only fire when the IBI catastral reference or productType changes, NOT on every data update (which would cause infinite render loops). Added // eslint-disable-next-line react-hooks/exhaustive-deps to suppress the warning and document intent. This is a valid pattern when the read-only fields inside the effect are only needed for guard conditions (needsCatastral/needsSoldProduct), not for computed output.",
+  "pointers": ["app/src/sections/EnergyCertificateSection.tsx:282-312"]
+}
