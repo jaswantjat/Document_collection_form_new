@@ -1,0 +1,12 @@
+{
+  "ts_utc": "2026-03-31T12:00:00Z",
+  "category": "architecture",
+  "text": "The dashboard project detail endpoint (/api/dashboard/project/:code) uses serializeProject (full formData, no summary) while the project list endpoint uses serializeDashboardProject (summary only, no formData). Any client-side function that reads status from project data must handle BOTH shapes: when summary is present trust it; when only formData is present validate the raw fields. The getDashboardEnergyCertificateSummary fallback path was trusting raw formData.energyCertificate.status without field validation — causing green tick for stale/incomplete projects in the detail modal.",
+  "pointers": [
+    "backend/server.js:serializeProject",
+    "backend/server.js:serializeDashboardProject",
+    "backend/server.js:/api/dashboard/project/:code (line 721-727)",
+    "app/src/lib/dashboardProject.ts:getDashboardEnergyCertificateSummary"
+  ],
+  "issue": "Dashboard detail modal showed green EC tick for projects with status='completed' but missing required fields, because the detail API returns raw formData without a pre-validated summary"
+}

@@ -8,6 +8,7 @@ import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
+import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
@@ -69,7 +70,11 @@ function hasExistingRepresentationFlow(formData: FormData | null): boolean {
 function hasEnergyCertificateDecision(formData: FormData | null): boolean {
   if (!formData) return false;
   const status = formData.energyCertificate?.status;
-  return status === 'completed' || status === 'skipped';
+  if (status === 'skipped') return true;
+  // Only treat 'completed' as a real decision if all required fields pass validation.
+  // This prevents routing to 'review' when a stale/invalid 'completed' is in state.
+  if (status === 'completed') return isEnergyCertificateReadyToComplete(formData.energyCertificate);
+  return false;
 }
 
 function getInitialSection(

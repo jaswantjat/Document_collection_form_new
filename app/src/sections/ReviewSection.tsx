@@ -5,6 +5,7 @@ import { submitForm } from '@/services/api';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
+import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
 interface Props {
   project: ProjectData;
@@ -87,7 +88,13 @@ export function ReviewSection({
   const allDone = pendingItems.length === 0;
   const progress = doneItems.length;
   const total = allItems.length;
-  const energyStatus = formData.energyCertificate.status;
+  // Guard: re-validate fields even if status is 'completed' — defence-in-depth
+  // to handle any edge case where a stale/invalid 'completed' is in memory.
+  const rawEnergyStatus = formData.energyCertificate.status;
+  const energyStatus =
+    rawEnergyStatus === 'completed' && !isEnergyCertificateReadyToComplete(formData.energyCertificate)
+      ? ('in-progress' as const)
+      : rawEnergyStatus;
 
   const submit = async () => {
     if (submitting) return;
