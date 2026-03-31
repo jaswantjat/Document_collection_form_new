@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-03-31T09:50:00Z",
+  "category": "architecture",
+  "text": "For multi-step survey forms, add a final completion gate that re-validates ALL steps, not just the current one. Per-step navigation guards prevent most paths, but defense-in-depth at the 'complete' call site is essential. The provision should be a single named function (e.g. isEnergyCertificateReadyToComplete) so the list of required fields has one authoritative location.",
+  "pointers": ["app/src/sections/EnergyCertificateSection.tsx"],
+  "issue": "EC survey could set status='completed' even if user bypassed per-step validation or navigated backward"
+}

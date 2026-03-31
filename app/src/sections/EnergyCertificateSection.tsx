@@ -116,6 +116,14 @@ function validateStep(stepKey: StepKey, data: EnergyCertificateData): Record<str
   return errs;
 }
 
+// Data-collection steps that must all pass before status can become 'completed'.
+// This is the single authoritative "provision" — update here to add/remove required-field rules.
+const DATA_STEPS: StepKey[] = ['housing', 'thermal', 'additional'];
+
+function isEnergyCertificateReadyToComplete(data: EnergyCertificateData): boolean {
+  return DATA_STEPS.every((key) => Object.keys(validateStep(key, data)).length === 0);
+}
+
 function createInProgressState(data: EnergyCertificateData): EnergyCertificateData {
   return {
     ...data,
@@ -388,6 +396,21 @@ export function EnergyCertificateSection({
   };
 
   const completeSurvey = async () => {
+    // Guard: all data steps must pass validation before status can become 'completed'.
+    // This is a defense-in-depth check — per-step validation in goNext() also runs,
+    // but this ensures no code path can bypass the requirement.
+    if (!isEnergyCertificateReadyToComplete(data)) {
+      const firstFailingIndex = DATA_STEPS.findIndex(
+        (key) => Object.keys(validateStep(key, data)).length > 0
+      );
+      if (firstFailingIndex >= 0) {
+        setStepIndex(firstFailingIndex);
+        setErrors(validateStep(DATA_STEPS[firstFailingIndex], data));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
     setErrors((prev) => keepOnlyRenderError(prev));
     setCompleting(true);
     try {
