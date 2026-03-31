@@ -751,16 +751,71 @@ function DocumentTableCell({
   );
 }
 
+function EcPdfTableButtons({
+  projectCode,
+  loadProjectDetail,
+}: {
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+}) {
+  const [loading, setLoading] = useState<'view' | 'download' | null>(null);
+
+  const run = async (mode: 'view' | 'download') => {
+    setLoading(mode);
+    try {
+      const project = await loadProjectDetail(projectCode);
+      const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+      if (mode === 'view') {
+        await viewPDFInNewTab(pdfFactory);
+      } else {
+        const blob = await pdfFactory();
+        downloadBlob(blob, `${projectCode}_certificado-energetico.pdf`);
+      }
+    } catch {
+      alert('No se pudo generar el certificado energético.');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2">
+      <button
+        type="button"
+        disabled={loading !== null}
+        onClick={(e) => { e.stopPropagation(); void run('view'); }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+        title="Ver certificado energético"
+      >
+        {loading === 'view' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+      </button>
+      <button
+        type="button"
+        disabled={loading !== null}
+        onClick={(e) => { e.stopPropagation(); void run('download'); }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+        title="Descargar certificado energético"
+      >
+        {loading === 'download' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
+
 function SignedPdfsTableCell({
   projectCode,
   items,
   loadProjectDetail,
+  energyCertificate,
 }: {
   projectCode: string;
   items: DashboardSignedPdfItem[];
   loadProjectDetail: (projectCode: string) => Promise<any>;
+  energyCertificate?: DashboardEnergyCertificateSummary;
 }) {
-  if (!items.length) {
+  const hasEc = energyCertificate?.status === 'completed';
+
+  if (!items.length && !hasEc) {
     return <span className="text-sm text-gray-300">—</span>;
   }
 
@@ -778,6 +833,12 @@ function SignedPdfsTableCell({
           )}
         </div>
       ))}
+      {hasEc && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-2.5 py-2">
+          <p className="text-[11px] font-semibold text-emerald-800 leading-tight">Certificado energético</p>
+          <EcPdfTableButtons projectCode={projectCode} loadProjectDetail={loadProjectDetail} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1440,7 +1501,7 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <SignedPdfsTableCell projectCode={project.code} items={summary.signedDocuments} loadProjectDetail={loadProjectDetail} />
+        <SignedPdfsTableCell projectCode={project.code} items={summary.signedDocuments} loadProjectDetail={loadProjectDetail} energyCertificate={summary.energyCertificate} />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">

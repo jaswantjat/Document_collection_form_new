@@ -1,0 +1,10 @@
+{
+  "ts_utc": "2026-03-31T13:00:00Z",
+  "category": "architecture",
+  "text": "The Signed PDFs table cell (SignedPdfsTableCell) in the main dashboard table only received summary.signedDocuments and had no awareness of the energy certificate. As a result, even when the EC was completed, no view/download buttons appeared in the table row. Fix: added energyCertificate prop to SignedPdfsTableCell and a new EcPdfTableButtons component that lazily loads the project detail (via loadProjectDetail, same pattern as SignedPdfButtons) and calls buildEnergyCertificatePdfFactory. The empty-state guard was also updated: previously returned '—' when items was empty, but now stays visible if EC is completed.",
+  "pointers": [
+    "app/src/pages/Dashboard.tsx:SignedPdfsTableCell",
+    "app/src/pages/Dashboard.tsx:EcPdfTableButtons"
+  ],
+  "issue": "No EC PDF view/download option in Signed PDFs column of main dashboard table"
+}
