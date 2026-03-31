@@ -1,10 +1,10 @@
 {
-  "ts_utc": "2026-03-31T13:25:00Z",
+  "ts_utc": "2026-03-31T14:15:00Z",
   "category": "bug",
-  "issue": "Catastral auto-fill missed manualCorrections; cadastralReference blocked form navigation when IBI absent",
-  "text": "Two related bugs fixed together. (1) The auto-fill effect in EnergyCertificateSection.tsx read only extractedData.referenciaCatastral, but when a user manually corrects the catastral in the IBI step it goes into manualCorrections.referenciaCatastral. Fix: read manualCorrections first, fall back to extractedData. Also added both paths to the useEffect dependency array. (2) cadastralReference was a validated required field in validateEcStep (frontend) and isEcDataComplete (backend), blocking form navigation and completion when no IBI was uploaded. Fix: removed it from both validation functions so users can proceed without it. The status will naturally be pending until the user chooses to complete the survey using the remaining required fields.",
+  "issue": "Catastral auto-fill: multiple useEffect race condition overwrote autofilled value",
+  "text": "Three related bugs investigated and fixed. (1) The auto-fill effect in EnergyCertificateSection.tsx read only extractedData.referenciaCatastral, but when a user manually corrects the catastral in the IBI step it goes into manualCorrections.referenciaCatastral. Fix: read manualCorrections first, fall back to extractedData. (2) cadastralReference was a validated required field in validateEcStep (frontend) and isEcDataComplete (backend), blocking form navigation and completion when no IBI was uploaded. Fix: removed it from both validation functions. (3) ROOT CAUSE of catastral never persisting (ELT20260024 had IBI catastral extracted but EC cadastralReference='') — TWO separate useEffects both called onChange({ ...data, ... }) on mount using a stale snapshot of 'data' from render 1. Effect 1 (autofill) set cadastralReference; Effect 2 (soldProduct default) spread stale 'data' (where cadastralReference='') and set soldProduct, overwriting the autofill. React batches state from effects in the same flush; the last setEnergyCertificate call wins. Fix: merged both useEffects into ONE combined effect making a single atomic onChange call. Deps include all three: manualCorrections.referenciaCatastral, extractedData.referenciaCatastral, and project.productType.",
   "pointers": [
-    "app/src/sections/EnergyCertificateSection.tsx:285-300",
+    "app/src/sections/EnergyCertificateSection.tsx:285-311",
     "app/src/lib/energyCertificateValidation.ts:14-23",
     "backend/server.js:300-327"
   ]

@@ -284,32 +284,28 @@ export function EnergyCertificateSection({
     const ibiCatastral =
       ibiExtraction?.manualCorrections?.referenciaCatastral ??
       (ibiExtraction?.extractedData?.referenciaCatastral as string | null | undefined);
-    if (ibiCatastral && !data.housing.cadastralReference) {
-      onChange({
-        ...data,
-        status: data.status === 'not-started' ? 'in-progress' : data.status,
-        housing: { ...data.housing, cadastralReference: ibiCatastral },
-      });
-    }
-  }, [
-    formData.ibi.extraction?.manualCorrections?.referenciaCatastral,
-    formData.ibi.extraction?.extractedData?.referenciaCatastral,
-  ]);
 
-  useEffect(() => {
-    if (data.additional.soldProduct) return;
     const defaultProduct =
       project.productType === 'solar' ? 'solo-paneles'
       : project.productType === 'aerothermal' ? 'solo-aerotermia'
       : null;
-    if (defaultProduct) {
-      onChange({
-        ...data,
-        status: data.status === 'not-started' ? 'in-progress' : data.status,
-        additional: { ...data.additional, soldProduct: defaultProduct },
-      });
-    }
-  }, [project.productType]);
+
+    const needsCatastral = !!(ibiCatastral && !data.housing.cadastralReference);
+    const needsSoldProduct = !!(defaultProduct && !data.additional.soldProduct);
+
+    if (!needsCatastral && !needsSoldProduct) return;
+
+    onChange({
+      ...data,
+      status: data.status === 'not-started' ? 'in-progress' : data.status,
+      housing: needsCatastral ? { ...data.housing, cadastralReference: ibiCatastral! } : data.housing,
+      additional: needsSoldProduct ? { ...data.additional, soldProduct: defaultProduct } : data.additional,
+    });
+  }, [
+    formData.ibi.extraction?.manualCorrections?.referenciaCatastral,
+    formData.ibi.extraction?.extractedData?.referenciaCatastral,
+    project.productType,
+  ]);
 
   const mutate = (updater: (prev: EnergyCertificateData) => EnergyCertificateData) => {
     const next = updater(data);
