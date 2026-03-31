@@ -282,16 +282,16 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
         : summary.status === 'skipped'
           ? 'skipped'
           : 'pending';
-    // Guard: even if the stored/API status is 'completed', re-validate field data.
-    // This catches any case where the backend downgrade didn't run (e.g. legacy records
-    // served without going through buildDashboardSummary) or where formData is available
-    // client-side for a stricter second check.
-    const status: 'completed' | 'skipped' | 'pending' =
-      rawStatus === 'completed' && ecData && !isEnergyCertificateReadyToComplete(ecData)
-        ? 'pending'
-        : rawStatus;
 
     const rendered = ecData?.renderedDocument?.imageDataUrl || null;
+
+    // Guard: downgrade 'completed' → 'pending' only when there is NO rendered document
+    // AND field validation also fails. A stored renderedDocument is proof the EC was
+    // valid at the time of completion — trust it and never downgrade those records.
+    const status: 'completed' | 'skipped' | 'pending' =
+      rawStatus === 'completed' && !rendered && ecData && !isEnergyCertificateReadyToComplete(ecData)
+        ? 'pending'
+        : rawStatus;
 
     return {
       status,
@@ -306,16 +306,19 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
 
   const energy = ecData;
 
-  // Fallback path (no project.summary): also validate fields before trusting 'completed'.
-  if (energy?.status === 'completed' && isEnergyCertificateReadyToComplete(energy)) {
+  // Fallback path (no project.summary): trust rendered document as proof of valid completion;
+  // otherwise re-validate fields before trusting 'completed'.
+  if (energy?.status === 'completed') {
     const rendered = energy?.renderedDocument?.imageDataUrl || null;
-    return {
-      status: 'completed',
-      label: 'Completado',
-      completedAt: energy.completedAt ?? null,
-      asset: rendered ? toAssetItem('energy-certificate', 'Certificado energético', rendered) : null,
-      needsRegeneration: !rendered,
-    };
+    if (rendered || isEnergyCertificateReadyToComplete(energy)) {
+      return {
+        status: 'completed',
+        label: 'Completado',
+        completedAt: energy.completedAt ?? null,
+        asset: rendered ? toAssetItem('energy-certificate', 'Certificado energético', rendered) : null,
+        needsRegeneration: !rendered,
+      };
+    }
   }
 
   if (energy?.status === 'skipped') {

@@ -1373,14 +1373,14 @@ function ProjectTableRow({
   return (
     <>
     <tr className="bg-white hover:bg-gray-50 transition-colors">
-      <td className="px-4 py-3 align-top border-b border-gray-100">
+      <td className="px-4 py-3 align-middle border-b border-gray-100">
         <div className="space-y-1 text-sm">
           <p className="font-semibold text-gray-900">{formatDate(summary.lastUpdated)}</p>
           <p className="text-xs text-gray-400">Creado {formatDate(project.createdAt)}</p>
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[220px]">
+      <td className="px-4 py-3 align-middle border-b border-gray-100 min-w-[220px]">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-eltex-blue bg-eltex-blue-light px-2 py-1 rounded-lg">
@@ -1395,14 +1395,14 @@ function ProjectTableRow({
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[170px]">
+      <td className="px-4 py-3 align-middle border-b border-gray-100 min-w-[170px]">
         <div className="space-y-2">
           <ProductBadge type={project.productType} />
           <p className="text-sm font-medium text-gray-800">{locationLabel(summary.location)}</p>
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[260px]">
+      <td className="px-4 py-3 align-middle border-b border-gray-100 min-w-[260px]">
         <p className="text-sm text-gray-800 leading-relaxed">{summary.address || '—'}</p>
       </td>
 
@@ -1956,15 +1956,19 @@ function EnergyCertificatePanel({
   project: any;
   energyCertificate: DashboardEnergyCertificateSummary;
 }) {
-  if (!energyCertificate) return null;
+  const [viewing, setViewing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  if (!energyCertificate || energyCertificate.status === 'pending') return null;
 
   const asset = energyCertificate.asset || null;
+  const isCompleted = energyCertificate.status === 'completed';
 
   return (
     <div className="space-y-3">
       <SectionHeading icon={Sun} label="Certificado energético" />
       <div className={`rounded-xl border p-4 space-y-3 ${
-        energyCertificate.status === 'completed'
+        isCompleted
           ? 'border-emerald-200 bg-emerald-50/70'
           : energyCertificate.status === 'skipped'
             ? 'border-gray-200 bg-gray-50'
@@ -1974,7 +1978,7 @@ function EnergyCertificatePanel({
           <div>
             <p className="text-sm font-bold text-gray-900">Estado</p>
             <p className="text-xs text-gray-500 mt-1">
-              {energyCertificate.status === 'completed'
+              {isCompleted
                 ? 'Documento completado y disponible como PDF'
                 : energyCertificate.status === 'skipped'
                   ? 'El cliente lo omitió'
@@ -1982,58 +1986,65 @@ function EnergyCertificatePanel({
             </p>
           </div>
           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-            energyCertificate.status === 'completed'
+            isCompleted
               ? 'bg-emerald-100 text-emerald-700'
               : energyCertificate.status === 'skipped'
                 ? 'bg-gray-100 text-gray-600'
                 : 'bg-amber-100 text-amber-700'
           }`}>
-            {energyCertificate.status === 'completed' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+            {isCompleted ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
             {energyCertificate.label}
           </span>
         </div>
 
-        {asset ? (
-          <>
-            <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-auto rounded-xl border border-gray-200 bg-white" />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
-                    await viewPDFInNewTab(pdfFactory);
-                  } catch (err) {
-                    console.error('Energy certificate view failed:', err);
-                    alert('No se pudo visualizar el certificado energético.');
-                  }
-                }}
-                className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
-              >
-                <Eye className="w-3 h-3" />
-                Ver PDF
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
-                    const blob = await pdfFactory();
-                    downloadBlob(blob, `${project.code}_certificado-energetico.pdf`);
-                  } catch (err) {
-                    console.error('Energy certificate download failed:', err);
-                    alert('No se pudo descargar el certificado energético.');
-                  }
-                }}
-                className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5"
-              >
-                <Download className="w-3 h-3" />
-                Descargar PDF
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-gray-500">No hay PDF generado todavía.</p>
+        {asset && (
+          <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-auto rounded-xl border border-gray-200 bg-white" />
+        )}
+
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={viewing}
+              onClick={async () => {
+                setViewing(true);
+                try {
+                  const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                  await viewPDFInNewTab(pdfFactory);
+                } catch (err) {
+                  console.error('Energy certificate view failed:', err);
+                  alert('No se pudo visualizar el certificado energético.');
+                } finally {
+                  setViewing(false);
+                }
+              }}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              <Eye className="w-3 h-3" />
+              {viewing ? 'Abriendo...' : 'Ver PDF'}
+            </button>
+            <button
+              type="button"
+              disabled={downloading}
+              onClick={async () => {
+                setDownloading(true);
+                try {
+                  const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                  const blob = await pdfFactory();
+                  downloadBlob(blob, `${project.code}_certificado-energetico.pdf`);
+                } catch (err) {
+                  console.error('Energy certificate download failed:', err);
+                  alert('No se pudo descargar el certificado energético.');
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              <Download className="w-3 h-3" />
+              {downloading ? 'Descargando...' : 'Descargar PDF'}
+            </button>
+          </div>
         )}
       </div>
     </div>
