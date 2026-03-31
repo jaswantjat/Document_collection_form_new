@@ -39,6 +39,7 @@ import {
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
 import { getStoredRenderedDocument, renderSignedDocumentOverlay, SIGNED_DOCUMENT_TEMPLATE_VERSION } from '@/lib/signedDocumentOverlays';
+import { renderEnergyCertificateOverlay } from '@/lib/energyCertificateDocument';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type { StoredDocumentFile } from '@/types';
 import { compressImageForAI, createStoredDocumentFile, fileToBase64, mergeStoredDocumentFiles } from '@/lib/photoValidation';
@@ -239,11 +240,12 @@ async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem)
 }
 
 async function buildEnergyCertificatePdfFactory(project: any) {
-  const asset = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl;
-  if (!asset) {
+  const stored = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl;
+  const imageDataUrl = stored ?? await renderEnergyCertificateOverlay(project?.formData).catch(() => null);
+  if (!imageDataUrl) {
     throw new Error('ENERGY_CERTIFICATE_NOT_READY');
   }
-  return () => generateImagePDF(asset, `${project.code}_certificado-energetico.pdf`);
+  return () => generateImagePDF(imageDataUrl, `${project.code}_certificado-energetico.pdf`);
 }
 
 async function downloadProjectZip(project: any, token: string) {
@@ -1451,11 +1453,11 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <div className="flex flex-col gap-2 min-w-[130px]">
+        <div className="grid grid-cols-2 gap-1.5 min-w-[180px]">
           <button
             type="button"
             onClick={() => setShowDetail(true)}
-            className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
+            className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
           >
             <Eye className="w-3 h-3" />
             Ver expediente
@@ -1464,16 +1466,16 @@ function ProjectTableRow({
             type="button"
             onClick={() => { void handleOpenForm(); }}
             disabled={openingForm}
-            className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center"
+            className="px-2 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center truncate"
           >
-            {openingForm ? 'Abriendo...' : 'Abrir formulario'}
+            {openingForm ? 'Abriendo...' : 'Formulario'}
           </button>
           <button
             type="button"
             onClick={() => setShowUpload(true)}
-            className="px-3 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1.5"
+            className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
           >
-            <Upload className="w-3 h-3" />
+            <Upload className="w-3 h-3 shrink-0" />
             Subir docs
           </button>
           <button
@@ -1485,7 +1487,7 @@ function ProjectTableRow({
               catch { alert('Error al descargar los archivos del expediente.'); }
               finally { setDownloading(false); }
             }}
-            className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center justify-center gap-1.5"
+            className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
             <Download className="w-3 h-3" />
             {downloading ? 'Descargando...' : 'Descargar ZIP'}
@@ -1844,7 +1846,7 @@ export function SignedDocumentsSection({
   const [ecDownloading, setEcDownloading] = useState(false);
 
   const ecAsset = energyCertificate?.asset ?? null;
-  const hasEc = Boolean(ecAsset);
+  const hasEc = energyCertificate?.status === 'completed';
 
   if (!items.length && !hasEc) return null;
 
@@ -1887,7 +1889,7 @@ export function SignedDocumentsSection({
           </div>
         ))}
 
-        {hasEc && ecAsset && (
+        {hasEc && (
           <div className="rounded-xl border p-4 space-y-3 border-emerald-200 bg-emerald-50/70">
             <div className="flex items-start justify-between gap-3">
               <div>

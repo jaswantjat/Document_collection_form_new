@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-03-31T11:20:00Z",
+  "category": "technical-gotcha",
+  "text": "Dashboard table rows appeared very tall with blank space in text-only cells (Project/Customer, Product/Region). Root cause: the Actions column had 4 buttons stacked vertically (flex-col), each ~36px, totalling ~168px minimum row height. Fix: changed Actions column to grid-cols-2 layout so 'Formulario' and 'Subir docs' sit side-by-side, reducing row height roughly by half. 'Ver expediente' and 'Descargar ZIP' span full width (col-span-2).",
+  "pointers": ["app/src/pages/Dashboard.tsx:1458-1499"],
+  "issue": "Blank space / tall rows in dashboard table"
+}
