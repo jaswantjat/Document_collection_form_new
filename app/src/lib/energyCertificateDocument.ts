@@ -1,6 +1,6 @@
 import type { AIExtraction, FormData, ProjectData, RenderedDocumentAsset } from '@/types';
 
-export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-04-01.1';
+export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-04-01.2';
 
 // ─── Canvas constants ─────────────────────────────────────────────────────────
 const W = 2480;   // A4 at 300 DPI
@@ -269,17 +269,6 @@ function drawMatrixSection(
   return rowA + rowB + rowC;
 }
 
-// ─── Signature rendering helper ───────────────────────────────────────────────
-async function drawSignatureImg(
-  ctx: CanvasRenderingContext2D,
-  dataUrl: string | null | undefined,
-  x: number, y: number, w: number, h: number
-) {
-  if (!dataUrl) return;
-  const img = await loadImg(dataUrl);
-  if (img) ctx.drawImage(img, x, y, w, h);
-}
-
 // ─── Build snapshot from source ───────────────────────────────────────────────
 function snapshotFromSource(source: EnergyCertificateRenderSource | null | undefined) {
   const formData = getSourceFormData(source);
@@ -423,26 +412,8 @@ async function buildCertificateCanvas(
     cy += RH;
   }
 
-  // ── Signature row ────────────────────────────────────────────────────────────
-  cy += 60;
-  const SIG_H = 200;
-  const SIG_LABEL = 'Firma del cliente';
-
-  drawRow(ctx, M, cy, SIG_LABEL, '', SIG_H);
-
-  if (energy.customerSignature) {
-    await drawSignatureImg(
-      ctx,
-      energy.customerSignature,
-      M + LC + 20,
-      cy + 10,
-      VC - 40,
-      SIG_H - 20
-    );
-  }
-
   // ── Footer line ───────────────────────────────────────────────────────────────
-  cy += SIG_H + 40;
+  cy += 60;
   ctx.strokeStyle = BORDER;
   ctx.lineWidth = 1;
   ctx.beginPath();
