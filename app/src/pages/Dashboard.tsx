@@ -1339,9 +1339,9 @@ function ProjectTableRow({
   const [openingForm, setOpeningForm] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
-  const documents = summary.documents;
+  const documents = summary?.documents ?? [];
   const byKey = new Map(documents.map((item) => [item.key, item]));
-  const allDocs = [...documents, ...summary.electricityPages];
+  const allDocs = [...documents, ...(summary?.electricityPages ?? [])];
 
   const handleOpenForm = async () => {
     const popup = window.open('', '_blank');
@@ -2085,16 +2085,16 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
 
       return (
         project.customerName?.toLowerCase().includes(query)
-        || summary.customerDisplayName.toLowerCase().includes(query)
+        || (summary?.customerDisplayName ?? '').toLowerCase().includes(query)
         || project.code?.toLowerCase().includes(query)
         || project.phone?.includes(query)
         || project.assessor?.toLowerCase().includes(query)
-        || (summary.address || '').toLowerCase().includes(query)
+        || (summary?.address || '').toLowerCase().includes(query)
       );
     })
     .sort((left, right) => {
-      const leftDate = new Date(left.summary.lastUpdated || 0).getTime();
-      const rightDate = new Date(right.summary.lastUpdated || 0).getTime();
+      const leftDate = new Date(left.summary?.lastUpdated || 0).getTime();
+      const rightDate = new Date(right.summary?.lastUpdated || 0).getTime();
       return rightDate - leftDate;
     }), [deferredSearch, filter, projectsWithSummary]);
 

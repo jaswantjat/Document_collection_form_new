@@ -354,8 +354,13 @@ function buildDashboardSummary(project) {
   const energyCertificate = getEnergyCertificate(formData);
   // Use explicit status field only; do NOT infer 'completed' from imageDataUrl presence
   // (legacy projects without the explicit status field correctly default to 'not-started')
-  const energyCertificateStatus = energyCertificate?.status
+  // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'
+  const rawEcStatus = energyCertificate?.status
     || (energyCertificate?.skippedAt ? 'skipped' : 'not-started');
+  const energyCertificateStatus =
+    rawEcStatus === 'completed' ? 'completed'
+    : rawEcStatus === 'skipped' ? 'skipped'
+    : 'pending';
 
   if (location === 'cataluna') {
     signedDocuments.push(

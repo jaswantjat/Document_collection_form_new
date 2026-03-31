@@ -146,12 +146,9 @@ function getSnapshot(project: any) {
       || dniBack.municipality
       || ibi.municipio
       || '',
-    // Province: electricity bill first, then IBI, then DNI as last resort
+    // Province: electricity bill only (IBI and DNI excluded — matches backend behaviour)
     province:
       eb.provincia
-      || ibi.provincia
-      || dniBack.province
-      || dniBack.provincia
       || '',
     postalCode:
       eb.codigoPostal
@@ -224,7 +221,7 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: Boolean(primaryIbiPage?.preview),
+      present: ibiPages.length > 0,
       dataUrl: primaryIbiPage?.preview || null,
       mimeType: getMimeType(primaryIbiPage?.preview),
       needsManualReview: Boolean(formData?.ibi?.extraction?.needsManualReview),
@@ -283,7 +280,6 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
           ? 'skipped'
           : 'pending';
     const rendered = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl
-      || summary.asset?.dataUrl
       || null;
 
     return {
