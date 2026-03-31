@@ -1224,11 +1224,13 @@ function normalizeIdentityExtraction(item) {
     ? normalized.side
     : null;
 
-  // Address data only appears on the back of a Spanish DNI/NIE — strongest signal
-  if (hasAddressData) {
-    side = 'back';
-  } else if (identityDocumentKind === 'nie-certificate') {
+  // nie-certificate is always single-page → always front, regardless of any extracted fields
+  // (birth city/municipality extracted from the certificate must not trigger the address→back rule)
+  if (identityDocumentKind === 'nie-certificate') {
     side = 'front';
+  } else if (hasAddressData) {
+    // Address data only appears on the back of a Spanish DNI/NIE card — strongest signal
+    side = 'back';
   } else if (explicitBackCue) {
     side = 'back';
   } else if (!side) {
