@@ -16,7 +16,7 @@ Each entry is a JSON file in `entries/`:
 }
 ```
 
-## Index (14 entries)
+## Index (15 entries)
 
 | File | Category | Issue |
 |------|----------|-------|

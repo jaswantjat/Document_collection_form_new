@@ -391,11 +391,16 @@ function buildDashboardSummary(project) {
   // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'
   // ALSO: if stored status is 'completed' but required fields are missing (stale data
   // saved before per-step validation was introduced), downgrade to 'pending'.
+  // GUARD: A stored renderedDocument.imageDataUrl is proof the EC was valid at completion
+  // time — never downgrade those records. Only downgrade when BOTH: no rendered document
+  // AND field validation fails. This mirrors getDashboardEnergyCertificateSummary() in
+  // app/src/lib/dashboardProject.ts to keep the table and detail view consistent.
   const rawEcStatus = energyCertificate?.status
     || (energyCertificate?.skippedAt ? 'skipped' : 'not-started');
+  const hasRenderedDocument = !!energyCertificate?.renderedDocument?.imageDataUrl;
   const energyCertificateStatus =
-    rawEcStatus === 'completed' && isEcDataComplete(energyCertificate) ? 'completed'
-    : rawEcStatus === 'completed' ? 'pending'   // stale — downgrade to pending
+    rawEcStatus === 'completed' && !hasRenderedDocument && !isEcDataComplete(energyCertificate) ? 'pending'
+    : rawEcStatus === 'completed' ? 'completed'
     : rawEcStatus === 'skipped' ? 'skipped'
     : 'pending';
 
