@@ -13,9 +13,12 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
   // (e.g. from getDashboardEnergyCertificateSummary) without throwing on missing sub-objects.
   if (stepKey === 'housing') {
     const h = data.housing ?? ({} as EnergyCertificateData['housing']);
-    if (!h.habitableAreaM2 || !String(h.habitableAreaM2).trim()) errs.housingHabitableAreaM2 = 'Introduce los m² habitables';
-    if (!h.floorCount || !String(h.floorCount).trim()) errs.housingFloorCount = 'Introduce el número de plantas';
-    if (!h.bedroomCount || !String(h.bedroomCount).trim()) errs.housingBedroomCount = 'Introduce el número de dormitorios';
+    const _area = h.habitableAreaM2 !== null && h.habitableAreaM2 !== undefined ? String(h.habitableAreaM2).trim() : '';
+    if (!_area) errs.housingHabitableAreaM2 = 'Introduce los m² habitables';
+    const _floors = h.floorCount !== null && h.floorCount !== undefined ? String(h.floorCount).trim() : '';
+    if (!_floors) errs.housingFloorCount = 'Introduce el número de plantas';
+    const _bedrooms = h.bedroomCount !== null && h.bedroomCount !== undefined ? String(h.bedroomCount).trim() : '';
+    if (!_bedrooms) errs.housingBedroomCount = 'Introduce el número de dormitorios';
     if (!h.averageFloorHeight) errs.housingAverageFloorHeight = 'Selecciona la altura promedio de planta';
     if (!h.windowFrameMaterial) errs.housingWindowFrameMaterial = 'Selecciona el material de los marcos';
     if (!h.windowGlassType) errs.housingWindowGlassType = 'Selecciona el tipo de vidrio';

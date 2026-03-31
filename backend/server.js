@@ -303,10 +303,13 @@ function isEcDataComplete(ec) {
   const t = ec.thermal || {};
   const a = ec.additional || {};
 
-  // Housing required fields
-  if (!h.habitableAreaM2 || !String(h.habitableAreaM2).trim()) return false;
-  if (!h.floorCount || !String(h.floorCount).trim()) return false;
-  if (!h.bedroomCount || !String(h.bedroomCount).trim()) return false;
+  // Housing required fields — convert to string first so numeric 0 is not treated as missing
+  const _area = h.habitableAreaM2 !== null && h.habitableAreaM2 !== undefined ? String(h.habitableAreaM2).trim() : '';
+  if (!_area) return false;
+  const _floors = h.floorCount !== null && h.floorCount !== undefined ? String(h.floorCount).trim() : '';
+  if (!_floors) return false;
+  const _bedrooms = h.bedroomCount !== null && h.bedroomCount !== undefined ? String(h.bedroomCount).trim() : '';
+  if (!_bedrooms) return false;
   if (!h.averageFloorHeight) return false;
   if (!h.windowFrameMaterial) return false;
   if (!h.windowGlassType) return false;
