@@ -1441,30 +1441,30 @@ function ProjectTableRow({
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[220px]">
+      <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-eltex-blue bg-eltex-blue-light px-2 py-1 rounded-lg">
               {project.code}
             </span>
           </div>
-          <p className="font-semibold text-gray-900">{summary.customerDisplayName}</p>
-          <p className="text-xs text-gray-500 flex items-center gap-1">
-            <User className="w-3 h-3" />
+          <p className="font-semibold text-gray-900 truncate">{summary.customerDisplayName}</p>
+          <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
+            <User className="w-3 h-3 shrink-0" />
             {project.assessor || '—'}
           </p>
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[170px]">
+      <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="space-y-2">
           <ProductBadge type={project.productType} />
-          <p className="text-sm font-medium text-gray-800">{locationLabel(summary.location)}</p>
+          <p className="text-sm font-medium text-gray-800 truncate">{locationLabel(summary.location)}</p>
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100 min-w-[260px]">
-        <p className="text-sm text-gray-800 leading-relaxed">{summary.address || '—'}</p>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <p className="text-sm text-gray-800 leading-relaxed line-clamp-3">{summary.address || '—'}</p>
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
@@ -2350,20 +2350,20 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table>
+                  <table className="table-fixed w-[1800px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Last updated</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Project / customer</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Product / region</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Address</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">DNI front</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">DNI back</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">IBI / escritura</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Factura luz</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Signed PDFs</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Status</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Project / customer</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[160px]">Product / region</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[220px]">Address</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">DNI front</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">DNI back</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Signed PDFs</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Status</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
