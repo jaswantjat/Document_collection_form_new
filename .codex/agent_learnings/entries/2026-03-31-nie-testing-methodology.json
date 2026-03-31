@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-03-31T10:00:00Z",
+  "category": "workflow",
+  "text": "When a runtime test requires a physical document that is not available (e.g. NIE green card), use a layered verification approach: (1) unit test the normalization/classification logic with mock inputs covering all branches; (2) do a live API test with a similar available document to confirm the pipeline end-to-end works; (3) confirm the frontend data path handles the specific document kind correctly via code review. This approach provides high confidence without the actual physical document.",
+  "pointers": ["backend/server.js:1177", "app/src/lib/identityDocument.ts"],
+  "issue": "D1.8 - NIE card upload test without physical NIE document"
+}
