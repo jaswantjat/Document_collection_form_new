@@ -7,6 +7,7 @@ import type {
 } from '@/types';
 import { saveProgress } from '@/services/api';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
+import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
 const emptyDocSlot = (): DocSlot => ({ photo: null, extraction: null });
 const DOCUMENT_SLOT_KEYS: DocumentSlotKey[] = ['dniFront', 'dniBack', 'ibi'];
