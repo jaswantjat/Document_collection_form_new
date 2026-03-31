@@ -1,0 +1,10 @@
+{
+  "ts_utc": "2026-03-31T00:00:00Z",
+  "category": "feature-insight",
+  "text": "computeDashboardWarnings in dashboardProject.ts implements name mismatch detection between DNI fullName and electricity bill titular. It uses word-level intersection: splits both names into words >2 chars, normalizes accents (NFD decomposition), and flags mismatch if NO common word exists. Warning key is 'titular-mismatch'. Warnings are rendered in StatusCell as red AlertTriangle badges per warning. This covers H12 in the test plan.",
+  "pointers": [
+    "app/src/lib/dashboardProject.ts:432-457",
+    "app/src/pages/Dashboard.tsx:783-845"
+  ],
+  "issue": "Feature: name mismatch warning between DNI and electricity bill titular"
+}
