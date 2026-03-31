@@ -280,7 +280,10 @@ export function EnergyCertificateSection({
   }, [previewSource, stepIndex]);
 
   useEffect(() => {
-    const ibiCatastral = formData.ibi.extraction?.extractedData?.referenciaCatastral;
+    const ibiExtraction = formData.ibi.extraction;
+    const ibiCatastral =
+      ibiExtraction?.manualCorrections?.referenciaCatastral ??
+      (ibiExtraction?.extractedData?.referenciaCatastral as string | null | undefined);
     if (ibiCatastral && !data.housing.cadastralReference) {
       onChange({
         ...data,
@@ -288,7 +291,10 @@ export function EnergyCertificateSection({
         housing: { ...data.housing, cadastralReference: ibiCatastral },
       });
     }
-  }, [formData.ibi.extraction?.extractedData?.referenciaCatastral]);
+  }, [
+    formData.ibi.extraction?.manualCorrections?.referenciaCatastral,
+    formData.ibi.extraction?.extractedData?.referenciaCatastral,
+  ]);
 
   useEffect(() => {
     if (data.additional.soldProduct) return;

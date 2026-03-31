@@ -304,7 +304,6 @@ function isEcDataComplete(ec) {
   const a = ec.additional || {};
 
   // Housing required fields
-  if (!h.cadastralReference || !h.cadastralReference.trim()) return false;
   if (!h.averageFloorHeight) return false;
   if (!h.windowFrameMaterial) return false;
   if (!h.windowGlassType) return false;

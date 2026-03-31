@@ -45,18 +45,11 @@ describe('validateEcStep — housing', () => {
     expect(errs).toEqual({});
   });
 
-  it('errors when cadastralReference is missing', () => {
+  it('does NOT error when cadastralReference is missing (optional field)', () => {
     const data = validData();
     data.housing.cadastralReference = '';
     const errs = validateEcStep('housing', data);
-    expect(errs).toHaveProperty('housingCadastralReference');
-  });
-
-  it('errors when cadastralReference is only whitespace', () => {
-    const data = validData();
-    data.housing.cadastralReference = '   ';
-    const errs = validateEcStep('housing', data);
-    expect(errs).toHaveProperty('housingCadastralReference');
+    expect(errs).not.toHaveProperty('housingCadastralReference');
   });
 
   it('errors when averageFloorHeight is missing', () => {
@@ -94,10 +87,10 @@ describe('validateEcStep — housing', () => {
     expect(errs).not.toHaveProperty('housingHasShutters');
   });
 
-  it('returns all 5 required-field errors when housing is empty', () => {
+  it('returns all 4 required-field errors when housing is empty', () => {
     const data: EnergyCertificateData = { housing: {} as EnergyCertificateData['housing'], thermal: validThermal(), additional: validAdditional() };
     const errs = validateEcStep('housing', data);
-    expect(Object.keys(errs)).toHaveLength(5);
+    expect(Object.keys(errs)).toHaveLength(4);
   });
 });
 
@@ -235,10 +228,10 @@ describe('isEnergyCertificateReadyToComplete', () => {
     expect(isEnergyCertificateReadyToComplete(validData())).toBe(true);
   });
 
-  it('returns false when cadastralReference is missing', () => {
+  it('returns true when cadastralReference is missing (it is optional)', () => {
     const data = validData();
     data.housing.cadastralReference = '';
-    expect(isEnergyCertificateReadyToComplete(data)).toBe(false);
+    expect(isEnergyCertificateReadyToComplete(data)).toBe(true);
   });
 
   it('returns false when any housing field is missing', () => {
