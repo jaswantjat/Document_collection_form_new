@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-03-31T10:15:00Z",
+  "category": "anti-pattern",
+  "text": "Fixing a status-correctness bug client-side (normalizeFormData) is NOT sufficient when there is a separate backend API code path (buildDashboardSummary) that reads the same field from the database independently. Both paths must apply the same downgrade logic. Always trace ALL code paths that read a field — frontend form normalization and backend API summarization are completely separate consumers of the same database value.",
+  "pointers": [
+    "backend/server.js",
+    "app/src/hooks/useFormState.ts",
+    "app/src/lib/energyCertificateValidation.ts"
+  ],
+  "issue": "Dashboard showed green (completed) for EC even though required fields were empty. Fix in normalizeFormData() protected the form but not the dashboard API endpoint."
+}

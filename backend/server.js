@@ -291,6 +291,40 @@ function getEnergyCertificate(formData) {
   return formData?.energyCertificate || null;
 }
 
+/**
+ * Validates that an energyCertificate object has all required fields filled.
+ * Mirrors the logic in app/src/lib/energyCertificateValidation.ts so the backend
+ * can detect stale 'completed' status (saved before per-step validation was added).
+ * Returns true only if every required field across all three data steps is present.
+ */
+function isEcDataComplete(ec) {
+  if (!ec) return false;
+  const h = ec.housing || {};
+  const t = ec.thermal || {};
+  const a = ec.additional || {};
+
+  // Housing required fields
+  if (!h.averageFloorHeight) return false;
+  if (!h.windowFrameMaterial) return false;
+  if (!h.windowGlassType) return false;
+  if (h.hasShutters === null || h.hasShutters === undefined) return false;
+
+  // Thermal required fields
+  if (!t.thermalInstallationType) return false;
+  if (!t.boilerFuelType) return false;
+  if (t.hasAirConditioning === null || t.hasAirConditioning === undefined) return false;
+  if (t.hasAirConditioning === true && !t.airConditioningType) return false;
+  if (!t.heatingEmitterType) return false;
+  if (t.heatingEmitterType && t.heatingEmitterType !== 'suelo-radiante' && !t.radiatorMaterial) return false;
+
+  // Additional required fields
+  if (!a.soldProduct) return false;
+  if (a.isExistingCustomer === null || a.isExistingCustomer === undefined) return false;
+  if (a.hasSolarPanels === null || a.hasSolarPanels === undefined) return false;
+
+  return true;
+}
+
 function buildDashboardSummary(project) {
   const formData = project?.formData || null;
   const snapshot = getProjectSnapshot(formData);
@@ -355,10 +389,13 @@ function buildDashboardSummary(project) {
   // Use explicit status field only; do NOT infer 'completed' from imageDataUrl presence
   // (legacy projects without the explicit status field correctly default to 'not-started')
   // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'
+  // ALSO: if stored status is 'completed' but required fields are missing (stale data
+  // saved before per-step validation was introduced), downgrade to 'pending'.
   const rawEcStatus = energyCertificate?.status
     || (energyCertificate?.skippedAt ? 'skipped' : 'not-started');
   const energyCertificateStatus =
-    rawEcStatus === 'completed' ? 'completed'
+    rawEcStatus === 'completed' && isEcDataComplete(energyCertificate) ? 'completed'
+    : rawEcStatus === 'completed' ? 'pending'   // stale — downgrade to pending
     : rawEcStatus === 'skipped' ? 'skipped'
     : 'pending';
 
