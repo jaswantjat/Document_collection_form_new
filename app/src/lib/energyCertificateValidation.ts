@@ -9,30 +9,35 @@ export const EC_DATA_STEPS: StepKey[] = ['housing', 'thermal', 'additional'];
 export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): Record<string, string> {
   const errs: Record<string, string> = {};
 
+  // Use safe defaults so this function can be called with raw/partial DB data
+  // (e.g. from getDashboardEnergyCertificateSummary) without throwing on missing sub-objects.
   if (stepKey === 'housing') {
-    if (!data.housing.averageFloorHeight) errs.housingAverageFloorHeight = 'Selecciona la altura promedio de planta';
-    if (!data.housing.windowFrameMaterial) errs.housingWindowFrameMaterial = 'Selecciona el material de los marcos';
-    if (!data.housing.windowGlassType) errs.housingWindowGlassType = 'Selecciona el tipo de vidrio';
-    if (data.housing.hasShutters === null) errs.housingHasShutters = 'Indica si hay ventanas con persiana';
+    const h = data.housing ?? ({} as EnergyCertificateData['housing']);
+    if (!h.averageFloorHeight) errs.housingAverageFloorHeight = 'Selecciona la altura promedio de planta';
+    if (!h.windowFrameMaterial) errs.housingWindowFrameMaterial = 'Selecciona el material de los marcos';
+    if (!h.windowGlassType) errs.housingWindowGlassType = 'Selecciona el tipo de vidrio';
+    if (h.hasShutters === null || h.hasShutters === undefined) errs.housingHasShutters = 'Indica si hay ventanas con persiana';
   }
 
   if (stepKey === 'thermal') {
-    if (!data.thermal.thermalInstallationType) errs.thermalInstallationType = 'Selecciona el tipo de instalación térmica';
-    if (!data.thermal.boilerFuelType) errs.thermalBoilerFuelType = 'Selecciona el tipo de combustión';
-    if (data.thermal.hasAirConditioning === null) errs.thermalHasAirConditioning = 'Indica si hay aire acondicionado';
-    if (data.thermal.hasAirConditioning === true && !data.thermal.airConditioningType) {
+    const t = data.thermal ?? ({} as EnergyCertificateData['thermal']);
+    if (!t.thermalInstallationType) errs.thermalInstallationType = 'Selecciona el tipo de instalación térmica';
+    if (!t.boilerFuelType) errs.thermalBoilerFuelType = 'Selecciona el tipo de combustión';
+    if (t.hasAirConditioning === null || t.hasAirConditioning === undefined) errs.thermalHasAirConditioning = 'Indica si hay aire acondicionado';
+    if (t.hasAirConditioning === true && !t.airConditioningType) {
       errs.thermalAirConditioningType = 'Selecciona el tipo de bomba';
     }
-    if (!data.thermal.heatingEmitterType) errs.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción';
-    if (data.thermal.heatingEmitterType && data.thermal.heatingEmitterType !== 'suelo-radiante' && !data.thermal.radiatorMaterial) {
+    if (!t.heatingEmitterType) errs.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción';
+    if (t.heatingEmitterType && t.heatingEmitterType !== 'suelo-radiante' && !t.radiatorMaterial) {
       errs.thermalRadiatorMaterial = 'Selecciona el material de los radiadores';
     }
   }
 
   if (stepKey === 'additional') {
-    if (!data.additional.soldProduct) errs.additionalSoldProduct = 'Selecciona el producto vendido';
-    if (data.additional.isExistingCustomer === null) errs.additionalIsExistingCustomer = 'Indica si es cliente de Eltex';
-    if (data.additional.hasSolarPanels === null) errs.additionalHasSolarPanels = 'Indica si tiene placas solares';
+    const a = data.additional ?? ({} as EnergyCertificateData['additional']);
+    if (!a.soldProduct) errs.additionalSoldProduct = 'Selecciona el producto vendido';
+    if (a.isExistingCustomer === null || a.isExistingCustomer === undefined) errs.additionalIsExistingCustomer = 'Indica si es cliente de Eltex';
+    if (a.hasSolarPanels === null || a.hasSolarPanels === undefined) errs.additionalHasSolarPanels = 'Indica si tiene placas solares';
   }
 
   return errs;

@@ -4,6 +4,7 @@ import {
   getSignedDocumentDefinitions,
   type SignedDocumentKind,
 } from '@/lib/signedDocumentOverlays';
+import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
 export type DashboardDocumentKey = string;
 
@@ -272,15 +273,25 @@ export function getDashboardSignedPdfItems(project: any): DashboardSignedPdfItem
 
 export function getDashboardEnergyCertificateSummary(project: any): DashboardEnergyCertificateSummary {
   const summary = project?.summary?.energyCertificate;
+  const ecData = project?.formData?.energyCertificate;
+
   if (summary) {
-    const status =
+    const rawStatus =
       summary.status === 'completed'
         ? 'completed'
         : summary.status === 'skipped'
           ? 'skipped'
           : 'pending';
-    const rendered = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl
-      || null;
+    // Guard: even if the stored/API status is 'completed', re-validate field data.
+    // This catches any case where the backend downgrade didn't run (e.g. legacy records
+    // served without going through buildDashboardSummary) or where formData is available
+    // client-side for a stricter second check.
+    const status: 'completed' | 'skipped' | 'pending' =
+      rawStatus === 'completed' && ecData && !isEnergyCertificateReadyToComplete(ecData)
+        ? 'pending'
+        : rawStatus;
+
+    const rendered = ecData?.renderedDocument?.imageDataUrl || null;
 
     return {
       status,
@@ -293,9 +304,10 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
     };
   }
 
-  const energy = project?.formData?.energyCertificate;
+  const energy = ecData;
 
-  if (energy?.status === 'completed') {
+  // Fallback path (no project.summary): also validate fields before trusting 'completed'.
+  if (energy?.status === 'completed' && isEnergyCertificateReadyToComplete(energy)) {
     const rendered = energy?.renderedDocument?.imageDataUrl || null;
     return {
       status: 'completed',
