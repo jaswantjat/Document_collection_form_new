@@ -40,8 +40,27 @@ chore(deps): bump pdf-lib to 1.17.1
 docs(agents): add agent learning for EC downgrade bug
 ```
 
+## Skills Available
+
+All 33 skills live in `.agents/skills/` and survive remixes. See `.agents/skills/INDEX.md` for full directory.
+
+**Always load before any task:**
+- `.agents/skills/ai-coding-workflow/SKILL.md` — PRD/EPIC/QA discipline
+- `.agents/skills/ecc-patterns/SKILL.md` — memory, continuous learning, code review
+
+**For Eltex engineering work (load as needed):**
+- `backend-patterns` — Express routes, middleware, error handling
+- `frontend-patterns` — React components, hooks, state management
+- `api-design` — REST API design, versioning, validation
+- `coding-standards` — TypeScript, naming conventions, linting rules
+- `security-review` — Auth, input sanitization, file upload security
+- `e2e-testing` / `tdd-workflow` — testing patterns
+- `verification-loop` — QA before merges
+- `documentation-lookup` — API/library reference research
+
 ## Research Defaults
 
 1. Check local code and `.codex/agent_learnings/` first
-2. Fetch library docs only for external/unstable facts
-3. Summarize findings with file paths and line references
+2. Check `.agents/skills/` for relevant skill guidance before acting
+3. Fetch library docs only for external/unstable facts
+4. Summarize findings with file paths and line references
