@@ -2,6 +2,28 @@
 
 Production web app for solar/aerothermal installation document workflows in Spain.
 
+---
+
+## SESSION START — DO THIS FIRST
+
+Read `.agents/session/CURRENT_TASK.md`. Check `Status`:
+- **`idle`** → proceed normally
+- **`in-progress`** → interrupted task exists — tell user what it was and ask to continue or start fresh
+- **`paused`** → deliberately paused — ask user to confirm resumption
+
+Full rules in `.agents/session/PROTOCOL.md`.
+
+## WHILE WORKING — WRITE STATE TO DISK
+
+After every significant step, update `.agents/session/CURRENT_TASK.md`:
+- Mark completed steps
+- Record the exact current step (file, line range, what's left)
+- Log files modified and decisions made
+
+**Always update before any destructive operation.**
+
+---
+
 **Stack**: React 19 + TypeScript + Vite · Node.js/Express · JSON flat-file DB · Python/Flask autocropper
 
 ## Core Principles
