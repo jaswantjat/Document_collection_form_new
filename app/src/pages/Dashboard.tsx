@@ -39,7 +39,7 @@ import {
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
 import { getStoredRenderedDocument, renderSignedDocumentOverlay, SIGNED_DOCUMENT_TEMPLATE_VERSION } from '@/lib/signedDocumentOverlays';
-import { renderEnergyCertificateOverlay } from '@/lib/energyCertificateDocument';
+import { renderEnergyCertificateOverlay, ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '@/lib/energyCertificateDocument';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type { StoredDocumentFile } from '@/types';
 import { compressImageForAI, createStoredDocumentFile, fileToBase64, mergeStoredDocumentFiles } from '@/lib/photoValidation';
@@ -240,8 +240,11 @@ async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem)
 }
 
 async function buildEnergyCertificatePdfFactory(project: any) {
-  const stored = project?.formData?.energyCertificate?.renderedDocument?.imageDataUrl;
-  const imageDataUrl = stored ?? await renderEnergyCertificateOverlay(project?.formData).catch(() => null);
+  const storedDoc = project?.formData?.energyCertificate?.renderedDocument;
+  const storedIsValid = storedDoc?.imageDataUrl && storedDoc.templateVersion === ENERGY_CERTIFICATE_TEMPLATE_VERSION;
+  const imageDataUrl = storedIsValid
+    ? storedDoc.imageDataUrl
+    : await renderEnergyCertificateOverlay(project?.formData).catch(() => null);
   if (!imageDataUrl) {
     throw new Error('ENERGY_CERTIFICATE_NOT_READY');
   }
