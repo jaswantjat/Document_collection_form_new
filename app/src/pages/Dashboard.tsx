@@ -1307,7 +1307,7 @@ function ProjectDetailModal({
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
               <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
-              <SignedDocumentsSection project={project} items={summary.signedDocuments} />
+              <SignedDocumentsSection project={project} items={summary.signedDocuments} energyCertificate={summary.energyCertificate} />
               <EnergyCertificatePanel project={project} energyCertificate={summary.energyCertificate} />
               <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
               <DownloadGroupsSection groups={summary.downloadGroups} projectCode={project.code} />
@@ -1834,11 +1834,19 @@ export function FinalSignaturesPanel({
 export function SignedDocumentsSection({
   project,
   items,
+  energyCertificate,
 }: {
   project: any;
   items: DashboardSignedPdfItem[];
+  energyCertificate?: DashboardEnergyCertificateSummary;
 }) {
-  if (!items.length) return null;
+  const [ecViewing, setEcViewing] = useState(false);
+  const [ecDownloading, setEcDownloading] = useState(false);
+
+  const ecAsset = energyCertificate?.asset ?? null;
+  const hasEc = Boolean(ecAsset);
+
+  if (!items.length && !hasEc) return null;
 
   return (
     <div className="space-y-3">
@@ -1878,6 +1886,62 @@ export function SignedDocumentsSection({
             )}
           </div>
         ))}
+
+        {hasEc && ecAsset && (
+          <div className="rounded-xl border p-4 space-y-3 border-emerald-200 bg-emerald-50/70">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-gray-900">Certificado energético</p>
+                <p className="text-xs text-gray-500 mt-1">Generado al completar el cuestionario</p>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                <CheckCircle className="w-3 h-3" />
+                Listo
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={ecViewing}
+                onClick={async () => {
+                  setEcViewing(true);
+                  try {
+                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                    await viewPDFInNewTab(pdfFactory);
+                  } catch {
+                    alert('No se pudo visualizar el certificado energético.');
+                  } finally {
+                    setEcViewing(false);
+                  }
+                }}
+                className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Eye className="w-3 h-3" />
+                {ecViewing ? 'Abriendo...' : 'Ver PDF'}
+              </button>
+              <button
+                type="button"
+                disabled={ecDownloading}
+                onClick={async () => {
+                  setEcDownloading(true);
+                  try {
+                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
+                    const blob = await pdfFactory();
+                    downloadBlob(blob, `${project.code}_certificado-energetico.pdf`);
+                  } catch {
+                    alert('No se pudo descargar el certificado energético.');
+                  } finally {
+                    setEcDownloading(false);
+                  }
+                }}
+                className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Download className="w-3 h-3" />
+                {ecDownloading ? 'Descargando...' : 'Descargar PDF'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
