@@ -16,10 +16,11 @@ Each entry is a JSON file in `entries/`:
 }
 ```
 
-## Index (16 entries)
+## Index (17 entries)
 
 | File | Category | Issue |
 |------|----------|-------|
+| `20260331-ec-renderedDocument-bypass-removed.json` | decision-pattern | EC showed confirmado with empty fields due to renderedDocument bypass — bypass removed |
 | `20260331-ec-catastral-autofill-and-optional.json` | bug | Catastral auto-fill missed manualCorrections; cadastralReference blocked form navigation when IBI absent |
 | `20260331-ec-duplicate-display-and-download-groups-blank-space.json` | anti-pattern | EC appeared in SignedDocumentsSection AND EnergyCertificatePanel; EC in download groups caused blank column |
 | `20260331-ec-pdf-onthefly-render.json` | architecture | EC PDF download missing for projects without stored imageDataUrl |

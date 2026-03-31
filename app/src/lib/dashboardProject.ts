@@ -285,11 +285,11 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
 
     const rendered = ecData?.renderedDocument?.imageDataUrl || null;
 
-    // Guard: downgrade 'completed' → 'pending' only when there is NO rendered document
-    // AND field validation also fails. A stored renderedDocument is proof the EC was
-    // valid at the time of completion — trust it and never downgrade those records.
+    // Guard: downgrade 'completed' → 'pending' whenever field validation fails,
+    // regardless of whether a renderedDocument exists. An empty field means the
+    // EC is incomplete and must show as pending.
     const status: 'completed' | 'skipped' | 'pending' =
-      rawStatus === 'completed' && !rendered && ecData && !isEnergyCertificateReadyToComplete(ecData)
+      rawStatus === 'completed' && ecData && !isEnergyCertificateReadyToComplete(ecData)
         ? 'pending'
         : rawStatus;
 
@@ -306,11 +306,11 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
 
   const energy = ecData;
 
-  // Fallback path (no project.summary): trust rendered document as proof of valid completion;
-  // otherwise re-validate fields before trusting 'completed'.
+  // Fallback path (no project.summary): always re-validate fields before trusting 'completed'.
+  // A renderedDocument alone is not sufficient — any empty required field downgrades to pending.
   if (energy?.status === 'completed') {
     const rendered = energy?.renderedDocument?.imageDataUrl || null;
-    if (rendered || isEnergyCertificateReadyToComplete(energy)) {
+    if (isEnergyCertificateReadyToComplete(energy)) {
       return {
         status: 'completed',
         label: 'Completado',

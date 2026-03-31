@@ -304,6 +304,9 @@ function isEcDataComplete(ec) {
   const a = ec.additional || {};
 
   // Housing required fields
+  if (!h.habitableAreaM2 || !String(h.habitableAreaM2).trim()) return false;
+  if (!h.floorCount || !String(h.floorCount).trim()) return false;
+  if (!h.bedroomCount || !String(h.bedroomCount).trim()) return false;
   if (!h.averageFloorHeight) return false;
   if (!h.windowFrameMaterial) return false;
   if (!h.windowGlassType) return false;
@@ -388,18 +391,14 @@ function buildDashboardSummary(project) {
   const energyCertificate = getEnergyCertificate(formData);
   // Use explicit status field only; do NOT infer 'completed' from imageDataUrl presence
   // (legacy projects without the explicit status field correctly default to 'not-started')
-  // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'
-  // ALSO: if stored status is 'completed' but required fields are missing (stale data
-  // saved before per-step validation was introduced), downgrade to 'pending'.
-  // GUARD: A stored renderedDocument.imageDataUrl is proof the EC was valid at completion
-  // time — never downgrade those records. Only downgrade when BOTH: no rendered document
-  // AND field validation fails. This mirrors getDashboardEnergyCertificateSummary() in
-  // app/src/lib/dashboardProject.ts to keep the table and detail view consistent.
+  // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'.
+  // Downgrade 'completed' → 'pending' whenever field validation fails, regardless of
+  // whether a renderedDocument exists. Any empty required field = incomplete EC.
+  // Mirrors getDashboardEnergyCertificateSummary() in dashboardProject.ts.
   const rawEcStatus = energyCertificate?.status
     || (energyCertificate?.skippedAt ? 'skipped' : 'not-started');
-  const hasRenderedDocument = !!energyCertificate?.renderedDocument?.imageDataUrl;
   const energyCertificateStatus =
-    rawEcStatus === 'completed' && !hasRenderedDocument && !isEcDataComplete(energyCertificate) ? 'pending'
+    rawEcStatus === 'completed' && !isEcDataComplete(energyCertificate) ? 'pending'
     : rawEcStatus === 'completed' ? 'completed'
     : rawEcStatus === 'skipped' ? 'skipped'
     : 'pending';
