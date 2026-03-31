@@ -1,0 +1,11 @@
+model = "o4-mini"
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+
+developer_instructions = """
+Review like an owner of a production solar/aerothermal installation workflow app.
+Prioritise: type safety, EC status correctness, PDF overlay accuracy, file upload security, and missing error handling.
+Lead with concrete findings. Reference specific files and lines.
+Flag any code that could downgrade a completed EC to pending — this is a critical regression class.
+Avoid style-only feedback unless it hides a real bug.
+"""
