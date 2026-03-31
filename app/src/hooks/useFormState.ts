@@ -171,6 +171,43 @@ function mergeDocSlot(base: DocSlot, slot?: Partial<DocSlot> | null): DocSlot {
 export function normalizeFormData(savedFormData?: FormData | null): FormData {
   const normalizedLocation = savedFormData?.location ?? savedFormData?.representation?.location ?? null;
 
+  // Build the normalized energy certificate object.
+  const rawEc = {
+    ...initialFormData.energyCertificate,
+    ...savedFormData?.energyCertificate,
+    housing: {
+      ...initialFormData.energyCertificate.housing,
+      ...savedFormData?.energyCertificate?.housing,
+      doorsByOrientation: {
+        ...initialFormData.energyCertificate.housing.doorsByOrientation,
+        ...savedFormData?.energyCertificate?.housing?.doorsByOrientation,
+      },
+      windowsByOrientation: {
+        ...initialFormData.energyCertificate.housing.windowsByOrientation,
+        ...savedFormData?.energyCertificate?.housing?.windowsByOrientation,
+      },
+    },
+    thermal: {
+      ...initialFormData.energyCertificate.thermal,
+      ...savedFormData?.energyCertificate?.thermal,
+    },
+    additional: {
+      ...initialFormData.energyCertificate.additional,
+      ...savedFormData?.energyCertificate?.additional,
+    },
+  };
+
+  // Downgrade stale 'completed' status: if the saved data claims 'completed' but
+  // the field data no longer passes full validation (e.g. data saved before per-step
+  // validation was introduced), reset to 'in-progress' so the form routes the user
+  // back to the energy certificate survey instead of treating it as done.
+  // This correction is in-memory only; it persists when the user re-completes the
+  // survey and saves.
+  const normalizedEc =
+    rawEc.status === 'completed' && !isEnergyCertificateReadyToComplete(rawEc)
+      ? { ...rawEc, status: 'in-progress' as const }
+      : rawEc;
+
   return {
     ...initialFormData,
     ...savedFormData,
@@ -190,30 +227,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
       originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
     },
-    energyCertificate: {
-      ...initialFormData.energyCertificate,
-      ...savedFormData?.energyCertificate,
-      housing: {
-        ...initialFormData.energyCertificate.housing,
-        ...savedFormData?.energyCertificate?.housing,
-        doorsByOrientation: {
-          ...initialFormData.energyCertificate.housing.doorsByOrientation,
-          ...savedFormData?.energyCertificate?.housing?.doorsByOrientation,
-        },
-        windowsByOrientation: {
-          ...initialFormData.energyCertificate.housing.windowsByOrientation,
-          ...savedFormData?.energyCertificate?.housing?.windowsByOrientation,
-        },
-      },
-      thermal: {
-        ...initialFormData.energyCertificate.thermal,
-        ...savedFormData?.energyCertificate?.thermal,
-      },
-      additional: {
-        ...initialFormData.energyCertificate.additional,
-        ...savedFormData?.energyCertificate?.additional,
-      },
-    },
+    energyCertificate: normalizedEc,
     signatures: {
       ...initialFormData.signatures,
       ...savedFormData?.signatures,
