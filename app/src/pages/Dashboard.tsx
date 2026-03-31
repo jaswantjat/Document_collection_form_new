@@ -2350,20 +2350,20 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="min-w-[1900px] w-full">
+                  <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                        <th className="px-4 py-3 font-semibold">Last updated</th>
-                        <th className="px-4 py-3 font-semibold">Project / customer</th>
-                        <th className="px-4 py-3 font-semibold">Product / region</th>
-                        <th className="px-4 py-3 font-semibold">Address</th>
-                        <th className="px-4 py-3 font-semibold">DNI front</th>
-                        <th className="px-4 py-3 font-semibold">DNI back</th>
-                        <th className="px-4 py-3 font-semibold">IBI / escritura</th>
-                        <th className="px-4 py-3 font-semibold">Factura luz</th>
-                        <th className="px-4 py-3 font-semibold">Signed PDFs</th>
-                        <th className="px-4 py-3 font-semibold">Status</th>
-                        <th className="px-4 py-3 font-semibold">Actions</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Last updated</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Project / customer</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Product / region</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Address</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">DNI front</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">DNI back</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">IBI / escritura</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Factura luz</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Signed PDFs</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Status</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
