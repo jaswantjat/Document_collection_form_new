@@ -429,12 +429,9 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
 
   const photoGroups = getDashboardPhotoGroups(project);
   const finalSignatures = getDashboardFinalSignatureAssets(project);
-  const energyCertificate = getDashboardEnergyCertificateSummary(project);
-  const energyCertificateItems = energyCertificate.asset ? [energyCertificate.asset] : [];
 
   return [
     { key: 'documents', label: 'Documentos', items: [...primaryDocuments, ...ibiItems, ...electricityItems] },
-    { key: 'energy-certificate', label: 'Certificado energético', items: energyCertificateItems },
     { key: 'photos', label: 'Fotos del inmueble', items: photoGroups.flatMap((group) => group.items) },
     { key: 'final-signatures', label: 'Firmas finales', items: finalSignatures },
   ].filter((group) => group.items.length > 0);

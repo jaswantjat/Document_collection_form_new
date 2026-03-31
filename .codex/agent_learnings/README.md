@@ -16,10 +16,11 @@ Each entry is a JSON file in `entries/`:
 }
 ```
 
-## Index (13 entries)
+## Index (14 entries)
 
 | File | Category | Issue |
 |------|----------|-------|
+| `20260331-ec-duplicate-display-and-download-groups-blank-space.json` | anti-pattern | EC appeared in SignedDocumentsSection AND EnergyCertificatePanel; EC in download groups caused blank column |
 | `20260331-ec-pdf-onthefly-render.json` | architecture | EC PDF download missing for projects without stored imageDataUrl |
 | `20260331-ec-stale-completed-status-downgrade.json` | bug | EC status incorrectly downgraded from completed to pending |
 | `20260331-ec-completion-guard.json` | domain | EC completion guard logic — stored imageDataUrl as proof |

@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-03-31T12:00:00Z",
+  "category": "anti-pattern",
+  "text": "Energy certificate was rendered in two places in the detail modal: inside SignedDocumentsSection ('PDFs firmados') AND in its own EnergyCertificatePanel. This caused the EC to appear under the wrong section heading. The on-the-fly render fallback (buildEnergyCertificatePdfFactory) already exists in EnergyCertificatePanel, so the duplicate in SignedDocumentsSection was redundant. Fix: removed EC from SignedDocumentsSection. Separately, getDashboardDownloadGroups included an 'energy-certificate' group that created a visible blank card between the first and other columns in the 3-column DownloadGroupsSection grid. Since EC is already shown in EnergyCertificatePanel, it should never be duplicated in download groups either.",
+  "pointers": [
+    "app/src/pages/Dashboard.tsx:SignedDocumentsSection",
+    "app/src/pages/Dashboard.tsx:EnergyCertificatePanel",
+    "app/src/lib/dashboardProject.ts:getDashboardDownloadGroups"
+  ],
+  "issue": "Energy certificate PDF appearing under 'PDFs firmados' and blank space in download groups section"
+}
