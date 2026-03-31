@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-03-31T00:00:00Z",
+  "category": "technical-gotcha",
+  "text": "HTML table with w-full or min-w-full distributes leftover space proportionally across ALL columns using auto layout, creating visible whitespace gaps inside columns even when w-px is set on <th> elements (td min-w overrides th width). The fix is to remove all width classes from <table> entirely, letting it size to content. The overflow-x-auto wrapper handles scrolling. Setting w-px on <th> is ineffective when <td> cells have min-w constraints.",
+  "pointers": ["app/src/pages/Dashboard.tsx"],
+  "issue": "Empty whitespace gap visible between Project/customer and Product/region columns in dashboard table"
+}
