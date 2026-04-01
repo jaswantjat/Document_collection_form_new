@@ -24,7 +24,7 @@ interface Props {
 type StepKey = 'housing' | 'thermal' | 'additional' | 'final';
 
 const STEPS: Array<{ key: StepKey; title: string; description: string }> = [
-  { key: 'housing', title: 'Vivienda', description: 'Completa solo los datos que tengas del inmueble.' },
+  { key: 'housing', title: 'Vivienda', description: 'La referencia catastral es opcional. Los demás datos son obligatorios.' },
   { key: 'thermal', title: 'Instalación', description: 'Añade la información disponible del equipo y climatización.' },
   { key: 'additional', title: 'Equipamiento', description: 'Producto vendido e instalación fotovoltaica, si aplica.' },
   { key: 'final', title: 'Confirmación', description: 'Revisa el certificado energético antes de guardarlo.' },

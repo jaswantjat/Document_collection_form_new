@@ -50,7 +50,7 @@ if (!initialOpenRouterApiKey) {
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
 }
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite-preview';
 
 // Middleware
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));
@@ -1225,14 +1225,14 @@ Extract:
 8. Assessor / sales rep name (asesor de ventas — person's name only, strip the word "Asesor")
 9. Product type — classify as exactly one of: "solo-paneles", "solo-aerotermia", "paneles-y-aerotermia". Use "solo-paneles" for solar/fotovoltaica only. Use "solo-aerotermia" for aerothermal only. Use "paneles-y-aerotermia" if both appear.
 10. Contract / budget reference number (e.g. SO-26/00283)
-11. Total amount including taxes (importe total IVA incluido)
 
 Important rules:
 - The CUSTOMER is the party under "Datos de clientes" or "Don/Doña ... mayor de edad con NIF ...". Do NOT extract Eltex's own company data.
+- Do NOT extract any price, amount, or cost figures.
 - If this is NOT a sales contract or installation service agreement, set isCorrectDocument: false.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
-{"isCorrectDocument":true,"documentTypeDetected":"Eltex sales contract","isReadable":true,"extractedData":{"fullName":"string or null","nif":"string or null","address":"string or null","postalCode":"string or null","municipality":"string or null","province":"string or null","email":"string or null","assessorName":"string or null","productType":"solo-paneles or solo-aerotermia or paneles-y-aerotermia or null","contractNumber":"string or null","totalAmount":"string or null"},"confidence":0.95,"notes":"string"}`,
+{"isCorrectDocument":true,"documentTypeDetected":"Eltex sales contract","isReadable":true,"extractedData":{"fullName":"string or null","nif":"string or null","address":"string or null","postalCode":"string or null","municipality":"string or null","province":"string or null","email":"string or null","assessorName":"string or null","productType":"solo-paneles or solo-aerotermia or paneles-y-aerotermia or null","contractNumber":"string or null"},"confidence":0.95,"notes":"string"}`,
 
   dniAutoBatch: `You are a document data extractor for Spanish government documents.
 

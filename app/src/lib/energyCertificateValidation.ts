@@ -13,7 +13,7 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
   // (e.g. from getDashboardEnergyCertificateSummary) without throwing on missing sub-objects.
   if (stepKey === 'housing') {
     const h = data.housing ?? ({} as EnergyCertificateData['housing']);
-    if (!h.cadastralReference || !String(h.cadastralReference).trim()) errs.housingCadastralReference = 'Introduce la referencia catastral';
+    // cadastralReference is intentionally optional — all other housing fields are required
     const _area = h.habitableAreaM2 !== null && h.habitableAreaM2 !== undefined ? String(h.habitableAreaM2).trim() : '';
     if (!_area) errs.housingHabitableAreaM2 = 'Introduce los m² habitables';
     const _floors = h.floorCount !== null && h.floorCount !== undefined ? String(h.floorCount).trim() : '';

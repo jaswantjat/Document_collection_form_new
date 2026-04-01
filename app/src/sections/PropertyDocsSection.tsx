@@ -61,7 +61,6 @@ const CONTRACT_FIELDS = [
   { key: 'municipality', label: 'Municipio' },
   { key: 'province', label: 'Provincia' },
   { key: 'email', label: 'Email' },
-  { key: 'totalAmount', label: 'Importe total' },
 ];
 
 const IBI_FIELDS = [

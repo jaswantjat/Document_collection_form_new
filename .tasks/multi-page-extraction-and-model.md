@@ -47,10 +47,10 @@
 - Electricity, IBI, Contract, DNI — all confirmed above ✅
 - No `.slice()` or max-page guard before AI call ✅
 
-### [x] 3. Switch AI model to Gemini 2.0 Flash Lite
+### [x] 3. Switch AI model (updated in subsequent task)
 - **File:** `backend/server.js` line 56
-- **Before:** `'google/gemini-2.0-flash-001'`
-- **After:** `'google/gemini-2.0-flash-lite'`
+- Initially switched: `'google/gemini-2.0-flash-001'` → `'google/gemini-2.0-flash-lite'`
+- Later updated to: `'google/gemini-3.1-flash-lite-preview'` (see ec-required-fields-and-contract-ocr.md)
 - Override still works via `OPENROUTER_MODEL` env var if needed
 
 ### [x] 4. Fix TypeScript type for `extractDocumentBatch`
