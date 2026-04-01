@@ -1204,6 +1204,30 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 Respond ONLY with this exact JSON (no markdown, no extra text).`
 ,
 
+  contract: `You are a document data extractor for Eltex Solar sales contracts.
+
+This is a Spanish photovoltaic / aerothermal installation sales contract or budget (Orden de venta / Contrato de servicios / Presupuesto) from Eltex Solar. The document may have many pages — scan ALL pages for the fields below.
+
+Extract:
+1. Customer full name (nombre y apellidos del CLIENTE — the buyer, not Eltex staff)
+2. Customer NIF/NIE number — ONLY if it is a valid Spanish format (8 digits + letter, or X/Y/Z + 7 digits + letter). If the value is "False", a placeholder, or clearly invalid, return null.
+3. Full installation address (dirección del emplazamiento / domicilio del cliente — street, number, floor, postal code, municipality)
+4. Postal code (5 digits)
+5. Municipality (municipio / localidad)
+6. Province (provincia — e.g. Tarragona, Barcelona, Madrid, Valencia, Sevilla)
+7. Customer email
+8. Assessor / sales rep name (asesor de ventas — person's name only, strip the word "Asesor")
+9. Product type — classify as exactly one of: "solo-paneles", "solo-aerotermia", "paneles-y-aerotermia". Use "solo-paneles" for solar/fotovoltaica only. Use "solo-aerotermia" for aerothermal only. Use "paneles-y-aerotermia" if both appear.
+10. Contract / budget reference number (e.g. SO-26/00283)
+11. Total amount including taxes (importe total IVA incluido)
+
+Important rules:
+- The CUSTOMER is the party under "Datos de clientes" or "Don/Doña ... mayor de edad con NIF ...". Do NOT extract Eltex's own company data.
+- If this is NOT a sales contract or installation service agreement, set isCorrectDocument: false.
+
+Respond ONLY with this exact JSON (no markdown, no extra text):
+{"isCorrectDocument":true,"documentTypeDetected":"Eltex sales contract","isReadable":true,"extractedData":{"fullName":"string or null","nif":"string or null","address":"string or null","postalCode":"string or null","municipality":"string or null","province":"string or null","email":"string or null","assessorName":"string or null","productType":"solo-paneles or solo-aerotermia or paneles-y-aerotermia or null","contractNumber":"string or null","totalAmount":"string or null"},"confidence":0.95,"notes":"string"}`,
+
   dniAutoBatch: `You are a document data extractor for Spanish government documents.
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.

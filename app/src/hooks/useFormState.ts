@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react'
 import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
-  StoredDocumentFile, EnergyCertificateData,
+  StoredDocumentFile, EnergyCertificateData, ContractData,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
 import { saveProgress } from '@/services/api';
@@ -97,10 +97,13 @@ function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): Do
   return [];
 }
 
+const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null });
+
 export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [] },
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
   electricityBill: { pages: [], originalPdfs: [] },
+  contract: emptyContractData(),
   energyCertificate: {
     status: 'not-started',
     housing: {
@@ -226,6 +229,10 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
     electricityBill: {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
       originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
+    },
+    contract: {
+      originalPdfs: savedFormData?.contract?.originalPdfs ?? [],
+      extraction: savedFormData?.contract?.extraction ?? null,
     },
     energyCertificate: normalizedEc,
     signatures: {
@@ -446,6 +453,11 @@ export const useFormState = (
     });
   }, []);
 
+  // Contract
+  const setContract = useCallback((contract: ContractData) => {
+    setFormData(prev => ({ ...prev, contract }));
+  }, []);
+
   // Representation
   const setRepresentation = useCallback((rep: RepresentationData) => {
     setFormData(prev => {
@@ -565,6 +577,7 @@ export const useFormState = (
     mergeDNIOriginalPdfs,
     setIBIDocument,
     addElectricityPages, removeElectricityPage, setElectricityPageProcessing,
+    setContract,
     setLocation,
     setRepresentation,
     setEnergyCertificate,

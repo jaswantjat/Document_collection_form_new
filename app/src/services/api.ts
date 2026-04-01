@@ -106,7 +106,7 @@ export async function submitForm(
 
 export async function extractDocument(
   imageBase64: string | string[],
-  documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto'
+  documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto' | 'contract'
 ): Promise<{
   success: boolean;
   side?: 'front' | 'back';

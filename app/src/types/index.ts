@@ -196,10 +196,16 @@ export interface EnergyCertificateData {
   skippedAt: string | null;
 }
 
+export interface ContractData {
+  originalPdfs: StoredDocumentFile[];
+  extraction: AIExtraction | null;
+}
+
 export interface FormData {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
+  contract?: ContractData;
   location?: LocationRegion;
   representation: RepresentationData;
   energyCertificate: EnergyCertificateData;
