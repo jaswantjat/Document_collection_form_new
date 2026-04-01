@@ -9,6 +9,7 @@ import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { getLocationInfo } from '@/lib/provinceMapping';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
@@ -221,6 +222,7 @@ function FormApp() {
     mergeDNIOriginalPdfs,
     setIBIDocument,
     addElectricityPages, removeElectricityPage,
+    setContract,
     setLocation,
     setRepresentation,
     setEnergyCertificate,
@@ -235,6 +237,16 @@ function FormApp() {
     { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
+
+  // Auto-set location from contract province when no location is selected yet
+  useEffect(() => {
+    const contractProvince = formData.contract?.extraction?.extractedData?.province;
+    if (!contractProvince) return;
+    const currentLocation = formData.location ?? formData.representation?.location ?? null;
+    if (currentLocation) return;
+    const info = getLocationInfo(String(contractProvince));
+    if (info) setLocation(info.id);
+  }, [formData.contract?.extraction]);
 
   const goTo = (section: Section | 'phone') => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -272,6 +284,7 @@ function FormApp() {
             dni={formData.dni}
             ibi={formData.ibi}
             electricityBill={formData.electricityBill}
+            contract={formData.contract}
             followUpMode={followUpDocumentFlow}
             errors={errors}
             documentProcessing={documentProcessing}
@@ -285,6 +298,7 @@ function FormApp() {
             onAddElectricityPages={addElectricityPages}
             onRemoveElectricityPage={removeElectricityPage}
             onDocumentProcessingChange={setDocumentProcessingState}
+            onContractChange={setContract}
             onBack={() => goTo('phone')}
             onContinue={() => {
               if (!validatePropertyDocs()) return;

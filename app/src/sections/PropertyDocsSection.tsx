@@ -5,6 +5,7 @@ import type {
   IBIData,
   ElectricityBillData,
   DNIData,
+  ContractData,
   UploadedPhoto,
   StoredDocumentFile,
   AIExtraction,
@@ -21,6 +22,7 @@ interface Props {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
+  contract: ContractData;
   followUpMode?: boolean;
   errors: FormErrors;
   documentProcessing: Record<DocumentSlotKey, DocumentProcessingState>;
@@ -35,6 +37,7 @@ interface Props {
   onAddElectricityPages: (photos: UploadedPhoto[], extraction: AIExtraction, originalPdfs: StoredDocumentFile[]) => void;
   onRemoveElectricityPage: (index: number) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
+  onContractChange: (contract: ContractData) => void;
   onBack: () => void;
   onContinue: () => void;
 }
@@ -48,6 +51,18 @@ interface DocCardProps {
   onDocumentChange: (pages: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
   onProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
 }
+
+const CONTRACT_FIELDS = [
+  { key: 'contractNumber', label: 'Nº Contrato' },
+  { key: 'fullName', label: 'Cliente' },
+  { key: 'nif', label: 'NIF/DNI' },
+  { key: 'address', label: 'Dirección' },
+  { key: 'postalCode', label: 'C. Postal' },
+  { key: 'municipality', label: 'Municipio' },
+  { key: 'province', label: 'Provincia' },
+  { key: 'email', label: 'Email' },
+  { key: 'totalAmount', label: 'Importe total' },
+];
 
 const IBI_FIELDS = [
   { key: 'referenciaCatastral', label: 'Ref. Catastral' },
@@ -145,6 +160,196 @@ function computeValidationWarnings(
   }
 
   return warnings;
+}
+
+// ── Contract Card ──────────────────────────────────────────────────────────────
+interface ContractCardProps {
+  contract: ContractData;
+  onChange: (contract: ContractData) => void;
+}
+
+type ContractStatus = 'idle' | 'processing' | 'accepted' | 'failed';
+
+function ContractCard({ contract, onChange }: ContractCardProps) {
+  const [status, setStatus] = useState<ContractStatus>(() =>
+    contract.originalPdfs.length > 0 || contract.extraction ? 'accepted' : 'idle'
+  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pageCount, setPageCount] = useState<number>(0);
+
+  const accepted = status === 'accepted';
+  const isBusy = status === 'processing';
+
+  const processFiles = useCallback(async (files: File[]) => {
+    setStatus('processing');
+    setErrorMessage(null);
+
+    try {
+      const { files: expandedFiles, originalPdfs, errors } = await expandUploadFiles(files);
+
+      if (errors.length > 0) {
+        setStatus('failed');
+        setErrorMessage(errors[0].message);
+        return;
+      }
+
+      if (expandedFiles.length === 0) {
+        setStatus('failed');
+        setErrorMessage('No se encontró ninguna página utilizable en el documento.');
+        return;
+      }
+
+      setPageCount(expandedFiles.length);
+
+      const base64Pages: string[] = [];
+      for (const { file } of expandedFiles) {
+        const raw = await fileToBase64(file);
+        base64Pages.push(await compressImageForAI(raw));
+      }
+
+      const res = base64Pages.length === 1
+        ? await extractDocument(base64Pages[0], 'contract')
+        : await extractDocumentBatch(base64Pages, 'contract');
+
+      if (!res.success || !res.extraction) {
+        const msg = res.message || 'No se pudo procesar el contrato.';
+        setStatus('failed');
+        setErrorMessage(msg);
+        return;
+      }
+
+      onChange({
+        originalPdfs,
+        extraction: {
+          ...res.extraction,
+          needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
+          confirmedByUser: true,
+        },
+      });
+      setStatus('accepted');
+    } catch {
+      setStatus('failed');
+      setErrorMessage('Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.');
+    }
+  }, [onChange]);
+
+  const reset = useCallback(() => {
+    onChange({ originalPdfs: [], extraction: null });
+    setStatus('idle');
+    setErrorMessage(null);
+    setPageCount(0);
+  }, [onChange]);
+
+  const extractedData = contract.extraction?.extractedData || {};
+  const storedPdfCount = contract.originalPdfs.length;
+
+  return (
+    <div className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-eltex-blue/30 bg-blue-50/20'} p-5 space-y-4`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className={`w-4 h-4 ${accepted ? 'text-green-500' : 'text-eltex-blue'}`} />
+          <p className={`font-semibold ${accepted ? 'text-gray-500' : 'text-gray-900'}`}>Contrato Eltex</p>
+          <span className="text-xs bg-eltex-blue/10 text-eltex-blue font-medium px-2 py-0.5 rounded-full">Prioritario</span>
+        </div>
+        {accepted && <CheckCircle className="w-5 h-5 text-green-500" />}
+      </div>
+
+      {!accepted && !isBusy && (
+        <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-eltex-blue/30 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/40 transition-colors">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (files.length) processFiles(files);
+            }}
+          />
+          <FileText className="w-7 h-7 text-eltex-blue/40" />
+          <span className="text-sm font-medium text-gray-500">Sube el contrato firmado</span>
+          <span className="text-xs text-gray-400 text-center px-4">PDF o imagen. Extrae automáticamente los datos del cliente, dirección y provincia.</span>
+        </label>
+      )}
+
+      {isBusy && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 py-2">
+            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+            <div>
+              <p className="text-sm text-gray-600">Analizando contrato…</p>
+              {pageCount > 0 && <p className="text-xs text-gray-400">{pageCount} {pageCount === 1 ? 'página' : 'páginas'} procesándose</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status === 'failed' && !isBusy && (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{errorMessage}</p>
+          </div>
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer w-full">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                e.target.value = '';
+                if (files.length) processFiles(files);
+              }}
+            />
+            <Camera className="w-3.5 h-3.5" /> Intentar de nuevo
+          </label>
+        </div>
+      )}
+
+      {accepted && (
+        <div className="space-y-3">
+          {storedPdfCount > 0 && (
+            <p className="text-xs text-gray-500">
+              {storedPdfCount} archivo{storedPdfCount !== 1 ? 's' : ''} PDF guardado{storedPdfCount !== 1 ? 's' : ''}
+            </p>
+          )}
+          <div className="space-y-1.5">
+            {CONTRACT_FIELDS.map(({ key, label }) => {
+              const value = contract.extraction?.manualCorrections?.[key] ?? extractedData[key];
+              if (!value) return null;
+              return (
+                <div key={key} className="flex gap-2 text-sm">
+                  <span className="text-gray-400 shrink-0 w-28">{label}</span>
+                  <span className="font-medium text-gray-700">{String(value)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,application/pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (files.length) processFiles(files);
+                }}
+              />
+              <Camera className="w-3.5 h-3.5" /> Sustituir
+            </label>
+            <button type="button" onClick={reset} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center">
+              <RotateCcw className="w-3.5 h-3.5" /> Quitar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
@@ -982,6 +1187,7 @@ export function PropertyDocsSection({
   dni,
   ibi,
   electricityBill,
+  contract,
   followUpMode = false,
   errors,
   documentProcessing,
@@ -995,6 +1201,7 @@ export function PropertyDocsSection({
   onAddElectricityPages,
   onRemoveElectricityPage,
   onDocumentProcessingChange,
+  onContractChange,
   onBack,
   onContinue,
 }: Props) {
@@ -1050,6 +1257,12 @@ export function PropertyDocsSection({
               : 'Sube cada documento con buena luz. Solo se guarda cuando la verificación termina correctamente.'}
           </p>
         </div>
+
+        {/* Contract card — always shown at top, primary data source */}
+        <ContractCard
+          contract={contract}
+          onChange={onContractChange}
+        />
 
         {/* DNI card or compact row */}
         {showDniCompact ? (
