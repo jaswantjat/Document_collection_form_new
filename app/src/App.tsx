@@ -135,6 +135,7 @@ function FormApp() {
   const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
+  const [autoSubmitReview, setAutoSubmitReview] = useState(false);
   const projectMatchesUrl = !urlCode || project?.code === urlCode;
   const activeProject = urlCode && projectMatchesUrl ? project : null;
   const activeProjectToken = urlCode ? projectToken : null;
@@ -339,7 +340,7 @@ function FormApp() {
               const energyLoc = formData.location ?? formData.representation?.location ?? null;
               goTo(energyLoc === 'other' ? 'province-selection' : 'representation');
             }}
-            onContinue={() => goTo('review')}
+            onContinue={() => { setAutoSubmitReview(true); goTo('review'); }}
           />
         );
 
@@ -352,10 +353,11 @@ function FormApp() {
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}
-            onEdit={(s) => goTo(s as Section)}
+            onEdit={(s) => { setAutoSubmitReview(false); goTo(s as Section); }}
             onSuccess={() => goTo('success')}
             projectToken={activeProjectToken}
-            onBack={() => goTo('energy-certificate')}
+            onBack={() => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
+            autoSubmit={autoSubmitReview}
           />
         );
       }

@@ -39,7 +39,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
   const [loading, setLoading] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newEmail, setNewEmail] = useState('');
-  const [newProduct, setNewProduct] = useState<'solar' | 'aerothermal'>('solar');
+  const [selectedProducts, setSelectedProducts] = useState<Set<'solar' | 'aerothermal'>>(new Set(['solar']));
   const [newAssessor, setNewAssessor] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -69,10 +69,15 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
     if (phoneError) { setError(phoneError); return; }
     setLoading(true); setError('');
     try {
+      const productType = selectedProducts.has('solar') && selectedProducts.has('aerothermal')
+        ? 'solar-aerothermal'
+        : selectedProducts.has('aerothermal')
+          ? 'aerothermal'
+          : 'solar';
       const res = await createProject({
         phone: val,
         email: newEmail.trim() || undefined,
-        productType: newProduct,
+        productType,
         assessor: newAssessor.trim() || undefined,
       });
       if (res.success && res.project) { onPhoneConfirmed(val, res.project); }
@@ -137,22 +142,39 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                   {([
                     { id: 'solar', label: 'Solar', icon: '☀️' },
                     { id: 'aerothermal', label: 'Aerotermia', icon: '🌡️' },
-                  ] as const).map(pt => (
-                    <button
-                      key={pt.id}
-                      type="button"
-                      onClick={() => setNewProduct(pt.id)}
-                      className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                        newProduct === pt.id
-                          ? 'border-eltex-blue bg-eltex-blue text-white'
-                          : 'border-gray-200 bg-white text-gray-600'
-                      }`}
-                    >
-                      <span className="block text-xl mb-0.5">{pt.icon}</span>
-                      {pt.label}
-                    </button>
-                  ))}
+                  ] as const).map(pt => {
+                    const active = selectedProducts.has(pt.id);
+                    return (
+                      <button
+                        key={pt.id}
+                        type="button"
+                        onClick={() => setSelectedProducts(prev => {
+                          const next = new Set(prev);
+                          if (next.has(pt.id)) {
+                            if (next.size > 1) next.delete(pt.id);
+                          } else {
+                            next.add(pt.id);
+                          }
+                          return next;
+                        })}
+                        className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all relative ${
+                          active
+                            ? 'border-eltex-blue bg-eltex-blue text-white'
+                            : 'border-gray-200 bg-white text-gray-600'
+                        }`}
+                      >
+                        <span className="block text-xl mb-0.5">{pt.icon}</span>
+                        {pt.label}
+                        {active && (
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px]">✓</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+                {selectedProducts.size === 2 && (
+                  <p className="text-xs text-eltex-blue font-medium text-center">Combo Solar + Aerotermia seleccionado</p>
+                )}
               </div>
 
               {/* Assessor */}

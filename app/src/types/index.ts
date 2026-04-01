@@ -1,6 +1,6 @@
 // Eltex Document Collection Form - Types
 
-export type ProductType = 'solar' | 'aerothermal';
+export type ProductType = 'solar' | 'aerothermal' | 'solar-aerothermal';
 export type EnergyCertificateStatus = 'not-started' | 'in-progress' | 'skipped' | 'completed';
 
 export interface ProjectData {

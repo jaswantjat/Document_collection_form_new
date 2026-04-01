@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
 import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
 import { submitForm } from '@/services/api';
@@ -18,6 +18,7 @@ interface Props {
   onSuccess: () => void;
   projectToken?: string | null;
   onBack?: () => void;
+  autoSubmit?: boolean;
 }
 
 function hasRequiredSignatures(formData: FormData): boolean {
@@ -40,10 +41,12 @@ export function ReviewSection({
   onSuccess,
   projectToken,
   onBack,
+  autoSubmit = false,
 }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
+  const autoSubmitFired = useRef(false);
   const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
@@ -128,6 +131,15 @@ export function ReviewSection({
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (autoSubmit && !autoSubmitFired.current) {
+      autoSubmitFired.current = true;
+      submit();
+    }
+  // submit is stable within this mount — intentionally omit to avoid re-running
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit]);
 
   function stripRenderedImages(fd: FormData): FormData {
     const docs = fd.representation?.renderedDocuments;

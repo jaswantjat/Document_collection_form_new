@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, X } from 'lucide-react';
 import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
 import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
@@ -125,7 +125,7 @@ function Field({
         inputMode={type === 'number' ? 'numeric' : 'text'}
         className={`form-input ${error ? 'error' : ''}`}
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p data-ec-field-error className="text-sm text-red-500">{error}</p>}
     </label>
   );
 }
@@ -153,7 +153,7 @@ function TextAreaField({
         rows={3}
         className={`form-input min-h-[96px] ${error ? 'error' : ''}`}
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p data-ec-field-error className="text-sm text-red-500">{error}</p>}
     </label>
   );
 }
@@ -193,7 +193,7 @@ function SegmentedOptions({
           );
         })}
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p data-ec-field-error className="text-sm text-red-500">{error}</p>}
     </div>
   );
 }
@@ -232,7 +232,7 @@ function YesNoField({
           );
         })}
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p data-ec-field-error className="text-sm text-red-500">{error}</p>}
     </div>
   );
 }
@@ -250,6 +250,17 @@ export function EnergyCertificateSection({
   const [renderingPreview, setRenderingPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(data.renderedDocument?.imageDataUrl || null);
   const [completing, setCompleting] = useState(false);
+  const errorScrollRef = useRef(0);
+
+  useEffect(() => {
+    if (errorScrollRef.current === 0) return;
+    const el = document.querySelector<HTMLElement>('[data-ec-field-error]');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [errors]);
 
   const currentStep = STEPS[stepIndex];
   const previewSource = useMemo(
@@ -333,8 +344,8 @@ export function EnergyCertificateSection({
   const goNext = () => {
     const stepErrors = validateStep(currentStep.key, data);
     if (Object.keys(stepErrors).length > 0) {
+      errorScrollRef.current += 1;
       setErrors(stepErrors);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setErrors((prev) => keepOnlyRenderError(prev));
@@ -373,8 +384,8 @@ export function EnergyCertificateSection({
       );
       if (firstFailingIndex >= 0) {
         setStepIndex(firstFailingIndex);
+        errorScrollRef.current += 1;
         setErrors(validateStep(DATA_STEPS[firstFailingIndex], data));
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
       return;
     }
