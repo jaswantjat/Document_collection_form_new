@@ -396,18 +396,20 @@ function DNICard({
   onBusyChange,
 }: DNICardProps) {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [isPreparing, setIsPreparing] = useState(false);
 
   const hasFront = !!front.photo;
   const hasBack = !!back.photo;
   const hasAny = hasFront || hasBack;
   const isComplete = isIdentityDocumentComplete({ front, back });
   const pendingLabel = getIdentityDocumentPendingLabel(front, back);
-  const isBusy = pendingItems.some(p => p.status !== 'failed');
+  const isBusy = isPreparing || pendingItems.some(p => p.status !== 'failed');
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
   const processFiles = useCallback(async (files: File[]) => {
-    const { files: expandedFiles, originalPdfs: uploadedOriginalPdfs, errors } = await expandUploadFiles(files);
+    setIsPreparing(true);
+    const { files: expandedFiles, originalPdfs: uploadedOriginalPdfs, errors } = await expandUploadFiles(files).finally(() => setIsPreparing(false));
     if (errors.length > 0) {
       setPendingItems(prev => [
         ...prev,
@@ -643,6 +645,16 @@ function DNICard({
                 <p className="text-[9px] text-gray-300 text-center mt-1">Reverso o datos adicionales</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Immediate feedback while PDF is being read/converted (before split+validate begins) */}
+      {isPreparing && (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-eltex-blue animate-spin" />
+            <p className="text-xs text-gray-500">Leyendo archivo...</p>
           </div>
         </div>
       )}
