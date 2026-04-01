@@ -248,6 +248,7 @@ function getProjectSnapshot(formData) {
   const dniBack = formData?.dni?.back?.extraction?.extractedData || {};
   const ibi = formData?.ibi?.extraction?.extractedData || {};
   const eb = getFirstElectricityData(formData);
+  const contract = formData?.contract?.extraction?.extractedData || {};
   const representation = formData?.representation || {};
 
   return {
@@ -256,14 +257,15 @@ function getProjectSnapshot(formData) {
     dniBack,
     ibi,
     electricityData: eb,
+    contract,
     representation,
-    fullName: dniFront.fullName || eb.titular || ibi.titular || '',
-    dniNumber: dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
-    address: eb.direccionSuministro || dniBack.address || ibi.direccion || '',
-    municipality: eb.municipio || dniBack.municipality || ibi.municipio || '',
-    // Province: electricity bill only (IBI and DNI excluded by design)
-    province: eb.provincia || '',
-    postalCode: eb.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
+    // Contract is first priority; fall back to other document sources
+    fullName: contract.fullName || dniFront.fullName || eb.titular || ibi.titular || '',
+    dniNumber: contract.nif || dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
+    address: contract.address || eb.direccionSuministro || dniBack.address || ibi.direccion || '',
+    municipality: contract.municipality || eb.municipio || dniBack.municipality || ibi.municipio || '',
+    province: contract.province || eb.provincia || '',
+    postalCode: contract.postalCode || eb.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }
 
