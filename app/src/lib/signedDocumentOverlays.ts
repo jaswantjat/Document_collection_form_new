@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-03-27.1';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-01.1';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -82,6 +82,7 @@ function getLocation(source: any) {
 
 function getSnapshot(source: any) {
   const fd = getSourceFormData(source);
+  const contract = fd?.contract?.extraction?.extractedData || {};
   const dniFront = fd?.dni?.front?.extraction?.extractedData || {};
   const dniBack = fd?.dni?.back?.extraction?.extractedData || {};
   const ibi = fd?.ibi?.extraction?.extractedData || {};
@@ -97,12 +98,13 @@ function getSnapshot(source: any) {
   return {
     location: getLocation(source),
     representation,
-    fullName: dniFront.fullName || eb0.titular || eb1.titular || ibi.titular || '',
-    dniNumber: dniFront.dniNumber || eb0.nifTitular || eb1.nifTitular || ibi.titularNif || '',
-    address: dniBack.address || eb0.direccionSuministro || eb1.direccionSuministro || ibi.direccion || '',
-    municipality: dniBack.municipality || eb0.municipio || eb1.municipio || ibi.municipio || '',
-    province: eb0.provincia || eb1.provincia || '',
-    postalCode: eb0.codigoPostal || eb1.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
+    // Contract is first priority; other documents fill in gaps if contract is absent
+    fullName: contract.fullName || dniFront.fullName || eb0.titular || eb1.titular || ibi.titular || '',
+    dniNumber: contract.nif || dniFront.dniNumber || eb0.nifTitular || eb1.nifTitular || ibi.titularNif || '',
+    address: contract.address || dniBack.address || eb0.direccionSuministro || eb1.direccionSuministro || ibi.direccion || '',
+    municipality: contract.municipality || dniBack.municipality || eb0.municipio || eb1.municipio || ibi.municipio || '',
+    province: contract.province || eb0.provincia || eb1.provincia || '',
+    postalCode: contract.postalCode || eb0.codigoPostal || eb1.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }
 

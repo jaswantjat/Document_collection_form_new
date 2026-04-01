@@ -604,9 +604,11 @@ app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
   }
   project.formData = formData;
   project.lastActivity = new Date().toISOString();
-  // Update customer name from DNI extraction if available
+  // Update customer name: contract first, then DNI front
   const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
-  if (dniName) project.customerName = dniName;
+  const contractName = formData?.contract?.extraction?.extractedData?.fullName;
+  const resolvedName = contractName || dniName;
+  if (resolvedName) project.customerName = resolvedName;
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);
@@ -633,9 +635,11 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   project.submissions.push(submission);
   project.formData = formData;
   project.lastActivity = new Date().toISOString();
-  // Update customer name from DNI extraction if available
+  // Update customer name: contract first, then DNI front
   const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
-  if (dniName) project.customerName = dniName;
+  const contractName = formData?.contract?.extraction?.extractedData?.fullName;
+  const resolvedName = contractName || dniName;
+  if (resolvedName) project.customerName = resolvedName;
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);
