@@ -172,31 +172,46 @@ export function ProvinceSelectionSection({
           <div className="space-y-3">
             <label className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-eltex-blue" />
-              ¿El titular es una empresa? <span className="text-eltex-error ml-0.5">*</span>
+              ¿El titular es una empresa?
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
               {[
-                { val: true, label: 'Sí, es empresa', icon: <Building2 className="w-4 h-4" /> },
-                { val: false, label: 'No, particular', icon: <User className="w-4 h-4" /> },
-              ].map(opt => (
-                <button
-                  key={String(opt.val)}
-                  type="button"
-                  onClick={() =>
-                    update({
-                      isCompany: opt.val,
-                      ...(!opt.val ? { companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '' } : {}),
-                    })
-                  }
-                  className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all flex items-center justify-center gap-2 ${
-                    data.isCompany === opt.val
-                      ? 'border-eltex-blue bg-eltex-blue text-white'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  {opt.icon}{opt.label}
-                </button>
-              ))}
+                { val: false, label: 'No, es particular', description: 'El titular es una persona física', icon: <User className="w-5 h-5" /> },
+                { val: true, label: 'Sí, es empresa', description: 'El titular es una persona jurídica', icon: <Building2 className="w-5 h-5" /> },
+              ].map(opt => {
+                const selected = data.isCompany === opt.val;
+                return (
+                  <button
+                    key={String(opt.val)}
+                    type="button"
+                    onClick={() =>
+                      update({
+                        isCompany: opt.val,
+                        ...(!opt.val ? { companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '' } : {}),
+                      })
+                    }
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all active:scale-[0.98] ${
+                      selected
+                        ? 'border-eltex-blue bg-blue-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${
+                      selected ? 'border-eltex-blue bg-eltex-blue' : 'border-gray-300 bg-white'
+                    }`}>
+                      {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${selected ? 'bg-eltex-blue/10 text-eltex-blue' : 'bg-gray-100 text-gray-400'}`}>
+                      {opt.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold leading-tight ${selected ? 'text-eltex-blue' : 'text-gray-800'}`}>{opt.label}</p>
+                      <p className="text-xs text-gray-400 leading-tight mt-0.5">{opt.description}</p>
+                    </div>
+                    {selected && <CheckCircle className="w-5 h-5 text-eltex-blue shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
 
             {data.isCompany && (

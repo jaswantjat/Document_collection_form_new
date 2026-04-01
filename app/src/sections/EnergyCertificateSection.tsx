@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, X } from 'lucide-react';
 import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
 import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
@@ -61,13 +61,27 @@ const RADIATOR_MATERIAL_OPTIONS = [
   { value: 'aluminio', label: 'Aluminio' },
 ] as const;
 
-const SOLD_PRODUCT_OPTIONS = [
-  { value: 'solo-paneles', label: 'Solo Paneles Solares' },
-  { value: 'solo-aerotermia', label: 'Solo Aerotermia' },
-  { value: 'paneles-y-aerotermia', label: 'Paneles Solares y Aerotermia' },
-  { value: 'ampliacion', label: 'Ampliación' },
-  { value: 'ampliacion-y-aerotermia', label: 'Ampliación y Aerotermia' },
-] as const;
+// Sold product multi-select helpers
+// The underlying soldProduct string is derived from independent checkbox selections
+type SoldProductString = 'solo-paneles' | 'solo-aerotermia' | 'paneles-y-aerotermia' | 'ampliacion' | 'ampliacion-y-aerotermia';
+
+function parseSoldProduct(soldProduct: SoldProductString | null) {
+  return {
+    hasSolar: soldProduct === 'solo-paneles' || soldProduct === 'paneles-y-aerotermia',
+    hasAerothermal: soldProduct === 'solo-aerotermia' || soldProduct === 'paneles-y-aerotermia' || soldProduct === 'ampliacion-y-aerotermia',
+    isAmpliacion: soldProduct === 'ampliacion' || soldProduct === 'ampliacion-y-aerotermia',
+  };
+}
+
+function deriveSoldProduct(hasSolar: boolean, hasAerothermal: boolean, isAmpliacion: boolean): SoldProductString | null {
+  if (isAmpliacion) {
+    return hasAerothermal ? 'ampliacion-y-aerotermia' : 'ampliacion';
+  }
+  if (hasSolar && hasAerothermal) return 'paneles-y-aerotermia';
+  if (hasSolar) return 'solo-paneles';
+  if (hasAerothermal) return 'solo-aerotermia';
+  return null;
+}
 
 const FRAME_OPTIONS = [
   { value: 'madera', label: 'Madera' },
@@ -250,17 +264,15 @@ export function EnergyCertificateSection({
   const [renderingPreview, setRenderingPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(data.renderedDocument?.imageDataUrl || null);
   const [completing, setCompleting] = useState(false);
-  const errorScrollRef = useRef(0);
 
-  useEffect(() => {
-    if (errorScrollRef.current === 0) return;
-    const el = document.querySelector<HTMLElement>('[data-ec-field-error]');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [errors]);
+  const scrollToFirstError = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>('[data-ec-field-error]');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, []);
 
   const currentStep = STEPS[stepIndex];
   const previewSource = useMemo(
@@ -299,6 +311,7 @@ export function EnergyCertificateSection({
     const defaultProduct =
       project.productType === 'solar' ? 'solo-paneles'
       : project.productType === 'aerothermal' ? 'solo-aerotermia'
+      : project.productType === 'solar-aerothermal' ? 'paneles-y-aerotermia'
       : null;
 
     const needsCatastral = !!(ibiCatastral && !data.housing.cadastralReference);
@@ -344,8 +357,8 @@ export function EnergyCertificateSection({
   const goNext = () => {
     const stepErrors = validateStep(currentStep.key, data);
     if (Object.keys(stepErrors).length > 0) {
-      errorScrollRef.current += 1;
       setErrors(stepErrors);
+      scrollToFirstError();
       return;
     }
     setErrors((prev) => keepOnlyRenderError(prev));
@@ -384,8 +397,8 @@ export function EnergyCertificateSection({
       );
       if (firstFailingIndex >= 0) {
         setStepIndex(firstFailingIndex);
-        errorScrollRef.current += 1;
         setErrors(validateStep(DATA_STEPS[firstFailingIndex], data));
+        scrollToFirstError();
       }
       return;
     }
@@ -717,14 +730,56 @@ export function EnergyCertificateSection({
 
           {currentStep.key === 'additional' && (
             <div className="space-y-5">
-              <SegmentedOptions
-                label="¿Qué producto/s se está vendiendo?"
-                options={SOLD_PRODUCT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={data.additional.soldProduct}
-                onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, soldProduct: value as EnergyCertificateData['additional']['soldProduct'] } }))}
-                error={errors.additionalSoldProduct}
-                columns={2}
-              />
+              {/* Sold product multi-select */}
+              {(() => {
+                const sp = parseSoldProduct(data.additional.soldProduct as SoldProductString | null);
+                const toggle = (field: 'hasSolar' | 'hasAerothermal' | 'isAmpliacion') => {
+                  const next = { ...sp, [field]: !sp[field] };
+                  if (field === 'isAmpliacion' && next.isAmpliacion) next.hasSolar = false;
+                  if (field === 'hasSolar' && next.hasSolar) next.isAmpliacion = false;
+                  mutate((prev) => ({
+                    ...prev,
+                    additional: { ...prev.additional, soldProduct: deriveSoldProduct(next.hasSolar, next.hasAerothermal, next.isAmpliacion) },
+                  }));
+                };
+                const options: { field: 'hasSolar' | 'hasAerothermal' | 'isAmpliacion'; label: string; sublabel: string }[] = [
+                  { field: 'hasSolar', label: 'Paneles Solares', sublabel: 'Instalación fotovoltaica' },
+                  { field: 'hasAerothermal', label: 'Aerotermia', sublabel: 'Bomba de calor' },
+                  { field: 'isAmpliacion', label: 'Ampliación', sublabel: 'Ampliación existente' },
+                ];
+                return (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-800">¿Qué producto/s se está vendiendo? <span className="text-red-500">*</span></p>
+                    <p className="text-xs text-gray-400">Puedes seleccionar más de uno.</p>
+                    <div className="space-y-2">
+                      {options.map(({ field, label, sublabel }) => {
+                        const checked = sp[field];
+                        return (
+                          <button
+                            key={field}
+                            type="button"
+                            onClick={() => toggle(field)}
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all active:scale-[0.98] ${
+                              checked ? 'border-eltex-blue bg-blue-50' : 'border-gray-200 bg-white'
+                            }`}
+                          >
+                            <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border-2 transition-colors ${
+                              checked ? 'bg-eltex-blue border-eltex-blue' : 'bg-white border-gray-300'
+                            }`}>
+                              {checked && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-semibold leading-tight ${checked ? 'text-eltex-blue' : 'text-gray-700'}`}>{label}</p>
+                              <p className="text-xs text-gray-400 leading-tight mt-0.5">{sublabel}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {errors.additionalSoldProduct && <p data-ec-field-error className="text-sm text-red-500">{errors.additionalSoldProduct}</p>}
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-3">
                 <YesNoField

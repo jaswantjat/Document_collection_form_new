@@ -43,10 +43,11 @@ export function ReviewSection({
   onBack,
   autoSubmit = false,
 }: Props) {
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(autoSubmit);
   const [submitError, setSubmitError] = useState('');
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
   const autoSubmitFired = useRef(false);
+  const autoSubmitProp = useRef(autoSubmit);
   const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
@@ -133,13 +134,12 @@ export function ReviewSection({
   };
 
   useEffect(() => {
-    if (autoSubmit && !autoSubmitFired.current) {
-      autoSubmitFired.current = true;
-      submit();
-    }
-  // submit is stable within this mount — intentionally omit to avoid re-running
+    if (!autoSubmitProp.current || autoSubmitFired.current) return;
+    autoSubmitFired.current = true;
+    submit();
+  // Runs once on mount — autoSubmitProp.current captures the initial value
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSubmit]);
+  }, []);
 
   function stripRenderedImages(fd: FormData): FormData {
     const docs = fd.representation?.renderedDocuments;
