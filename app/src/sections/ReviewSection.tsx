@@ -46,6 +46,7 @@ export function ReviewSection({
   const [submitting, setSubmitting] = useState(autoSubmit);
   const [submitError, setSubmitError] = useState('');
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
+  const submitInProgress = useRef(false);
   const autoSubmitFired = useRef(false);
   const autoSubmitProp = useRef(autoSubmit);
   const signaturesOk = hasRequiredSignatures(formData);
@@ -101,7 +102,8 @@ export function ReviewSection({
       : rawEnergyStatus;
 
   const submit = async () => {
-    if (submitting) return;
+    if (submitInProgress.current) return;
+    submitInProgress.current = true;
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -129,6 +131,7 @@ export function ReviewSection({
     } catch {
       setSubmitError('Sin conexión. Inténtalo de nuevo.');
     } finally {
+      submitInProgress.current = false;
       setSubmitting(false);
     }
   };

@@ -1,9 +1,12 @@
 import type { AIExtraction, FormData, ProjectData, RenderedDocumentAsset } from '@/types';
 
-export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-04-01.2';
+export const ENERGY_CERTIFICATE_TEMPLATE_VERSION = '2026-04-01.3';
 
 // ─── Canvas constants ─────────────────────────────────────────────────────────
-const W = 2480;   // A4 at 300 DPI
+// Logical drawing space: A4 at 300 DPI. Canvas output at 150 DPI via SCALE.
+// All coordinates use the 300 DPI space; ctx.scale(SCALE) handles the output.
+const SCALE = 0.5;
+const W = 2480;
 const H = 3508;
 const M = 100;    // page margin
 const TW = W - M * 2; // table width = 2280
@@ -305,9 +308,10 @@ async function buildCertificateCanvas(
   const a = energy.additional;
 
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = Math.round(W * SCALE);
+  canvas.height = Math.round(H * SCALE);
   const ctx = canvas.getContext('2d')!;
+  ctx.scale(SCALE, SCALE);
 
   // ── Page background ─────────────────────────────────────────────────────────
   ctx.fillStyle = WHITE;
@@ -426,7 +430,7 @@ async function buildCertificateCanvas(
   ctx.textBaseline = 'middle';
   ctx.fillText(`Expediente generado por Eltex · ${snap.today}`, W / 2, cy + 28);
 
-  return canvas.toDataURL('image/jpeg', 0.92);
+  return canvas.toDataURL('image/jpeg', 0.82);
 }
 
 // ─── Public API (same signatures as before) ───────────────────────────────────

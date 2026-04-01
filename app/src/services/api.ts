@@ -99,6 +99,7 @@ export async function submitForm(
     method: 'POST',
     headers: projectHeaders(token),
     body: JSON.stringify({ formData, source }),
+    signal: AbortSignal.timeout(60000),
   });
   return res.json();
 }

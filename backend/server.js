@@ -80,12 +80,23 @@ function loadDB() {
   return { projects: getDefaultProjects() };
 }
 
+let _saveDBWriting = false;
+let _saveDBDirty = false;
 function saveDB() {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(database, null, 2), 'utf8');
-  } catch (e) {
-    console.error('Error saving DB:', e.message);
+  _saveDBDirty = true;
+  if (_saveDBWriting) return;
+  function doWrite() {
+    if (!_saveDBDirty) return;
+    _saveDBDirty = false;
+    _saveDBWriting = true;
+    const snapshot = JSON.stringify(database, null, 2);
+    fs.writeFile(DB_FILE, snapshot, 'utf8', (err) => {
+      _saveDBWriting = false;
+      if (err) console.error('Error saving DB:', err.message);
+      if (_saveDBDirty) doWrite();
+    });
   }
+  setImmediate(doWrite);
 }
 
 function getDefaultProjects() {
