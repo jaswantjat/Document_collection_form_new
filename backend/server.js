@@ -50,7 +50,7 @@ if (!initialOpenRouterApiKey) {
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
 }
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite';
 
 // Middleware
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));

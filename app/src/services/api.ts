@@ -131,7 +131,7 @@ export async function extractDocument(
 
 export async function extractDocumentBatch(
   imagesBase64: string[],
-  documentType: 'electricity' | 'ibi'
+  documentType: 'electricity' | 'ibi' | 'contract'
 ): Promise<{
   success: boolean;
   extraction?: any;
