@@ -14,7 +14,7 @@ import type {
   DocumentProcessingState,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
-import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles, splitWideImageIfNeeded } from '@/lib/photoValidation';
+import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
 interface Props {
@@ -424,13 +424,13 @@ function DNICard({
     if (expandedFiles.length === 0) return;
 
     // For images that came from a PDF (skipBlurCheck=true), check whether the
-    // page is much wider than it is tall — this indicates both DNI sides were
-    // scanned side-by-side on a single page. Split those into left/right halves
+    // page is much wider than it is tall, or much taller than wide — this indicates
+    // both DNI sides were scanned on a single page. Split those into two halves
     // so each side can be extracted independently.
     const splitFiles: { file: File; skipBlurCheck: boolean }[] = [];
     for (const entry of expandedFiles) {
       if (entry.skipBlurCheck) {
-        const halves = await splitWideImageIfNeeded(entry.file, entry.file.name);
+        const halves = await splitDocumentImageIfNeeded(entry.file, entry.file.name);
         for (const half of halves) {
           splitFiles.push({ file: half, skipBlurCheck: true });
         }

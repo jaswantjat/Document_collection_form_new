@@ -993,7 +993,7 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
 
     addField('imageFormat', 'png');
     addField('singleImage', 'false');
-    addField('dpi', '150');
+    addField('dpi', '200');
 
     // File part header
     const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="${req.file.originalname}"\r\nContent-Type: application/pdf\r\n\r\n`;
@@ -1186,6 +1186,11 @@ Respond ONLY with this exact JSON (no markdown, no extra text).`
   dniAutoBatch: `You are a document data extractor for Spanish government documents.
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.
+
+Note: A single image may sometimes show BOTH sides of the document simultaneously (e.g. a scan of both sides on one page, or a photo with two cards). If you see two document cards (one above the other or side-by-side) or both sides in one image:
+1. Treat the image as the side whose data is most prominent or contains the primary identification.
+2. Add "combined image" to the 'notes' field.
+3. Extract as much data as possible from the prominent side.
 
 You are analyzing multiple Spanish DNI/NIE images in one request. Supported variants:
 - DNI plastic card

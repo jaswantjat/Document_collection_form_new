@@ -210,15 +210,22 @@ export function fileToPreview(file: File): Promise<string> {
 
 /**
  * If the image is significantly wider than tall (both sides of a DNI scanned
- * side-by-side on one page), split it into left and right halves.
- * Returns an array of 2 files (left, right) when split, or the original
+ * side-by-side on one page), or significantly taller than wide (vertical scan),
+ * split it into two halves.
+ * Returns an array of 2 files when split, or the original
  * single-element array when no split is needed.
  *
- * Threshold: width > 1.6 × height covers two-card landscape arrangements
- * without accidentally splitting a single DNI card (ratio ~1.57 is borderline
- * but the page background/margins push combined scans well above 2.0).
+ * NOTE: This function is ONLY called on PDF-derived images (skipBlurCheck=true)
+ * so direct phone photos are never affected.
+ *
+ * Thresholds:
+ * - Width > 1.6 × height: two cards landscape side-by-side (combined ratio ~3.17)
+ * - Height > 1.4 × width: A4/portrait page with two cards stacked (A4 ratio = 1.414).
+ *   A single DNI card in portrait has h/w ≈ 1.587 — this falls above the threshold,
+ *   but that scenario (single portrait card in a PDF) is extremely rare in practice.
+ *   The threshold deliberately catches A4 scans (1.414) as the primary use case.
  */
-export async function splitWideImageIfNeeded(file: File, originalName?: string): Promise<File[]> {
+export async function splitDocumentImageIfNeeded(file: File, originalName?: string): Promise<File[]> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -226,31 +233,46 @@ export async function splitWideImageIfNeeded(file: File, originalName?: string):
       URL.revokeObjectURL(url);
       const { naturalWidth: w, naturalHeight: h } = img;
 
-      if (w <= h * 1.6) {
+      const isWide = w > h * 1.6;
+      const isTall = h > w * 1.4;
+
+      if (!isWide && !isTall) {
         resolve([file]);
         return;
       }
 
-      const half = Math.floor(w / 2);
+      const canvas1 = document.createElement('canvas');
+      const canvas2 = document.createElement('canvas');
       const baseName = (originalName ?? file.name).replace(/\.[^.]+$/, '');
 
-      const leftCanvas = document.createElement('canvas');
-      leftCanvas.width = half;
-      leftCanvas.height = h;
-      const leftCtx = leftCanvas.getContext('2d');
+      if (isWide) {
+        const half = Math.floor(w / 2);
+        canvas1.width = half;
+        canvas1.height = h;
+        canvas2.width = w - half;
+        canvas2.height = h;
 
-      const rightCanvas = document.createElement('canvas');
-      rightCanvas.width = w - half;
-      rightCanvas.height = h;
-      const rightCtx = rightCanvas.getContext('2d');
+        const ctx1 = canvas1.getContext('2d');
+        const ctx2 = canvas2.getContext('2d');
+        if (!ctx1 || !ctx2) { resolve([file]); return; }
 
-      if (!leftCtx || !rightCtx) {
-        resolve([file]);
-        return;
+        ctx1.drawImage(img, 0, 0, half, h, 0, 0, half, h);
+        ctx2.drawImage(img, half, 0, w - half, h, 0, 0, w - half, h);
+      } else {
+        // isTall
+        const half = Math.floor(h / 2);
+        canvas1.width = w;
+        canvas1.height = half;
+        canvas2.width = w;
+        canvas2.height = h - half;
+
+        const ctx1 = canvas1.getContext('2d');
+        const ctx2 = canvas2.getContext('2d');
+        if (!ctx1 || !ctx2) { resolve([file]); return; }
+
+        ctx1.drawImage(img, 0, 0, w, half, 0, 0, w, half);
+        ctx2.drawImage(img, 0, half, w, h - half, 0, 0, w, h - half);
       }
-
-      leftCtx.drawImage(img, 0, 0, half, h, 0, 0, half, h);
-      rightCtx.drawImage(img, half, 0, w - half, h, 0, 0, w - half, h);
 
       let done = 0;
       const results: File[] = [null as unknown as File, null as unknown as File];
@@ -260,14 +282,14 @@ export async function splitWideImageIfNeeded(file: File, originalName?: string):
         if (done === 2) resolve(results);
       };
 
-      leftCanvas.toBlob((blob) => {
+      canvas1.toBlob((blob) => {
         results[0] = blob
           ? new File([blob], `${baseName}-lado-1.png`, { type: 'image/png' })
           : file;
         finish();
       }, 'image/png');
 
-      rightCanvas.toBlob((blob) => {
+      canvas2.toBlob((blob) => {
         results[1] = blob
           ? new File([blob], `${baseName}-lado-2.png`, { type: 'image/png' })
           : file;
