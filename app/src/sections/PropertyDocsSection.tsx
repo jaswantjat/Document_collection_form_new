@@ -14,7 +14,7 @@ import type {
   DocumentProcessingState,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
-import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles } from '@/lib/photoValidation';
+import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles, splitWideImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
 interface Props {
@@ -423,12 +423,28 @@ function DNICard({
 
     if (expandedFiles.length === 0) return;
 
-    const newItems: PendingItem[] = expandedFiles.map(({ file }) => ({ id: genId(), file, preview: null, status: 'validating' }));
+    // For images that came from a PDF (skipBlurCheck=true), check whether the
+    // page is much wider than it is tall — this indicates both DNI sides were
+    // scanned side-by-side on a single page. Split those into left/right halves
+    // so each side can be extracted independently.
+    const splitFiles: { file: File; skipBlurCheck: boolean }[] = [];
+    for (const entry of expandedFiles) {
+      if (entry.skipBlurCheck) {
+        const halves = await splitWideImageIfNeeded(entry.file, entry.file.name);
+        for (const half of halves) {
+          splitFiles.push({ file: half, skipBlurCheck: true });
+        }
+      } else {
+        splitFiles.push(entry);
+      }
+    }
+
+    const newItems: PendingItem[] = splitFiles.map(({ file }) => ({ id: genId(), file, preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);
     let assignedFront = !!front.photo;
     let assignedBack = !!back.photo;
 
-    const preparedFileResults = await Promise.all(expandedFiles.map(async ({ file, skipBlurCheck }, index) => {
+    const preparedFileResults = await Promise.all(splitFiles.map(async ({ file, skipBlurCheck }, index) => {
       const id = newItems[index].id;
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {

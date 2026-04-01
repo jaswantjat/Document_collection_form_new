@@ -208,6 +208,80 @@ export function fileToPreview(file: File): Promise<string> {
   return fileToBase64(file);
 }
 
+/**
+ * If the image is significantly wider than tall (both sides of a DNI scanned
+ * side-by-side on one page), split it into left and right halves.
+ * Returns an array of 2 files (left, right) when split, or the original
+ * single-element array when no split is needed.
+ *
+ * Threshold: width > 1.6 × height covers two-card landscape arrangements
+ * without accidentally splitting a single DNI card (ratio ~1.57 is borderline
+ * but the page background/margins push combined scans well above 2.0).
+ */
+export async function splitWideImageIfNeeded(file: File, originalName?: string): Promise<File[]> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { naturalWidth: w, naturalHeight: h } = img;
+
+      if (w <= h * 1.6) {
+        resolve([file]);
+        return;
+      }
+
+      const half = Math.floor(w / 2);
+      const baseName = (originalName ?? file.name).replace(/\.[^.]+$/, '');
+
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = half;
+      leftCanvas.height = h;
+      const leftCtx = leftCanvas.getContext('2d');
+
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = w - half;
+      rightCanvas.height = h;
+      const rightCtx = rightCanvas.getContext('2d');
+
+      if (!leftCtx || !rightCtx) {
+        resolve([file]);
+        return;
+      }
+
+      leftCtx.drawImage(img, 0, 0, half, h, 0, 0, half, h);
+      rightCtx.drawImage(img, half, 0, w - half, h, 0, 0, w - half, h);
+
+      let done = 0;
+      const results: File[] = [null as unknown as File, null as unknown as File];
+
+      const finish = () => {
+        done += 1;
+        if (done === 2) resolve(results);
+      };
+
+      leftCanvas.toBlob((blob) => {
+        results[0] = blob
+          ? new File([blob], `${baseName}-lado-1.png`, { type: 'image/png' })
+          : file;
+        finish();
+      }, 'image/png');
+
+      rightCanvas.toBlob((blob) => {
+        results[1] = blob
+          ? new File([blob], `${baseName}-lado-2.png`, { type: 'image/png' })
+          : file;
+        finish();
+      }, 'image/png');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve([file]);
+    };
+    img.src = url;
+  });
+}
+
 // Compress and resize an image to max 1600px (longest side), JPEG quality 0.82
 // This dramatically reduces payload size for large phone photos before sending to AI
 export function compressImageForAI(dataUrl: string, maxPx = 1600, quality = 0.82): Promise<string> {
