@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react';
+import { toast } from 'sonner';
 import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
@@ -334,7 +335,13 @@ export const useFormState = (
           }
         }
       }
-      saveProgress(projectCode, cleanData, projectToken).catch(() => {});
+      saveProgress(projectCode, cleanData, projectToken).catch((err: unknown) => {
+        console.error('[useFormState] Auto-save failed:', err);
+        toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {
+          id: 'save-error',
+          duration: 5000,
+        });
+      });
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [formData, projectCode, projectToken]);

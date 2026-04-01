@@ -61,21 +61,21 @@ Using `hasContractData` (a boolean primitive) as the dependency ensures:
 
 ## BUG-002 · Save failures are silently swallowed
 
-**Status:** TRACKED — low priority
-**File:** `app/src/hooks/useFormState.ts` line 337
+**Status:** FIXED (2026-04-01)
+**File:** `app/src/hooks/useFormState.ts` line 341
 
 ### Symptom
-If the auto-save POST request fails (network error, body too large, server error), the error is silently caught and discarded. The user sees no warning and assumes their data was saved.
+If the auto-save POST request fails (network error, body too large, server error), the error was silently caught and discarded. The user saw no warning and assumed their data was saved.
 
 ### Root Cause
 ```typescript
 saveProgress(projectCode, cleanData, projectToken).catch(() => {});
 ```
 
-### Impact
-If the total formData payload exceeds 25 MB (the Express body limit), the save silently fails and the user loses progress on reload. Multi-page PDFs stored as base64 in `originalPdfs` are the most likely cause of oversized payloads.
-
-### Recommended Fix
-Log the error to the console at minimum. Optionally surface a subtle toast/banner to the user ("No se pudo guardar el progreso — comprueba tu conexión").
+### Fix Applied
+- Error logged to console via `console.error('[useFormState] Auto-save failed:', err)`.
+- A Sonner `toast.warning` is shown to the user: *"No se pudo guardar el progreso — comprueba tu conexión"*.
+- The toast uses `id: 'save-error'` so repeated failures only show one toast (no stacking).
+- Duration: 5 seconds.
 
 ---
