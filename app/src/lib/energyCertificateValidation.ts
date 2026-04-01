@@ -33,6 +33,7 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     }
 
     if (!h.windowFrameMaterial) errs.housingWindowFrameMaterial = 'Selecciona el material de los marcos';
+    if (!String(h.doorMaterial ?? '').trim()) errs.housingDoorMaterial = 'Introduce el material de las puertas';
     if (!h.windowGlassType) errs.housingWindowGlassType = 'Selecciona el tipo de vidrio';
     if (h.hasShutters === null || h.hasShutters === undefined) errs.housingHasShutters = 'Indica si hay ventanas con persiana';
 
@@ -47,9 +48,13 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     const t = data.thermal ?? ({} as EnergyCertificateData['thermal']);
     if (!t.thermalInstallationType) errs.thermalInstallationType = 'Selecciona el tipo de instalación térmica';
     if (!t.boilerFuelType) errs.thermalBoilerFuelType = 'Selecciona el tipo de combustión';
+    if (!String(t.equipmentDetails ?? '').trim()) errs.thermalEquipmentDetails = 'Introduce la marca y año de instalación del equipo';
     if (t.hasAirConditioning === null || t.hasAirConditioning === undefined) errs.thermalHasAirConditioning = 'Indica si hay aire acondicionado';
     if (t.hasAirConditioning === true && !t.airConditioningType) {
       errs.thermalAirConditioningType = 'Selecciona el tipo de bomba';
+    }
+    if (t.hasAirConditioning === true && !String(t.airConditioningDetails ?? '').trim()) {
+      errs.thermalAirConditioningDetails = 'Introduce la marca y año del aire acondicionado';
     }
     if (!t.heatingEmitterType) errs.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción';
     if (t.heatingEmitterType && t.heatingEmitterType !== 'suelo-radiante' && !t.radiatorMaterial) {
@@ -62,6 +67,9 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     if (!a.soldProduct) errs.additionalSoldProduct = 'Selecciona el producto vendido';
     if (a.isExistingCustomer === null || a.isExistingCustomer === undefined) errs.additionalIsExistingCustomer = 'Indica si es cliente de Eltex';
     if (a.hasSolarPanels === null || a.hasSolarPanels === undefined) errs.additionalHasSolarPanels = 'Indica si tiene placas solares';
+    if (a.hasSolarPanels === true && !String(a.solarPanelDetails ?? '').trim()) {
+      errs.additionalSolarPanelDetails = 'Introduce los detalles de la instalación fotovoltaica';
+    }
   }
 
   return errs;
