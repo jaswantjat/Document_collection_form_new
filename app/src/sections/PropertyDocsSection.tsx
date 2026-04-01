@@ -176,6 +176,19 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
 
+  // Sync status when saved contract data loads asynchronously (e.g. on form reload).
+  // useState's lazy initializer only runs once at mount; if the project data arrives
+  // after mount (async API fetch), the status must be updated explicitly.
+  // Using a boolean primitive as the dependency avoids object-reference churn from
+  // normalizeFormData() while still reacting to real data presence changes.
+  const hasContractData = contract.originalPdfs.length > 0 || !!contract.extraction;
+  useEffect(() => {
+    setStatus(prev => {
+      if (prev === 'processing') return prev; // never interrupt an in-flight upload
+      return hasContractData ? 'accepted' : 'idle';
+    });
+  }, [hasContractData]);
+
   const accepted = status === 'accepted';
   const isBusy = status === 'processing';
 
