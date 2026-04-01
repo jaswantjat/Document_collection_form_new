@@ -284,7 +284,7 @@ function FormApp() {
             dni={formData.dni}
             ibi={formData.ibi}
             electricityBill={formData.electricityBill}
-            contract={formData.contract}
+            contract={formData.contract!}
             followUpMode={followUpDocumentFlow}
             errors={errors}
             documentProcessing={documentProcessing}
