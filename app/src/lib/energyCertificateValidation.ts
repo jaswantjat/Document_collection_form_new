@@ -21,9 +21,26 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     const _bedrooms = h.bedroomCount !== null && h.bedroomCount !== undefined ? String(h.bedroomCount).trim() : '';
     if (!_bedrooms) errs.housingBedroomCount = 'Introduce el número de dormitorios';
     if (!h.averageFloorHeight) errs.housingAverageFloorHeight = 'Selecciona la altura promedio de planta';
+
+    // All four orientations for doors and windows must be filled in
+    const doors = h.doorsByOrientation ?? { north: '', east: '', south: '', west: '' };
+    const windows = h.windowsByOrientation ?? { north: '', east: '', south: '', west: '' };
+    const directions = ['north', 'east', 'south', 'west'] as const;
+    const missingDoors = directions.some((d) => String(doors[d] ?? '').trim() === '');
+    const missingWindows = directions.some((d) => String(windows[d] ?? '').trim() === '');
+    if (missingDoors || missingWindows) {
+      errs.housingOpenings = 'Introduce el número de puertas y ventanas en cada orientación';
+    }
+
     if (!h.windowFrameMaterial) errs.housingWindowFrameMaterial = 'Selecciona el material de los marcos';
     if (!h.windowGlassType) errs.housingWindowGlassType = 'Selecciona el tipo de vidrio';
     if (h.hasShutters === null || h.hasShutters === undefined) errs.housingHasShutters = 'Indica si hay ventanas con persiana';
+
+    // When the user confirmed there are shuttered windows, the count is required
+    if (h.hasShutters === true) {
+      const _shutterCount = String(h.shutterWindowCount ?? '').trim();
+      if (!_shutterCount) errs.housingShutterWindowCount = 'Introduce el número de ventanas con persiana';
+    }
   }
 
   if (stepKey === 'thermal') {
