@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-01.1';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-01.2';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
