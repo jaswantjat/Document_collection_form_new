@@ -1,5 +1,32 @@
 type ApiImage = { name: string; data: string; mimeType: string };
 
+// Module-level cache so pdfjs only initializes once per browser session.
+// The first upload pays the dynamic-import cost (~500ms); all subsequent
+// uploads skip it entirely.
+let pdfjsCache: Promise<typeof import('pdfjs-dist')> | null = null;
+
+function getPdfjs(): Promise<typeof import('pdfjs-dist')> {
+  if (!pdfjsCache) {
+    pdfjsCache = import('pdfjs-dist').then((pdfjs) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).toString();
+      return pdfjs;
+    });
+  }
+  return pdfjsCache;
+}
+
+/**
+ * Call this as early as possible (e.g. on component mount) to pre-load the
+ * pdfjs-dist module in the background before the user picks a file.
+ * Safe to call multiple times — subsequent calls are no-ops.
+ */
+export function preWarmPdfjs(): void {
+  getPdfjs().catch(() => {});
+}
+
 async function convertViaBackend(file: File): Promise<File[]> {
   const formData = new FormData();
   formData.append('file', file, file.name);
@@ -50,11 +77,7 @@ async function blobFromCanvas(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 async function convertInBrowser(file: File): Promise<File[]> {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-  ).toString();
+  const pdfjs = await getPdfjs();
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const loadingTask = pdfjs.getDocument({ data: bytes });
@@ -63,6 +86,7 @@ async function convertInBrowser(file: File): Promise<File[]> {
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
+    // scale: 2 → enough resolution for AI vision without going to 4× pixel count
     const viewport = page.getViewport({ scale: 2 });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');

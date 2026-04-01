@@ -981,6 +981,16 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
 
     const apiKey = getStirlingApiKey();
 
+    // Short-circuit: if no API key is configured, skip the Stirling-PDF network
+    // call entirely and tell the frontend to fall back to browser conversion.
+    // This saves the ~300-600ms wasted on a guaranteed-401 external request.
+    if (!apiKey) {
+      return res.status(503).json({
+        success: false,
+        message: 'Stirling-PDF no configurado (falta STIRLING_PDF_API_KEY). Usando conversión local.'
+      });
+    }
+
     // Build multipart request for Stirling-PDF
     const boundary = `----FormBoundary${Date.now()}`;
     const parts = [];
