@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e": "bash scripts/e2e.sh",
+    "test:e2e:smoke": "bash scripts/e2e.sh tests/e2e/smoke.spec.ts",
+    "test:e2e:nav": "bash scripts/e2e.sh tests/e2e/form-navigation.spec.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +20,8 @@
     "multer": "^2.1.1",
     "pdf-lib": "^1.17.1",
     "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
   }
 }
