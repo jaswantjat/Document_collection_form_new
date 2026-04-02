@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, X } from 'lucide-react';
-import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador-web.jpg';
-import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera-web.jpg';
-import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia-web.jpg';
-import thermalTermoElectricoImage from '@/assets/energy-certificate/thermal-termo-electrico-web.jpg';
 import { createRenderedEnergyCertificateAsset, renderEnergyCertificateOverlay } from '@/lib/energyCertificateDocument';
 import type { EnergyCertificateData, FormData, ProjectData } from '@/types';
 import {
@@ -37,10 +33,10 @@ const HEIGHT_OPTIONS = [
 ] as const;
 
 const THERMAL_INSTALLATION_OPTIONS = [
-  { value: 'termo-electrico', label: 'Termo Eléctrico (Sólo ACS)', image: thermalTermoElectricoImage },
-  { value: 'calentador', label: 'Calentador (Sólo ACS)', image: thermalCalentadorImage },
-  { value: 'caldera', label: 'Caldera (ACS y calefacción)', image: thermalCalderaImage },
-  { value: 'aerotermia', label: 'Aerotermia', image: thermalAerotermiaImage },
+  { value: 'termo-electrico', label: 'Termo Eléctrico (Sólo ACS)', image: 'https://uploads.onecompiler.io/4454edy2w/4454ed8yh/value_image%20(1).png' },
+  { value: 'calentador', label: 'Calentador (Sólo ACS)', image: 'https://uploads.onecompiler.io/4454edy2w/4454ed8yh/value_image%20(2).png' },
+  { value: 'caldera', label: 'Caldera (ACS y calefacción)', image: 'https://uploads.onecompiler.io/4454edy2w/4454ed8yh/value_image%20(3).png' },
+  { value: 'aerotermia', label: 'Aerotermia', image: 'https://uploads.onecompiler.io/4454edy2w/4454ed8yh/value_image.png' },
 ] as const;
 
 const FUEL_OPTIONS = [
