@@ -58,6 +58,26 @@
 
 ---
 
+## 2026-04-02 — Session: Codebase Cleanup
+
+**Phase**: Maintenance
+
+**What was done:**
+- Deleted 4 ad-hoc root-level debug scripts (`test_extraction.js`, `test_false_positive.js`, `test_false_positive_refined.js`, `test_safety_net.js`)
+- Deleted `attached_assets/` — conversation upload artifacts (screenshots, PDFs, text pastes)
+- Deleted `screenshots/` — early dev debug screenshots
+- Deleted `test-results/` — generated Playwright output
+- Deleted `playwright-report/` — generated Playwright HTML report
+- Deleted `scripts/browser-test.mjs` and `scripts/browser-test-deep.mjs` — ad-hoc browser debug scripts superseded by Playwright
+- Deleted `.tasks/` — all 5 completed task files (info preserved in AGENTS.md / CHANGELOG.md)
+- Deleted `.local/progress_final.md`, `.local/progress_t001_t002_t003.md`, `.local/qa_report_t001_t002_t003.md` — temporary session progress tracking files
+
+**Files changed:** Deletions only — no source code modified.
+
+**What's next:** Codebase is clean. Task queue remains empty.
+
+---
+
 ## 2026-04-02 — Session: Playbook Enforcement
 
 **Phase**: Setup
