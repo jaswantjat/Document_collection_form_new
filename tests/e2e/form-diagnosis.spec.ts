@@ -197,10 +197,11 @@ test('T07 — ELT20250003: third project smart routing', async ({ page }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // T08 — Backend API health
 // ─────────────────────────────────────────────────────────────────────────────
-test('T08 — backend: /api/projects/:code returns data', async ({ request }) => {
-  const res1 = await request.get('http://localhost:3001/api/projects/ELT20250001', {
-    headers: { 'x-token': TOKEN_1 },
+test('T08 — backend: /api/project/:code returns data', async ({ request }) => {
+  const res1 = await request.get('http://localhost:3001/api/project/ELT20250001', {
+    headers: { 'x-project-token': TOKEN_1 },
     failOnStatusCode: false,
+    timeout: 30000,
   });
   console.log('[T08] ELT20250001 status:', res1.status());
   const body1 = await res1.json().catch(() => ({}));
