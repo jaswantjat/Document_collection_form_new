@@ -1102,6 +1102,23 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
 });
 
 // ── AI Document Extraction ─────────────────────────────────────────────────────
+
+// Safety-net: catch driving licenses that slipped past the AI prompt
+const DRIVING_LICENSE_KEYWORDS = [
+  'driving', 'driver', 'license', 'licence',
+  'carnet de conducir', 'permiso de conducir', 'permiso de conducción',
+  'conducir', 'conducción', 'dl ', ' dl', 'driving license', 'driving licence',
+];
+
+function isDrivingLicenseDetected(extraction) {
+  if (!extraction) return false;
+  const haystack = [
+    extraction.documentTypeDetected || '',
+    extraction.notes || '',
+  ].join(' ').toLowerCase();
+  return DRIVING_LICENSE_KEYWORDS.some((kw) => haystack.includes(kw));
+}
+
 const PROMPTS = {
   dniFront: `You are a document data extractor for Spanish government documents.
 
@@ -1114,7 +1131,12 @@ Extract from the FRONT of a Spanish DNI or NIE:
 4. Expiry date — YYYY-MM-DD
 5. Sex (M or F)
 
-If this is NOT a DNI/NIE front, set isCorrectDocument: false.
+CRITICAL — Documents that are NOT valid and must be rejected (isCorrectDocument: false):
+- Driving license / carnet de conducir / permiso de conducción (even if it looks like a card with a photo and ID number)
+- Passport / pasaporte
+- Any document that is NOT specifically a Spanish DNI or NIE
+
+If this is NOT a DNI/NIE front (including if it is a driving license), set isCorrectDocument: false.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"string or null","expiryDate":"string or null","sex":"M or F or null","nationality":"string or null"},"confidence":0.95,"notes":"string"}`,
@@ -1129,7 +1151,12 @@ Extract from the BACK of a Spanish DNI:
 3. Province (provincia)
 4. Place of birth (lugar de nacimiento)
 
-If this is NOT a DNI back, set isCorrectDocument: false.
+CRITICAL — Documents that are NOT valid and must be rejected (isCorrectDocument: false):
+- Driving license / carnet de conducir / permiso de conducción
+- Passport / pasaporte
+- Any document that is NOT specifically a Spanish DNI or NIE
+
+If this is NOT a DNI back (including if it is a driving license), set isCorrectDocument: false.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"DNI back","isReadable":true,"extractedData":{"address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}`,
@@ -1202,7 +1229,9 @@ Important rules:
 - A green NIE card with holder data and address is still the FRONT, even if address appears there.
 - The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-card", side: "back", and return null for fields that are not visible there.
 - A one-page NIE certificate is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-certificate", side: "front".
-- If this is NOT a DNI/NIE at all, set isCorrectDocument: false.
+- CRITICAL: A driving license (carnet de conducir / permiso de conducción) is NOT a valid document — set isCorrectDocument: false even if it contains a photo, name, and ID number similar to a DNI.
+- CRITICAL: A passport (pasaporte) is NOT a valid document for this field — set isCorrectDocument: false.
+- If this is NOT a DNI/NIE at all (including driving license or passport), set isCorrectDocument: false.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
@@ -1259,6 +1288,8 @@ Important rules:
 - A green NIE card side with holder data is the FRONT, even if it also shows address.
 - The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as identityDocumentKind: "nie-card", side: "back", even if it has little or no personal data.
 - A one-page NIE certificate is STILL a correct document. Mark it as identityDocumentKind: "nie-certificate", side: "front".
+- CRITICAL: A driving license (carnet de conducir / permiso de conducción) is NOT a valid document — set isCorrectDocument: false even if it has a photo, name, and ID number like a DNI.
+- CRITICAL: A passport (pasaporte) is NOT a valid document for this field — set isCorrectDocument: false.
 
 Respond ONLY with this exact JSON shape (no markdown, no extra text):
 {"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
@@ -1431,6 +1462,17 @@ app.post('/api/extract', async (req, res) => {
         isWrongDocument: true,
         reason: 'wrong-document',
         message: `Documento incorrecto. Por favor sube ${documentType.includes('dni') ? 'el DNI/NIE' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'la factura de electricidad'}.`
+      });
+    }
+
+    // Safety-net: reject driving licenses even if AI marked isCorrectDocument: true
+    if (documentType.includes('dni') && isDrivingLicenseDetected(extraction)) {
+      console.log(`[extract:${documentType}] Driving license detected via safety-net, rejecting.`);
+      return res.json({
+        success: false,
+        isWrongDocument: true,
+        reason: 'wrong-document',
+        message: 'Documento incorrecto. El carnet de conducir no es válido. Por favor sube el DNI/NIE.'
       });
     }
 
@@ -1685,6 +1727,17 @@ app.post('/api/extract-dni-batch', async (req, res) => {
           isWrongDocument: true,
           reason: 'wrong-document',
           message: 'Documento incorrecto. Por favor sube el DNI/NIE.'
+        };
+      }
+
+      // Safety-net: reject driving licenses even if AI marked isCorrectDocument: true
+      if (isDrivingLicenseDetected(normalizedItem)) {
+        console.log('[extract-dni-batch] Driving license detected via safety-net, rejecting.');
+        return {
+          side: normalizedItem.side || null,
+          isWrongDocument: true,
+          reason: 'wrong-document',
+          message: 'Documento incorrecto. El carnet de conducir no es válido. Por favor sube el DNI/NIE.'
         };
       }
 
