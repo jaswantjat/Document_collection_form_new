@@ -302,6 +302,7 @@ export const useFormState = (
   const [errors, setErrors] = useState<FormErrors>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const consecutiveSaveFailures = useRef(0);
+  const lastSavedPayload = useRef<string>('');
 
   const syncSavedFormData = useEffectEvent((nextSavedFormData?: FormData | null) => {
     const normalized = normalizeFormData(nextSavedFormData);
@@ -334,7 +335,13 @@ export const useFormState = (
         if (_key === 'imageDataUrl') return undefined;  // RenderedDocumentAsset base64
         return value;
       }));
+      // Skip the network round-trip when data hasn't changed since the last successful save.
+      // This stops the debounce from re-posting the same heavy payload every 2 seconds
+      // when the user navigates sections without editing anything.
+      const snapshot = JSON.stringify(cleanData);
+      if (snapshot === lastSavedPayload.current) return;
       saveProgress(projectCode, cleanData, projectToken).then(() => {
+        lastSavedPayload.current = snapshot;
         if (consecutiveSaveFailures.current > 0) {
           consecutiveSaveFailures.current = 0;
           toast.dismiss('save-error');

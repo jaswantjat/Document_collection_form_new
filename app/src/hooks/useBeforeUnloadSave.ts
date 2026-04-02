@@ -8,18 +8,15 @@ function buildSavePayload(
   formData: unknown,
   projectToken?: string | null
 ): { url: string; body: string; token?: string } | null {
+  // Strip the same binary/large fields as the regular auto-save so the payload
+  // stays small enough to fit within the 60 KB keepalive limit.
   const cleanData = JSON.parse(JSON.stringify(formData, (_key, value) => {
     if (value instanceof File) return undefined;
+    if (_key === 'preview') return undefined;      // UploadedPhoto base64 preview
+    if (_key === 'dataUrl') return undefined;      // StoredDocumentFile PDF binary
+    if (_key === 'imageDataUrl') return undefined; // RenderedDocumentAsset image
     return value;
   }));
-
-  if (cleanData?.representation?.renderedDocuments) {
-    for (const asset of Object.values(cleanData.representation.renderedDocuments as Record<string, { imageDataUrl?: string }>)) {
-      if (asset && typeof asset === 'object' && 'imageDataUrl' in asset) {
-        delete asset.imageDataUrl;
-      }
-    }
-  }
 
   const body = JSON.stringify({ formData: cleanData });
 
