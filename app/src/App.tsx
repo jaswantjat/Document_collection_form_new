@@ -24,14 +24,16 @@ const SuccessSection = lazy(() => import('@/sections/SuccessSection').then((modu
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const DashboardLogin = lazy(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
 
-// Pre-warm all lazy section chunks during idle time so transitions feel instant.
+// Pre-warm all lazy section chunks immediately so transitions feel instant.
+// Fired as soon as FormApp mounts — chunks download in parallel while the user
+// fills the first section. No idle-callback delay, which was letting mobile
+// devices start downloading too late and causing Suspense spinners.
 function preloadSections() {
-  const idle = typeof requestIdleCallback !== 'undefined' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 200);
-  idle(() => { import('@/sections/ProvinceSelectionSection'); });
-  idle(() => { import('@/sections/RepresentationSection'); });
-  idle(() => { import('@/sections/EnergyCertificateSection'); });
-  idle(() => { import('@/sections/ReviewSection'); });
-  idle(() => { import('@/sections/SuccessSection'); });
+  import('@/sections/ProvinceSelectionSection');
+  import('@/sections/RepresentationSection');
+  import('@/sections/EnergyCertificateSection');
+  import('@/sections/ReviewSection');
+  import('@/sections/SuccessSection');
 }
 
 // ── Dashboard wrapper (handles login gate) ────────────────────────────────────
@@ -161,9 +163,24 @@ function FormApp() {
     setLoadError(null);
   });
 
+  // Read current project without adding it to effect deps.
+  // Used to skip a redundant re-fetch when we already have the project in memory
+  // (e.g. the phone flow: handlePhoneConfirmed sets project then navigates, which
+  // changes urlCode and would otherwise trigger an unnecessary second network request).
+  const getCurrentProject = useEffectEvent(() => project);
+
   // If URL has a code, load it on mount
   useEffect(() => {
     if (!urlCode) return;
+
+    // If we already hold this project in memory (e.g. just created via phone flow),
+    // skip the server round-trip entirely. The loading flag was never set to true
+    // in this path, so no spinner is shown.
+    const current = getCurrentProject();
+    if (current?.code === urlCode) {
+      setLoading(false);
+      return;
+    }
 
     const controller = new AbortController();
     const token = urlToken ?? getStoredToken(urlCode);
