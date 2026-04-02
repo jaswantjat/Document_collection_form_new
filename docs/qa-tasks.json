@@ -1,0 +1,182 @@
+{
+  "project": "Eltex Document Collection Form",
+  "description": "Tracks all QA cycles, coding tasks, and bug fixes across the Orchestrator → Coding Agent → QA Agent loop.",
+  "lastUpdated": "2026-04-02",
+  "cycles": [
+    {
+      "id": "CYCLE-0",
+      "name": "Unit Tests Baseline",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "Orchestrator",
+      "status": "passed",
+      "summary": "10 unit tests written and all passing",
+      "results": { "unit": { "pass": 10, "fail": 0 }, "e2e": null },
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-1",
+      "name": "E2E Baseline",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "QA Agent",
+      "status": "failed",
+      "summary": "16/17 pass — DIAG-T08 failed (wrong URL + header + no timeout)",
+      "results": { "unit": null, "e2e": { "pass": 16, "fail": 1, "failing": ["DIAG-T08"] } },
+      "bugsFound": ["BUG-T08-A", "BUG-T08-B", "BUG-T08-C"],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "FIX-1",
+      "name": "Fix DIAG-T08",
+      "type": "fix",
+      "date": "2026-04-02",
+      "runBy": "Coding Agent",
+      "status": "completed",
+      "summary": "Fixed wrong API path, wrong auth header, missing timeout in form-diagnosis.spec.ts",
+      "filesChanged": ["tests/e2e/form-diagnosis.spec.ts"],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-2",
+      "name": "E2E Verification Post-Fix",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "QA Agent",
+      "status": "passed",
+      "summary": "17/17 E2E pass",
+      "results": { "unit": null, "e2e": { "pass": 17, "fail": 0 } },
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-3",
+      "name": "Full Suite + New Tests",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "QA Agent",
+      "status": "failed",
+      "summary": "23/24 — REG-03 failed (wrong test expectation, not a code bug)",
+      "results": { "unit": { "pass": 17, "fail": 0 }, "e2e": { "pass": 23, "fail": 1, "failing": ["REG-03"] } },
+      "bugsFound": ["BUG-REG-03"],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "FIX-2",
+      "name": "Fix REG-03 expectation",
+      "type": "fix",
+      "date": "2026-04-02",
+      "runBy": "Orchestrator",
+      "status": "completed",
+      "summary": "Corrected test expectation: phone not-found correctly returns 404, not 200",
+      "filesChanged": ["tests/e2e/bug-regressions.spec.ts"],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-4",
+      "name": "Final Verification (Loop Close)",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "QA Agent",
+      "status": "passed",
+      "summary": "41/41 pass — unit (17) + E2E (24). Loop closed.",
+      "results": { "unit": { "pass": 17, "fail": 0 }, "e2e": { "pass": 24, "fail": 0 } },
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "FIX-3",
+      "name": "Conditional Field Visibility Fixes",
+      "type": "fix",
+      "date": "2026-04-02",
+      "runBy": "Orchestrator (Main Agent)",
+      "status": "completed",
+      "summary": "Fixed 3 conditional UI rendering bugs in EnergyCertificateSection.tsx: shutterWindowCount, airConditioningDetails+Type, solarPanelDetails were always rendered; now correctly gated by parent toggles.",
+      "commit": "0bb7801af403d83302a939aa93d7f9b7cc91de8f",
+      "bugsFixed": ["BUG-COND-01", "BUG-COND-02", "BUG-COND-03"],
+      "filesChanged": ["app/src/sections/EnergyCertificateSection.tsx"],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "TASK-CODING-1",
+      "name": "Write Conditional Visibility Tests (COND-01/02/03 + UNIT-COND-01..06)",
+      "type": "coding",
+      "date": "2026-04-02",
+      "runBy": "Coding Agent",
+      "status": "in-progress",
+      "summary": "Write E2E tests (COND-01, COND-02, COND-03) and unit tests (UNIT-COND-01..06) verifying the 3 conditional visibility fixes",
+      "filesChanged": [
+        "app/src/lib/energyCertificateValidation.test.ts",
+        "tests/e2e/energy-certificate.spec.ts"
+      ],
+      "completedAt": null
+    },
+    {
+      "id": "CYCLE-5",
+      "name": "QA Cycle 5 — Conditional Visibility Verification",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "QA Agent",
+      "status": "in-progress",
+      "summary": "Run full suite after COND fixes + new tests. Expected: 41 existing + 9 new = 50 total.",
+      "results": null,
+      "completedAt": null
+    }
+  ],
+  "bugs": [
+    {
+      "id": "BUG-T08-A",
+      "description": "API path was /api/projects/ — should be /api/project/",
+      "foundInCycle": "CYCLE-1",
+      "fixedInTask": "FIX-1",
+      "file": "tests/e2e/form-diagnosis.spec.ts",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-T08-B",
+      "description": "Auth header was x-token — should be x-project-token",
+      "foundInCycle": "CYCLE-1",
+      "fixedInTask": "FIX-1",
+      "file": "tests/e2e/form-diagnosis.spec.ts",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-T08-C",
+      "description": "No request timeout — added timeout: 30000",
+      "foundInCycle": "CYCLE-1",
+      "fixedInTask": "FIX-1",
+      "file": "tests/e2e/form-diagnosis.spec.ts",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-REG-03",
+      "description": "Test expected HTTP 200 for not-found phone; backend correctly returns 404",
+      "foundInCycle": "CYCLE-3",
+      "fixedInTask": "FIX-2",
+      "file": "tests/e2e/bug-regressions.spec.ts",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-COND-01",
+      "description": "shutterWindowCount field always rendered regardless of hasShutters value — should only show when hasShutters === true",
+      "foundBy": "Code review (Main Agent)",
+      "fixedInTask": "FIX-3",
+      "file": "app/src/sections/EnergyCertificateSection.tsx",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-COND-02",
+      "description": "airConditioningDetails + airConditioningType (¿Tipo de Bomba?) always rendered — should only show when hasAirConditioning === true",
+      "foundBy": "Code review (Main Agent)",
+      "fixedInTask": "FIX-3",
+      "file": "app/src/sections/EnergyCertificateSection.tsx",
+      "status": "fixed"
+    },
+    {
+      "id": "BUG-COND-03",
+      "description": "solarPanelDetails textarea always rendered — should only show when hasSolarPanels === true",
+      "foundBy": "Code review (Main Agent)",
+      "fixedInTask": "FIX-3",
+      "file": "app/src/sections/EnergyCertificateSection.tsx",
+      "status": "fixed"
+    }
+  ]
+}

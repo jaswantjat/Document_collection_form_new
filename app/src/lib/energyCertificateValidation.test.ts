@@ -131,4 +131,66 @@ describe('Energy Certificate Validation - New Rules', () => {
       expect(errors).not.toHaveProperty('additionalSolarPanelDetails');
     });
   });
+
+  describe('Conditional Field Visibility — UI Logic Mirror', () => {
+    // UNIT-COND-01: hasShutters=false → no error on shutterWindowCount (even if empty)
+    it('UNIT-COND-01: hasShutters=false → no error on shutterWindowCount (even if empty)', () => {
+      const data = createBaseData();
+      data.housing.hasShutters = false;
+      data.housing.shutterWindowCount = '';
+      const errors = validateEcStep('housing', data);
+      expect(errors).not.toHaveProperty('housingShutterWindowCount');
+    });
+
+    // UNIT-COND-02: hasShutters=true + shutterWindowCount='' → error housingShutterWindowCount
+    it('UNIT-COND-02: hasShutters=true + shutterWindowCount="" → error housingShutterWindowCount', () => {
+      const data = createBaseData();
+      data.housing.hasShutters = true;
+      data.housing.shutterWindowCount = '';
+      const errors = validateEcStep('housing', data);
+      expect(errors).toHaveProperty('housingShutterWindowCount');
+      expect(errors.housingShutterWindowCount).toBe('Introduce el número de ventanas con persiana');
+    });
+
+    // UNIT-COND-03: hasAirConditioning=false → no error on airConditioningDetails or airConditioningType
+    it('UNIT-COND-03: hasAirConditioning=false → no error on airConditioningDetails or airConditioningType', () => {
+      const data = createBaseData();
+      data.thermal.hasAirConditioning = false;
+      data.thermal.airConditioningDetails = '';
+      data.thermal.airConditioningType = null;
+      const errors = validateEcStep('thermal', data);
+      expect(errors).not.toHaveProperty('thermalAirConditioningDetails');
+      expect(errors).not.toHaveProperty('thermalAirConditioningType');
+    });
+
+    // UNIT-COND-04: hasAirConditioning=true + empty fields → errors on both
+    it('UNIT-COND-04: hasAirConditioning=true + empty fields → errors on both', () => {
+      const data = createBaseData();
+      data.thermal.hasAirConditioning = true;
+      data.thermal.airConditioningDetails = '';
+      data.thermal.airConditioningType = null;
+      const errors = validateEcStep('thermal', data);
+      expect(errors).toHaveProperty('thermalAirConditioningDetails');
+      expect(errors).toHaveProperty('thermalAirConditioningType');
+    });
+
+    // UNIT-COND-05: hasSolarPanels=false → no error on solarPanelDetails
+    it('UNIT-COND-05: hasSolarPanels=false → no error on solarPanelDetails', () => {
+      const data = createBaseData();
+      data.additional.hasSolarPanels = false;
+      data.additional.solarPanelDetails = '';
+      const errors = validateEcStep('additional', data);
+      expect(errors).not.toHaveProperty('additionalSolarPanelDetails');
+    });
+
+    // UNIT-COND-06: hasSolarPanels=true + empty → error additionalSolarPanelDetails
+    it('UNIT-COND-06: hasSolarPanels=true + empty → error additionalSolarPanelDetails', () => {
+      const data = createBaseData();
+      data.additional.hasSolarPanels = true;
+      data.additional.solarPanelDetails = '';
+      const errors = validateEcStep('additional', data);
+      expect(errors).toHaveProperty('additionalSolarPanelDetails');
+      expect(errors.additionalSolarPanelDetails).toBe('Introduce los detalles de la instalación fotovoltaica');
+    });
+  });
 });

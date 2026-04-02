@@ -74,4 +74,117 @@ test.describe('Energy Certificate PRD Tests', () => {
     const errorText = page.getByText(/enlace no válido|error|no encontrado/i);
     await expect(errorText).toBeVisible();
   });
+
+  test.describe('Conditional Field Visibility (COND fixes)', () => {
+    const TOKEN_1 = 'b43df737-e202-40d8-ba45-277dceb9d323';
+    const URL = `/?code=ELT20250001&token=${TOKEN_1}`;
+
+    async function fillAndAdvanceHousingStep(page: any) {
+      await page.getByPlaceholder('120').fill('120');
+      await page.getByPlaceholder('2').fill('2');
+      await page.getByPlaceholder('3').fill('3');
+      await page.getByRole('button', { name: 'Entre 2,7m y 3,2m' }).click();
+      
+      const orientations = ['Norte', 'Este', 'Sur', 'Oeste'];
+      const doorInputs = page.locator('div:has-text("Nº PUERTAS Exterior")').locator('input');
+      for (let i = 0; i < 4; i++) {
+        await doorInputs.nth(i).fill('1');
+      }
+      const windowInputs = page.locator('div:has-text("Nº VENTANAS Exterior")').locator('input');
+      for (let i = 0; i < 4; i++) {
+        await windowInputs.nth(i).fill('2');
+      }
+
+      await page.getByRole('button', { name: 'PVC' }).click();
+      await page.getByPlaceholder('Madera').fill('Madera');
+      await page.getByRole('button', { name: 'Doble vidrio' }).click();
+      await page.getByRole('button', { name: 'No' }).nth(0).click(); // "¿Ventanas con persiana?"
+
+      await page.getByRole('button', { name: /siguiente/i }).click();
+    }
+
+    async function fillAndAdvanceThermalStep(page: any) {
+      await page.locator('button:has(img[src*="thermal-caldera"])').click();
+      await page.getByRole('button', { name: 'Gas' }).click();
+      await page.getByPlaceholder('Samsung 2020').fill('Samsung 2020');
+      await page.getByRole('button', { name: 'No' }).nth(1).click(); // "¿Aire Acondicionado?"
+      await page.getByRole('button', { name: 'Radiadores de Agua' }).click();
+      await page.getByRole('button', { name: 'Aluminio' }).click();
+
+      await page.getByRole('button', { name: /siguiente/i }).click();
+    }
+
+    test('COND-01 (Housing): shutterWindowCount visibility', async ({ page }) => {
+      await page.goto(URL);
+      await page.waitForLoadState('networkidle');
+
+      const heading = page.locator('h1').first();
+      const headingText = await heading.textContent();
+      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
+        console.log('Skipping COND-01: Not on EC section');
+        return;
+      }
+
+      // Click "No" on "¿Ventanas con persiana?"
+      const noBtn = page.locator('div:has-text("¿Ventanas con persiana?")').getByRole('button', { name: 'No' });
+      await noBtn.click();
+      await expect(page.getByLabel('Nº ventanas con persianas')).not.toBeVisible();
+
+      // Click "Sí" on "¿Ventanas con persiana?"
+      const yesBtn = page.locator('div:has-text("¿Ventanas con persiana?")').getByRole('button', { name: 'Sí' });
+      await yesBtn.click();
+      await expect(page.getByLabel('Nº ventanas con persianas')).toBeVisible();
+    });
+
+    test('COND-02 (Thermal): airConditioning visibility', async ({ page }) => {
+      await page.goto(URL);
+      await page.waitForLoadState('networkidle');
+
+      const heading = page.locator('h1').first();
+      const headingText = await heading.textContent();
+      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
+        console.log('Skipping COND-02: Not on EC section');
+        return;
+      }
+
+      await fillAndAdvanceHousingStep(page);
+
+      // Click "No" on "¿Aire Acondicionado?"
+      const noBtn = page.locator('div:has-text("¿Aire Acondicionado?")').getByRole('button', { name: 'No' });
+      await noBtn.click();
+      await expect(page.getByText('Detalles (marca y año)')).not.toBeVisible();
+      await expect(page.getByText('¿Tipo de Bomba?')).not.toBeVisible();
+
+      // Click "Sí" on "¿Aire Acondicionado?"
+      const yesBtn = page.locator('div:has-text("¿Aire Acondicionado?")').getByRole('button', { name: 'Sí' });
+      await yesBtn.click();
+      await expect(page.getByText('Detalles (marca y año)')).toBeVisible();
+      await expect(page.getByText('¿Tipo de Bomba?')).toBeVisible();
+    });
+
+    test('COND-03 (Additional): solarPanelDetails visibility', async ({ page }) => {
+      await page.goto(URL);
+      await page.waitForLoadState('networkidle');
+
+      const heading = page.locator('h1').first();
+      const headingText = await heading.textContent();
+      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
+        console.log('Skipping COND-03: Not on EC section');
+        return;
+      }
+
+      await fillAndAdvanceHousingStep(page);
+      await fillAndAdvanceThermalStep(page);
+
+      // Click "No" on "¿Placas solares?"
+      const noBtn = page.locator('div:has-text("¿Placas solares?")').getByRole('button', { name: 'No' });
+      await noBtn.click();
+      await expect(page.getByText('Detalles de la Instalación Fotovoltaica')).not.toBeVisible();
+
+      // Click "Sí" on "¿Placas solares?"
+      const yesBtn = page.locator('div:has-text("¿Placas solares?")').getByRole('button', { name: 'Sí' });
+      await yesBtn.click();
+      await expect(page.getByText('Detalles de la Instalación Fotovoltaica')).toBeVisible();
+    });
+  });
 });

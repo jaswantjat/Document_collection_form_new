@@ -6,18 +6,21 @@
 
 ---
 
-## 📋 Current Status — All Green ✅
+## 📋 Current Status — Cycle 5 In Progress ⏳
 
 | Layer | Suite | Tests | Status |
 |---|---|---|---|
 | Unit (Vitest) | Energy Certificate Validation | 10/10 | ✅ |
+| Unit (Vitest) | Conditional Visibility Mirror | 6/6 | ⏳ Pending |
 | Unit (Vitest) | Phone Parsing (`parsePhone`) | 7/7 | ✅ |
 | E2E (Playwright) | Smoke | 3/3 | ✅ |
 | E2E (Playwright) | Form Navigation | 2/2 | ✅ |
 | E2E (Playwright) | Form Diagnosis (T01–T12) | 12/12 | ✅ |
 | E2E (Playwright) | Energy Certificate PRD | 4/4 | ✅ |
+| E2E (Playwright) | Conditional Visibility (COND fixes) | 3/3 | ⏳ Pending |
 | E2E (Playwright) | Bug Regressions | 3/3 | ✅ |
-| **Total** | | **41/41** | ✅ |
+| **Existing total** | | **41/41** | ✅ |
+| **New total (after Cycle 5)** | | **50/50** | ⏳ Pending |
 
 ---
 
@@ -124,6 +127,42 @@ New tests added by **Coding Agent** from PRD & bug-fix docs:
 
 ---
 
+### Fix — Conditional Field Visibility (2026-04-02, commit 0bb7801)
+
+> Applied by: **Orchestrator (Main Agent)** · 3 UI rendering bugs fixed in `EnergyCertificateSection.tsx`
+
+| Bug ID | Field | Was | Now |
+|---|---|---|---|
+| BUG-COND-01 | `shutterWindowCount` (housing) | Always rendered | Only when `hasShutters === true` |
+| BUG-COND-02 | `airConditioningDetails` + `airConditioningType` (thermal) | Always rendered | Only when `hasAirConditioning === true` |
+| BUG-COND-03 | `solarPanelDetails` (additional) | Always rendered | Only when `hasSolarPanels === true` |
+
+Note: Validation logic was already correct — only the JSX rendering was wrong.
+
+---
+
+### Cycle 5 — Conditional Visibility Verification (2026-04-02) ⏳
+
+> Run by: **QA Agent** · **In progress — awaiting test run**
+
+New tests being added by **Coding Agent** (TASK-CODING-1):
+- `app/src/lib/energyCertificateValidation.test.ts` — 6 new unit tests (UNIT-COND-01 to 06)
+- `tests/e2e/energy-certificate.spec.ts` — 3 new E2E tests (COND-01, COND-02, COND-03)
+
+| Test ID | Suite | Description | Expected |
+|---|---|---|---|
+| UNIT-COND-01 | Unit | hasShutters=false → no shutterWindowCount error | ⏳ |
+| UNIT-COND-02 | Unit | hasShutters=true + empty count → error | ⏳ |
+| UNIT-COND-03 | Unit | hasAirConditioning=false → no AC field errors | ⏳ |
+| UNIT-COND-04 | Unit | hasAirConditioning=true + empty fields → errors on both | ⏳ |
+| UNIT-COND-05 | Unit | hasSolarPanels=false → no solarPanelDetails error | ⏳ |
+| UNIT-COND-06 | Unit | hasSolarPanels=true + empty → error | ⏳ |
+| COND-01 | E2E | Housing: shutterWindowCount hidden/shown by hasShutters toggle | ⏳ |
+| COND-02 | E2E | Thermal: AC fields hidden/shown by hasAirConditioning toggle | ⏳ |
+| COND-03 | E2E | Additional: solarPanelDetails hidden/shown by hasSolarPanels toggle | ⏳ |
+
+---
+
 ## 🐛 Issues Found & Fixed
 
 | Issue ID | Description | Found | Fixed | Files |
@@ -132,6 +171,9 @@ New tests added by **Coding Agent** from PRD & bug-fix docs:
 | BUG-T08-B | Auth header `x-token` → `x-project-token` | Cycle 1 | Cycle 2 | `tests/e2e/form-diagnosis.spec.ts` |
 | BUG-T08-C | Missing request timeout → added `timeout: 30000` | Cycle 1 | Cycle 2 | `tests/e2e/form-diagnosis.spec.ts` |
 | BUG-REG-03 | Test expected HTTP 200 for not-found phone; backend correctly returns 404 | Cycle 3 | Cycle 4 | `tests/e2e/bug-regressions.spec.ts` |
+| BUG-COND-01 | `shutterWindowCount` always visible — should only show when `hasShutters === true` | Code review | FIX-3 | `app/src/sections/EnergyCertificateSection.tsx` |
+| BUG-COND-02 | `airConditioningDetails` + `airConditioningType` always visible — should only show when `hasAirConditioning === true` | Code review | FIX-3 | `app/src/sections/EnergyCertificateSection.tsx` |
+| BUG-COND-03 | `solarPanelDetails` always visible — should only show when `hasSolarPanels === true` | Code review | FIX-3 | `app/src/sections/EnergyCertificateSection.tsx` |
 
 ---
 
