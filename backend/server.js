@@ -204,7 +204,16 @@ const upload = multer({
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function normalizePhone(p) {
   if (!p) return '';
-  return p.replace(/[\s\-().]/g, '').replace(/^0034/, '+34').replace(/^(?=\d{9}$)/, '+34').replace(/^34(?=\d{9}$)/, '+34');
+  // Strip spaces, dashes, dots, parentheses — preserve + and digits
+  let clean = p.replace(/[\s\-().]/g, '');
+  // Convert any 00XX international prefix → +XX (covers 0034, 0044, 0033, etc.)
+  if (/^00\d/.test(clean)) clean = '+' + clean.slice(2);
+  // Convert bare 34 + 9-digit Spanish number → +34XXXXXXXXX
+  if (/^34\d{9}$/.test(clean)) return '+' + clean;
+  // Convert bare 9-digit Spanish number (starts 6-9) → +34XXXXXXXXX
+  if (/^\d{9}$/.test(clean) && /^[6-9]/.test(clean)) return '+34' + clean;
+  // Already in +CC…  format or other — return as-is
+  return clean;
 }
 
 function getEffectiveLocation(formData) {

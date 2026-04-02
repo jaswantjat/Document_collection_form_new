@@ -53,3 +53,38 @@ An independent testing agent verified the fix from first principles:
 - Safety-net uses `isValidIdentityNumber()`, not document-type keywords
 - No hard-rejection for uncertain documents — flags for manual review instead
 - All secondary prompts (`dniAuto`, `dniFront`) also updated consistently
+
+---
+
+# Fix: International Phone Numbers in Phone Lookup Step
+
+**Date:** 2026-04-02
+
+## Problem
+
+The phone number entry step only accepted Spanish phone numbers (9 digits starting with 6, 7, 8, or 9). International clients from outside Spain could not enter their number, blocking them from the whole form.
+
+## Fix
+
+### Frontend — `app/src/sections/PhoneSection.tsx`
+
+Replaced `parseSpanishPhone()` with `parsePhone()` which accepts:
+- Spanish 9-digit numbers (with or without `+34` / `0034` prefix)
+- Any international E.164 format (`+CC...` with 7–15 digits)
+- Any `00CC...` international prefix
+
+Updated UI: placeholder now shows `+34 600 000 000 / +44 7700 900000`, `maxLength` raised to 20.
+
+### Backend — `backend/server.js`
+
+Rewrote `normalizePhone()` to handle:
+- Generic `00XX` international prefix → converted to `+XX` (previously only `0034` was handled)
+- Bare 9-digit Spanish numbers → `+34XXXXXXXXX`
+- `34XXXXXXXXX` → `+34XXXXXXXXX`
+- Anything already starting with `+` → passed through
+
+All phone numbers are stored in E.164 format, so lookup consistency is maintained across different input formats.
+
+## Verified (independent QA agent)
+
+All test cases passed including Spanish shorthand, UK `+44`, French `+33`, US `+1`, and `00XX` international prefixes. Normalization is consistent between frontend and backend.
