@@ -2,6 +2,8 @@ const path = require('path');
 const dotenv = require('dotenv');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
@@ -50,10 +52,58 @@ if (!initialOpenRouterApiKey) {
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
 }
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite-preview';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash';
+
+// ── Startup env-var validation ──────────────────────────────────────────────
+if (isProduction) {
+  const required = ['OPENROUTER_API_KEY', 'DASHBOARD_PASSWORD'];
+  const missing = required.filter((k) => !process.env[k] || process.env[k] === 'your_openrouter_api_key_here');
+  if (missing.length > 0) {
+    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    console.error('   Server cannot start in production without these values.');
+    process.exit(1);
+  }
+}
+
+// ── Rate limiters (only enforce in production to keep tests fast) ───────────
+const aiExtractLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  skip: () => !isProduction,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests. Please try again in a minute.' },
+});
+
+const pdfLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  skip: () => !isProduction,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests. Please try again in a minute.' },
+});
+
+// ── CORS allowed origins ────────────────────────────────────────────────────
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : null;
 
 // Middleware
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'] }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(cors({
+  origin: allowedOrigins
+    ? (origin, cb) => {
+        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+        cb(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    : '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'],
+}));
 app.use(express.json({ limit: '25mb' }));
 app.use('/uploads', express.static(uploadDir));
 
@@ -1043,7 +1093,7 @@ function getStirlingApiKey() {
   return process.env.STIRLING_PDF_API_KEY || null;
 }
 
-app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
+app.post('/api/pdf-to-images', pdfLimiter, pdfUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No se recibió ningún archivo PDF.' });
@@ -1426,7 +1476,7 @@ function normalizeIdentityExtraction(item) {
 }
 
 
-app.post('/api/extract', async (req, res) => {
+app.post('/api/extract', aiExtractLimiter, async (req, res) => {
   const { imageBase64, imagesBase64, documentType } = req.body;
   // Accept either a single image or an array of images (multi-page PDFs)
   const imagesToSend = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0
@@ -1557,7 +1607,7 @@ app.post('/api/extract', async (req, res) => {
 });
 
 // ── Batch extraction (multiple images → single AI call) ───────────────────────────────
-app.post('/api/extract-batch', async (req, res) => {
+app.post('/api/extract-batch', aiExtractLimiter, async (req, res) => {
   const { imagesBase64, documentType } = req.body;
   if (!Array.isArray(imagesBase64) || imagesBase64.length === 0 || !documentType) {
     return res.status(400).json({ success: false, message: 'Faltan imagesBase64 o documentType.' });
@@ -1673,7 +1723,7 @@ app.post('/api/extract-batch', async (req, res) => {
   }
 });
 
-app.post('/api/extract-dni-batch', async (req, res) => {
+app.post('/api/extract-dni-batch', aiExtractLimiter, async (req, res) => {
   const { imagesBase64 } = req.body;
   if (!Array.isArray(imagesBase64) || imagesBase64.length === 0) {
     return res.status(400).json({ success: false, message: 'Faltan imagesBase64.' });
@@ -2208,6 +2258,17 @@ if (isProduction) {
     logLevel: 'silent',
   }));
 }
+
+// ── Global error handler ────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  const message = isProduction ? 'Internal server error' : (err.message || 'Internal server error');
+  console.error(`[ERROR] ${req.method} ${req.path} → ${status}: ${err.message}`);
+  if (!res.headersSent) {
+    res.status(status).json({ success: false, error: message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

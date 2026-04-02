@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Current Status — Cycle 6 Complete ✅
+## 📋 Current Status — Cycle 7 Complete ✅
 
 | Layer | Suite | Tests | Status |
 |---|---|---|---|
@@ -20,9 +20,11 @@
 | E2E (Playwright) | Conditional Visibility (COND-01–03) | 3/3 | ✅ |
 | E2E (Playwright) | EC Flow (E2E-FLOW-01–02) | 2/2 | ✅ |
 | E2E (Playwright) | Bug Regressions | 3/3 | ✅ |
+| E2E (Playwright) | API Coverage (API-01–03) | 3/3 | ✅ |
+| E2E (Playwright) | Mobile Viewport (E2E-MOBILE-01) | 1/1 | ✅ |
 | **Unit total** | | **23/23** | ✅ |
-| **E2E total** | | **29/29** | ✅ |
-| **Grand total** | | **52/52** | ✅ |
+| **E2E total** | | **33/33** | ✅ |
+| **Grand total** | | **56/56** | ✅ |
 
 ---
 
@@ -140,6 +142,28 @@ New tests added by **Coding Agent** from PRD & bug-fix docs:
 | BUG-COND-03 | `solarPanelDetails` (additional) | Always rendered | Only when `hasSolarPanels === true` |
 
 Note: Validation logic was already correct — only the JSX rendering was wrong.
+
+---
+
+### Cycle 7 — Production Readiness + Text Overlay Fix (2026-04-02) ✅
+
+> Run by: **Main Agent (Orchestrator)** · **56/56 PASS**
+
+Changes in this cycle:
+- Backend: Added `helmet`, `express-rate-limit`, global error handler, startup env-var validation
+- Backend: Changed AI model default to stable `google/gemini-2.0-flash`
+- Frontend: Fixed `SignedDocumentPreview` using full-res render (1.0) → now uses fast preview (0.25 scale)
+- Frontend: Added `useDebounce` hook; signature state debounced at 400ms to prevent mid-stroke re-renders
+- Frontend: Added `preloadDocumentTemplates` on mount for instant first render
+- Tests: Added `api-coverage.spec.ts` (API-01, API-02, API-03) and `mobile.spec.ts` (E2E-MOBILE-01)
+
+| Test ID | Suite | Description | Result |
+|---|---|---|---|
+| API-01 | API Coverage | POST /save with valid token → 200 | ✅ |
+| API-02 | API Coverage | POST /save with invalid token → 401/403 | ✅ |
+| API-03 | API Coverage | GET /download-zip → ZIP response | ✅ |
+| E2E-MOBILE-01 | Mobile | 375×667 viewport: form renders without overflow | ✅ |
+| All previous | — | 52 existing tests | ✅ |
 
 ---
 

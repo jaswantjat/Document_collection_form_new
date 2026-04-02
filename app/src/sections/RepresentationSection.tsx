@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { SignaturePad } from '@/components/SignaturePad';
 import type { FormData, RenderedDocumentAsset, RepresentationData, LocationRegion } from '@/types';
 import {
   createRenderedDocumentAsset,
   renderedDocumentKeyForKind,
-  renderSignedDocumentOverlay,
+  renderSignedDocumentPreview,
+  preloadDocumentTemplates,
   type SignedDocumentKind,
 } from '@/lib/signedDocumentOverlays';
 
@@ -56,7 +58,7 @@ function SignedDocumentPreview({
     setLoading(true);
     setImageDataUrl(null);
 
-    renderSignedDocumentOverlay({ formData }, kind)
+    renderSignedDocumentPreview({ formData }, kind)
       .then((image) => {
         if (!cancelled) {
           setImageDataUrl(image);
@@ -105,24 +107,35 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const applyingRef = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
+  // Debounce signature updates so the preview re-renders at most once per 400ms
+  // instead of on every signature stroke, keeping the UI responsive while signing.
+  const debouncedSignature = useDebounce(sharedSignature, 400);
+
+  // Preload document templates as soon as the section mounts.
+  // This warms the image cache so the first render is instant rather than
+  // waiting for the large PNG/JPG to decode after the user starts signing.
+  useEffect(() => {
+    preloadDocumentTemplates(docs.map((d) => d.kind));
+  }, [docs]);
+
   const previewFormData = useMemo<FormData>(() => {
-    if (!sharedSignature) return formData;
+    if (!debouncedSignature) return formData;
     const isCataluna = location === 'cataluna';
     const signaturePatch: Partial<RepresentationData> = isCataluna
       ? {
-          ivaCertificateSignature: sharedSignature,
-          generalitatSignature: sharedSignature,
-          representacioSignature: sharedSignature,
+          ivaCertificateSignature: debouncedSignature,
+          generalitatSignature: debouncedSignature,
+          representacioSignature: debouncedSignature,
         }
       : {
-          ivaCertificateEsSignature: sharedSignature,
-          poderRepresentacioSignature: sharedSignature,
+          ivaCertificateEsSignature: debouncedSignature,
+          poderRepresentacioSignature: debouncedSignature,
         };
     return {
       ...formData,
       representation: { ...formData.representation, ...signaturePatch },
     };
-  }, [formData, sharedSignature, location]);
+  }, [formData, debouncedSignature, location]);
 
   const handleCarouselScroll = useCallback(() => {
     if (!carouselRef.current) return;
