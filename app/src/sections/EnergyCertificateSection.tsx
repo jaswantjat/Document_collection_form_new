@@ -597,20 +597,20 @@ export function EnergyCertificateSection({
                 error={errors.housingWindowGlassType}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <YesNoField
-                  label="¿Ventanas con persiana?"
-                  value={data.housing.hasShutters}
-                  onChange={(value) => mutate((prev) => ({
-                    ...prev,
-                    housing: {
-                      ...prev.housing,
-                      hasShutters: value,
-                      shutterWindowCount: value ? prev.housing.shutterWindowCount : '0',
-                    },
-                  }))}
-                  error={errors.housingHasShutters}
-                />
+              <YesNoField
+                label="¿Ventanas con persiana?"
+                value={data.housing.hasShutters}
+                onChange={(value) => mutate((prev) => ({
+                  ...prev,
+                  housing: {
+                    ...prev.housing,
+                    hasShutters: value,
+                    shutterWindowCount: value ? prev.housing.shutterWindowCount : '0',
+                  },
+                }))}
+                error={errors.housingHasShutters}
+              />
+              {data.housing.hasShutters === true && (
                 <Field
                   label="Nº ventanas con persianas"
                   value={data.housing.shutterWindowCount}
@@ -619,7 +619,7 @@ export function EnergyCertificateSection({
                   error={errors.housingShutterWindowCount}
                   type="number"
                 />
-              </div>
+              )}
             </div>
           )}
 
@@ -668,37 +668,38 @@ export function EnergyCertificateSection({
                 error={errors.thermalEquipmentDetails}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <YesNoField
-                  label="¿Aire Acondicionado?"
-                  value={data.thermal.hasAirConditioning}
-                  onChange={(value) => mutate((prev) => ({
-                    ...prev,
-                    thermal: {
-                      ...prev.thermal,
-                      hasAirConditioning: value,
-                      airConditioningType: value ? prev.thermal.airConditioningType : null,
-                      airConditioningDetails: value ? prev.thermal.airConditioningDetails : '',
-                    },
-                  }))}
-                  error={errors.thermalHasAirConditioning}
-                />
-                <Field
-                  label="Detalles (marca y año)"
-                  value={data.thermal.airConditioningDetails}
-                  onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningDetails: value } }))}
-                  placeholder="Marca y año"
-                  error={errors.thermalAirConditioningDetails}
-                />
-              </div>
-
-              <SegmentedOptions
-                label="¿Tipo de Bomba?"
-                options={AIR_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={data.thermal.airConditioningType}
-                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningType: value as EnergyCertificateData['thermal']['airConditioningType'] } }))}
-                error={errors.thermalAirConditioningType}
+              <YesNoField
+                label="¿Aire Acondicionado?"
+                value={data.thermal.hasAirConditioning}
+                onChange={(value) => mutate((prev) => ({
+                  ...prev,
+                  thermal: {
+                    ...prev.thermal,
+                    hasAirConditioning: value,
+                    airConditioningType: value ? prev.thermal.airConditioningType : null,
+                    airConditioningDetails: value ? prev.thermal.airConditioningDetails : '',
+                  },
+                }))}
+                error={errors.thermalHasAirConditioning}
               />
+              {data.thermal.hasAirConditioning === true && (
+                <>
+                  <Field
+                    label="Detalles (marca y año)"
+                    value={data.thermal.airConditioningDetails}
+                    onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningDetails: value } }))}
+                    placeholder="Marca y año"
+                    error={errors.thermalAirConditioningDetails}
+                  />
+                  <SegmentedOptions
+                    label="¿Tipo de Bomba?"
+                    options={AIR_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                    value={data.thermal.airConditioningType}
+                    onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, airConditioningType: value as EnergyCertificateData['thermal']['airConditioningType'] } }))}
+                    error={errors.thermalAirConditioningType}
+                  />
+                </>
+              )}
 
               <SegmentedOptions
                 label="Tipo de Calefacción"
@@ -803,13 +804,15 @@ export function EnergyCertificateSection({
                 />
               </div>
 
-              <TextAreaField
-                label="Detalles de la Instalación Fotovoltaica"
-                value={data.additional.solarPanelDetails}
-                onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, solarPanelDetails: value } }))}
-                placeholder="Número de placas, potencia y fecha de instalación"
-                error={errors.additionalSolarPanelDetails}
-              />
+              {data.additional.hasSolarPanels === true && (
+                <TextAreaField
+                  label="Detalles de la Instalación Fotovoltaica"
+                  value={data.additional.solarPanelDetails}
+                  onChange={(value) => mutate((prev) => ({ ...prev, additional: { ...prev.additional, solarPanelDetails: value } }))}
+                  placeholder="Número de placas, potencia y fecha de instalación"
+                  error={errors.additionalSolarPanelDetails}
+                />
+              )}
             </div>
           )}
 
