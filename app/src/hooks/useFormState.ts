@@ -324,17 +324,15 @@ export const useFormState = (
     if (!projectCode) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      // Strip large binary fields so the payload stays small (photos are persisted
+      // device-locally in IndexedDB and restored on load from there).
       const cleanData = JSON.parse(JSON.stringify(formData, (_key, value) => {
         if (value instanceof File) return undefined;
+        if (_key === 'preview') return undefined;       // UploadedPhoto binary (~1-5 MB each)
+        if (_key === 'dataUrl') return undefined;       // StoredDocumentFile binary (PDF data)
+        if (_key === 'imageDataUrl') return undefined;  // RenderedDocumentAsset base64
         return value;
       }));
-      if (cleanData?.representation?.renderedDocuments) {
-        for (const asset of Object.values(cleanData.representation.renderedDocuments as Record<string, { imageDataUrl?: string }>)) {
-          if (asset && typeof asset === 'object' && 'imageDataUrl' in asset) {
-            delete asset.imageDataUrl;
-          }
-        }
-      }
       saveProgress(projectCode, cleanData, projectToken).catch((err: unknown) => {
         console.error('[useFormState] Auto-save failed:', err);
         toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {

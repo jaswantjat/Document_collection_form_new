@@ -187,11 +187,78 @@ function FormApp() {
           const idbBackup = localBackup ? null : await readIndexedDBBackup(urlCode);
           const bestBackup = localBackup ?? idbBackup;
 
-          if (bestBackup && bestBackup.savedAt > serverTs + 500) {
-            normalizedProject = {
-              ...normalizedProject,
-              formData: normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]),
-            };
+          if (bestBackup) {
+            const backupFd = normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]);
+
+            if (bestBackup.savedAt > serverTs + 500) {
+              // Backup is significantly newer than server — use it for everything
+              // (e.g. user changed something and reloaded before server auto-save fired).
+              normalizedProject = { ...normalizedProject, formData: backupFd };
+            } else {
+              // Server is up-to-date for form state, but photos are stripped from server
+              // saves to keep payloads small. Restore photo binary data from local backup.
+              const serverFd = normalizedProject.formData;
+              const hasPreview = (p: { preview?: string } | null | undefined) => !!p?.preview;
+              const hasDataUrl = (f: { dataUrl?: string } | null | undefined) => !!f?.dataUrl;
+
+              normalizedProject = {
+                ...normalizedProject,
+                formData: normalizeFormData({
+                  ...serverFd,
+                  dni: {
+                    ...serverFd?.dni,
+                    front: {
+                      ...serverFd?.dni?.front,
+                      photo: hasPreview(backupFd.dni?.front?.photo)
+                        ? backupFd.dni.front.photo
+                        : serverFd?.dni?.front?.photo ?? null,
+                    },
+                    back: {
+                      ...serverFd?.dni?.back,
+                      photo: hasPreview(backupFd.dni?.back?.photo)
+                        ? backupFd.dni.back.photo
+                        : serverFd?.dni?.back?.photo ?? null,
+                    },
+                    originalPdfs: backupFd.dni?.originalPdfs?.some(hasDataUrl)
+                      ? backupFd.dni.originalPdfs
+                      : serverFd?.dni?.originalPdfs ?? [],
+                  },
+                  ibi: {
+                    ...serverFd?.ibi,
+                    photo: hasPreview(backupFd.ibi?.photo)
+                      ? backupFd.ibi.photo
+                      : serverFd?.ibi?.photo ?? null,
+                    pages: backupFd.ibi?.pages?.some(hasPreview)
+                      ? backupFd.ibi.pages
+                      : serverFd?.ibi?.pages ?? [],
+                    originalPdfs: backupFd.ibi?.originalPdfs?.some(hasDataUrl)
+                      ? backupFd.ibi.originalPdfs
+                      : serverFd?.ibi?.originalPdfs ?? [],
+                  },
+                  electricityBill: {
+                    ...serverFd?.electricityBill,
+                    pages: backupFd.electricityBill?.pages?.some((p) => hasPreview(p?.photo))
+                      ? backupFd.electricityBill.pages
+                      : serverFd?.electricityBill?.pages ?? [],
+                    originalPdfs: backupFd.electricityBill?.originalPdfs?.some(hasDataUrl)
+                      ? backupFd.electricityBill.originalPdfs
+                      : serverFd?.electricityBill?.originalPdfs ?? [],
+                  },
+                  contract: {
+                    ...serverFd?.contract,
+                    originalPdfs: backupFd.contract?.originalPdfs?.some(hasDataUrl)
+                      ? backupFd.contract.originalPdfs
+                      : serverFd?.contract?.originalPdfs ?? [],
+                  },
+                  energyCertificate: {
+                    ...serverFd?.energyCertificate,
+                    renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
+                      ? backupFd.energyCertificate.renderedDocument
+                      : serverFd?.energyCertificate?.renderedDocument ?? null,
+                  },
+                }),
+              };
+            }
           }
 
           setProject(normalizedProject);
