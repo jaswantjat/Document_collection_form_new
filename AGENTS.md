@@ -91,7 +91,7 @@ AGENTS.md                   → This file (living memory)
 | `ALLOWED_ORIGINS` | Replit Secrets | Comma-separated CORS whitelist (optional; `*` in dev) |
 | `PORT` | optional | Backend port (default 3001) |
 | `DATA_DIR` | optional | Where db.json + uploads live (default: `backend/`) |
-| `OPENROUTER_MODEL` | optional | AI model (default: `google/gemini-2.0-flash`) |
+| `OPENROUTER_MODEL` | optional | AI model (default: `google/gemini-3.1-flash-lite-preview`) |
 | `NODE_ENV` | set by Railway | `production` enables strict mode |
 | `SEED_SAMPLE_DATA` | optional | Set to `false` to skip seeding test projects |
 
@@ -169,7 +169,7 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Rate limiting on AI extraction and PDF endpoints (skipped in dev)
   - Global error handler middleware
   - Startup env-var validation (exits in prod if required keys missing)
-  - Changed AI model default to stable `google/gemini-2.0-flash`
+  - Changed AI model default to `google/gemini-3.1-flash-lite-preview`
   - Files: `backend/server.js`, `backend/package.json`
 
 - **[2026-04-02] Text Overlay Rendering Performance**

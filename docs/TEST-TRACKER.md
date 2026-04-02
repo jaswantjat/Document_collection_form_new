@@ -151,7 +151,7 @@ Note: Validation logic was already correct — only the JSX rendering was wrong.
 
 Changes in this cycle:
 - Backend: Added `helmet`, `express-rate-limit`, global error handler, startup env-var validation
-- Backend: Changed AI model default to stable `google/gemini-2.0-flash`
+- Backend: AI model default is `google/gemini-3.1-flash-lite-preview`
 - Frontend: Fixed `SignedDocumentPreview` using full-res render (1.0) → now uses fast preview (0.25 scale)
 - Frontend: Added `useDebounce` hook; signature state debounced at 400ms to prevent mid-stroke re-renders
 - Frontend: Added `preloadDocumentTemplates` on mount for instant first render

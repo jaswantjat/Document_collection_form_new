@@ -34,7 +34,7 @@
 |---|-----|----------|--------|-----|
 | REL-01 | No global error-handling middleware — unhandled errors return HTML | High | ✅ Done | Added `app.use((err, req, res, next) => ...)` handler |
 | REL-02 | No startup env-var validation — missing keys fail at runtime | High | ✅ Done | Startup check exits process if required vars absent |
-| REL-03 | `OPENROUTER_MODEL` defaults to a `preview` model | Med | ✅ Done | Default changed to stable `google/gemini-2.0-flash` |
+| REL-03 | `OPENROUTER_MODEL` model ID | Med | ✅ Done | Default set to `google/gemini-3.1-flash-lite-preview` |
 
 ### Code Quality
 
@@ -70,7 +70,7 @@ From `docs/TEST-TRACKER.md` § Coverage Gaps:
 - Added `pdfLimiter` (20 req/min) on `/api/pdf-to-images` — skipped in dev (SEC-04)
 - Added global error handler middleware at end of `backend/server.js` (REL-01)
 - Added startup env-var validation block (exits in prod if required keys missing) (REL-02)
-- Changed `OPENROUTER_MODEL` default from `google/gemini-3.1-flash-lite-preview` → `google/gemini-2.0-flash` (REL-03)
+- `OPENROUTER_MODEL` default: `google/gemini-3.1-flash-lite-preview` (REL-03)
 - Dashboard password fallback `'eltex2025'` already gated by `!isProduction` — confirmed correct (SEC-05)
 
 **Files changed:** `backend/server.js`, `backend/package.json`

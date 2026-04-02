@@ -14,7 +14,7 @@
 - Rate limiting on AI extraction and PDF endpoints (skipped in dev)
 - Global error handler middleware added
 - Startup env-var validation (exits in prod if required keys missing)
-- Changed AI model default to stable `google/gemini-2.0-flash`
+- AI model: `google/gemini-3.1-flash-lite-preview` (override via `OPENROUTER_MODEL` env var)
 - Fixed text overlay preview: switched from full-res (1.0 scale) to preview scale (0.25) — eliminated 300–600ms freeze
 - Added `useDebounce` hook (400ms) to prevent mid-stroke re-renders
 - Added `preloadDocumentTemplates` on mount for instant first render
