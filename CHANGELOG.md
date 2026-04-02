@@ -1,6 +1,31 @@
 # CHANGELOG
-> This is the AI agent's handoff log. Every session must append an entry here before finishing.
-> Format: `[Date] [Phase] — What was done — Files changed — What's next`
+
+## 2026-04-02 — Session: Representació Field Alignment Fix
+
+**Phase**: Developer
+
+**Root cause:**
+Pixel-level analysis of `autoritzacio-representacio.jpg` (1241×1754 px) revealed that all persona and empresa field box tops were 8–12px above the actual template content rows. With `textBaseline='top'`, this caused user-filled blue text to appear slightly elevated above where the template's printed labels sit — text was floating above the fill line rather than sitting on it.
+
+**What was done:**
+- Scanned the template at full resolution using jimp pixel analysis to find exact y-coordinates of each content row
+- Confirmed x-coordinates are correct (e.g., personaNom x=388 sits 25px after the label ends at x≈363 — correct gap)
+- Updated all 10 REPRESENTACIO_FIELDS y-coordinates to match actual pixel rows:
+  - personaNom/personaNif: 244 → 252 (+8px)
+  - personaAdreca/personaCodiPostal: 282 → 291 (+9px)
+  - personaMunicipi: 321 → 333 (+12px)
+  - empresaNom/empresaNif: 438 → 449 (+11px)
+  - empresaAdreca/empresaCodiPostal: 476 → 484 (+8px)
+  - empresaMunicipi: 515 → 527 (+12px)
+  - lloc/data/signaturaPersonaInteressada: unchanged (already correctly positioned)
+- Bumped SIGNED_DOCUMENT_TEMPLATE_VERSION from '2026-04-01.2' to '2026-04-02.1' to force re-render of stored documents with old coordinates
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+
+**Test status:** TypeScript compiles cleanly (0 errors). No logic changed — coordinate values only.
+
+**What's next:** Task queue is empty.
 
 ---
 

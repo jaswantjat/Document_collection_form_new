@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-01.2';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-02.1';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -15,16 +15,16 @@ type Box = readonly [number, number, number, number];
 
 const REPRESENTACIO_PAGE_SIZE = { width: 1241, height: 1754 };
 const REPRESENTACIO_FIELDS = {
-  personaNom: [388, 244, 812, 276],
-  personaNif: [902, 244, 1095, 276],
-  personaAdreca: [190, 282, 812, 314],
-  personaCodiPostal: [979, 282, 1095, 314],
-  personaMunicipi: [202, 321, 812, 354],
-  empresaNom: [388, 438, 812, 470],
-  empresaNif: [902, 438, 1095, 470],
-  empresaAdreca: [190, 476, 812, 508],
-  empresaCodiPostal: [979, 476, 1095, 508],
-  empresaMunicipi: [202, 515, 812, 548],
+  personaNom: [388, 252, 812, 284],
+  personaNif: [902, 252, 1095, 284],
+  personaAdreca: [190, 291, 812, 323],
+  personaCodiPostal: [979, 291, 1095, 323],
+  personaMunicipi: [202, 333, 812, 365],
+  empresaNom: [388, 449, 812, 481],
+  empresaNif: [902, 449, 1095, 481],
+  empresaAdreca: [190, 484, 812, 516],
+  empresaCodiPostal: [979, 484, 1095, 516],
+  empresaMunicipi: [202, 527, 812, 559],
   lloc: [130, 1459, 560, 1496],
   data: [725, 1459, 1100, 1496],
   signaturaPersonaInteressada: [76, 1552, 575, 1685],

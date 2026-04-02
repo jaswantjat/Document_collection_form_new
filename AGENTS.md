@@ -234,6 +234,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - DASH-02 (`EnergyCertificatePanel` + table cell badge): shows "Saltado por cliente" label/badge when EC is skipped
   - No code changes needed
 
+- **[2026-04-02] Representació Field Alignment Fix**
+  - Pixel-level scan of `autoritzacio-representacio.jpg` (1241×1754 px) revealed all persona/empresa box tops were 8–12px above actual template content rows
+  - Adjusted REPRESENTACIO_FIELDS y-coordinates to match actual pixel rows (+8 to +12px per field)
+  - lloc/data/signature positions confirmed correct, left unchanged
+  - Bumped SIGNED_DOCUMENT_TEMPLATE_VERSION to '2026-04-02.1' to force re-render of stored docs
+  - File: `app/src/lib/signedDocumentOverlays.ts`
+
 - **[2026-04-02] False "connection issue" warnings on mobile (MOBILE-SAVE-01)**
   - Auto-save showed a toast warning on the VERY FIRST save failure — one mobile network blip triggered it
   - Added 10-second `AbortSignal.timeout` to `saveProgress` API call (was hanging forever)
