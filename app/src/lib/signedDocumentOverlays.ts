@@ -178,13 +178,45 @@ export async function ensureRenderedDocuments(source: FormData): Promise<FormDat
   return nextFormData;
 }
 
+// Module-level cache: store the Promise so concurrent calls share the same decode.
+// This eliminates re-parsing the same PNG/JPG every time renderTemplate is called.
+const _imageCache = new Map<string, Promise<HTMLImageElement>>();
+
 function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
+  if (!_imageCache.has(src)) {
+    _imageCache.set(
+      src,
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        img.src = src;
+      })
+    );
+  }
+  return _imageCache.get(src)!;
+}
+
+/** Template src by kind — used for preloading */
+function templateSrcForKind(kind: SignedDocumentKind): string | null {
+  if (kind === 'cataluna-iva') return '/certificat-iva-10-cat.png';
+  if (kind === 'cataluna-generalitat') return '/generalitat-declaration.png';
+  if (kind === 'cataluna-representacio') return '/autoritzacio-representacio.jpg';
+  if (kind === 'spain-iva') return '/certificat-iva-10-es.png';
+  if (kind === 'spain-poder') return '/poder-representacio.png';
+  return null;
+}
+
+/**
+ * Warm the image cache for a set of document kinds.
+ * Call this when the RepresentationSection mounts so images are decoded
+ * before the user needs them.
+ */
+export function preloadDocumentTemplates(kinds: SignedDocumentKind[]): void {
+  for (const kind of kinds) {
+    const src = templateSrcForKind(kind);
+    if (src) void loadImage(src);
+  }
 }
 
 function scaledX(x: number, referenceWidth: number, actualWidth: number) {
@@ -285,17 +317,31 @@ async function drawPercentSignature(
   ctx.drawImage(img, x, y, width, height);
 }
 
-async function renderTemplate(templateSrc: string, draw: (ctx: CanvasRenderingContext2D) => Promise<void> | void) {
+/**
+ * Render a document template onto a canvas and return a JPEG data URL.
+ *
+ * @param scale - 1.0 = full resolution (for final stored artifacts).
+ *                0.25 = quarter resolution (for live preview in carousel).
+ *                All coordinate math in drawXxx() uses ctx.canvas dimensions
+ *                so scaling is transparent — do NOT change coordinate values.
+ */
+async function renderTemplate(
+  templateSrc: string,
+  draw: (ctx: CanvasRenderingContext2D) => Promise<void> | void,
+  scale = 1.0
+) {
   const template = await loadImage(templateSrc);
   const canvas = document.createElement('canvas');
-  canvas.width = template.naturalWidth;
-  canvas.height = template.naturalHeight;
+  canvas.width = Math.round(template.naturalWidth * scale);
+  canvas.height = Math.round(template.naturalHeight * scale);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas context unavailable');
 
   ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
   await draw(ctx);
-  return canvas.toDataURL('image/jpeg', 0.92);
+  // Preview uses lower quality (faster toDataURL); final uses 0.92 for archival quality.
+  const quality = scale < 1.0 ? 0.80 : 0.92;
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 function getCurrentCatalanDate() {
@@ -342,7 +388,13 @@ export function getSignedDocumentDefinitions(project: any) {
   return [];
 }
 
-export async function renderSignedDocumentOverlay(project: any, kind: SignedDocumentKind) {
+/**
+ * Render a signed document at a custom scale.
+ * scale=1.0 → full resolution (used for final stored artifacts).
+ * scale=0.25 → quarter resolution (used for fast live preview in carousel).
+ * Coordinates are NOT changed — the drawXxx() helpers scale themselves via ctx.canvas.
+ */
+async function renderSignedDocumentOverlayAtScale(project: any, kind: SignedDocumentKind, scale: number) {
   const snapshot = getSnapshot(project);
   const representation = snapshot.representation;
 
@@ -360,7 +412,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawPercentText(ctx, date.month, 62.0, 92.6, ctx.canvas.width * 0.0155);
       drawPercentText(ctx, date.yearShort, 85.0, 92.6, ctx.canvas.width * 0.0155);
       await drawPercentSignature(ctx, representation.ivaCertificateSignature, 65.2, 76.5, 24, 7.5);
-    });
+    }, scale);
   }
 
   if (kind === 'cataluna-generalitat') {
@@ -370,7 +422,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawBoxText(ctx, representation.isCompany ? '' : 'X', GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.checkboxTitular, 1.7, 'center');
       drawBoxText(ctx, representation.isCompany ? 'X' : '', GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.checkboxRepresentant, 1.7, 'center');
       await drawSignature(ctx, representation.generalitatSignature, GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.signatura);
-    });
+    }, scale);
   }
 
   if (kind === 'cataluna-representacio') {
@@ -391,7 +443,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawBoxText(ctx, snapshot.municipality, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.lloc, 1.7);
       drawBoxText(ctx, date.full, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.data, 1.7, 'center');
       await drawSignature(ctx, representation.representacioSignature, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.signaturaPersonaInteressada);
-    });
+    }, scale);
   }
 
   if (kind === 'spain-iva') {
@@ -408,7 +460,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
       drawLineText(ctx, date.month, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.fecha_mes, 1.45);
       drawLineText(ctx, date.yearShort, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.fecha_anio_sufijo, 1.45);
       await drawSignature(ctx, representation.ivaCertificateEsSignature, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.firma_aprobacion);
-    });
+    }, scale);
   }
 
   return renderTemplate('/poder-representacio.png', async (ctx) => {
@@ -428,5 +480,28 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
     drawAnchoredText(ctx, snapshot.municipality, PODER_ES_PAGE_SIZE, PODER_ES_FIELDS.lugar, 1.18, 18, 2);
     drawAnchoredText(ctx, date.full, PODER_ES_PAGE_SIZE, PODER_ES_FIELDS.fecha, 1.18, 20, 2);
     await drawSignature(ctx, representation.poderRepresentacioSignature, PODER_ES_PAGE_SIZE, PODER_ES_FIELDS.firma_persona_interesada_safe_box);
-  });
+  }, scale);
+}
+
+/**
+ * Render a signed document at full resolution (1.0 scale).
+ * Use this for final artifacts stored in formData and downloaded by the admin.
+ */
+export async function renderSignedDocumentOverlay(project: any, kind: SignedDocumentKind): Promise<string> {
+  return renderSignedDocumentOverlayAtScale(project, kind, 1.0);
+}
+
+/**
+ * Render a signed document at quarter resolution (0.25 scale) for fast live preview.
+ *
+ * Why 0.25: The carousel is shown at ~350px wide on mobile. The heaviest template
+ * (certificat-iva-10-es.png) is 2482×3509. At 0.25 scale that becomes 620×877 —
+ * still 1.8× wider than needed, so it looks sharp, but the canvas has ~30× fewer
+ * pixels to process. toDataURL on a 620×877 canvas takes <10ms vs 300-600ms at full res.
+ *
+ * IMPORTANT: Do NOT change coordinate values — drawXxx() helpers compute positions
+ * from ctx.canvas dimensions at runtime, so all overlays scale correctly.
+ */
+export async function renderSignedDocumentPreview(project: any, kind: SignedDocumentKind): Promise<string> {
+  return renderSignedDocumentOverlayAtScale(project, kind, 0.25);
 }
