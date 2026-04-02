@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-04-02 — Session: Document Discoverability Fix
+
+**Phase**: Developer
+
+**Problem solved:**
+On the mobile "Documentos" page, only 2 of 4 document upload cards were visible in the mobile viewport (375×667). A naive user could upload (or skip) the first two cards and tap "Continuar" without ever discovering the IBI or electricity bill cards below the fold.
+
+**What was done:**
+- Added a `DocProgressStrip` component to `PropertyDocsSection.tsx` — a compact 2-column grid of 4 document slots (Contrato Eltex, DNI/NIE, IBI o escritura, Factura de luz) that renders immediately below the page header, before any upload card. Each slot shows a filled green checkmark when uploaded or an empty circle ring when pending. A "X de 4" counter in the top-right corner updates live.
+- Added `contractDone` computed boolean to the main section, and updated `missingCount` to include the contract slot (was only counting the other 3).
+- The strip takes ~80px of vertical space — small enough to fit alongside the page title and still leave the first upload card partially visible, giving the natural scroll signal.
+
+**Files changed:**
+- `app/src/sections/PropertyDocsSection.tsx`
+
+**Test status:** TypeScript compiles cleanly (0 errors). No logic changed — strip is purely additive UI.
+
+**What's next:** Task queue is empty.
+
+---
+
 ## 2026-04-02 — Session: Blurry Document Preview Fix
 
 **Phase**: Developer

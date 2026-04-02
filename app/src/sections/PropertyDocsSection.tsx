@@ -165,6 +165,47 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// ── Document progress strip ────────────────────────────────────────────────────
+interface DocSlotStatus {
+  label: string;
+  done: boolean;
+}
+
+function DocProgressStrip({ slots }: { slots: DocSlotStatus[] }) {
+  const doneCount = slots.filter(s => s.done).length;
+  const allDone = doneCount === slots.length;
+  return (
+    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Documentos necesarios</p>
+        <span className={`text-xs font-bold tabular-nums ${allDone ? 'text-green-600' : 'text-eltex-blue'}`}>
+          {doneCount} de {slots.length}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {slots.map((slot) => (
+          <div
+            key={slot.label}
+            className={`flex items-center gap-2 rounded-xl px-2.5 py-2 ${
+              slot.done
+                ? 'bg-green-50 border border-green-100'
+                : 'bg-white border border-gray-200'
+            }`}
+          >
+            {slot.done
+              ? <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              : <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 shrink-0" />
+            }
+            <span className={`text-xs font-medium truncate ${slot.done ? 'text-green-700' : 'text-gray-600'}`}>
+              {slot.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Compact accepted row (frictionless resume) ─────────────────────────────────
 function CompactRow({ icon, title, subtitle, onExpand }: {
   icon: React.ReactNode;
@@ -1375,7 +1416,8 @@ export function PropertyDocsSection({
     ?? electricityBill.pages[0]?.extraction?.extractedData?.titular
     ?? `${electricityBill.pages.length} imagen${electricityBill.pages.length !== 1 ? 'es' : ''}`;
 
-  const missingCount = [!dniDone, !ibiDone, !elecDone].filter(Boolean).length;
+  const contractDone = contract.originalPdfs.length > 0 || !!contract.extraction;
+  const missingCount = [!contractDone, !dniDone, !ibiDone, !elecDone].filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -1390,6 +1432,16 @@ export function PropertyDocsSection({
               : 'Sube cada documento con buena luz. Solo se guarda cuando la verificación termina correctamente.'}
           </p>
         </div>
+
+        {/* Progress strip — shows all 4 required documents above the fold */}
+        <DocProgressStrip
+          slots={[
+            { label: 'Contrato Eltex', done: contractDone },
+            { label: 'DNI / NIE', done: dniDone },
+            { label: 'IBI o escritura', done: ibiDone },
+            { label: 'Factura de luz', done: elecDone },
+          ]}
+        />
 
         {/* Contract card — always shown at top, primary data source */}
         <ContractCard
