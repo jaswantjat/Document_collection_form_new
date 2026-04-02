@@ -52,7 +52,7 @@ if (!initialOpenRouterApiKey) {
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
 }
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
 
 // ── Startup env-var validation ──────────────────────────────────────────────
 if (isProduction) {
