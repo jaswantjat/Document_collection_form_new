@@ -301,6 +301,7 @@ export const useFormState = (
   const [electricityProcessing, setElectricityProcessing] = useState<DocumentProcessingState[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const consecutiveSaveFailures = useRef(0);
 
   const syncSavedFormData = useEffectEvent((nextSavedFormData?: FormData | null) => {
     const normalized = normalizeFormData(nextSavedFormData);
@@ -333,12 +334,20 @@ export const useFormState = (
         if (_key === 'imageDataUrl') return undefined;  // RenderedDocumentAsset base64
         return value;
       }));
-      saveProgress(projectCode, cleanData, projectToken).catch((err: unknown) => {
+      saveProgress(projectCode, cleanData, projectToken).then(() => {
+        if (consecutiveSaveFailures.current > 0) {
+          consecutiveSaveFailures.current = 0;
+          toast.dismiss('save-error');
+        }
+      }).catch((err: unknown) => {
+        consecutiveSaveFailures.current += 1;
         console.error('[useFormState] Auto-save failed:', err);
-        toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {
-          id: 'save-error',
-          duration: 5000,
-        });
+        if (consecutiveSaveFailures.current >= 2) {
+          toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {
+            id: 'save-error',
+            duration: 5000,
+          });
+        }
       });
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };

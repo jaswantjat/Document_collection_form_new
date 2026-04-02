@@ -85,6 +85,7 @@ export async function saveProgress(
     method: 'POST',
     headers: projectHeaders(token),
     body: JSON.stringify({ formData }),
+    signal: AbortSignal.timeout(10000),
   });
   return res.json();
 }

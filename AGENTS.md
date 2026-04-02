@@ -234,6 +234,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - DASH-02 (`EnergyCertificatePanel` + table cell badge): shows "Saltado por cliente" label/badge when EC is skipped
   - No code changes needed
 
+- **[2026-04-02] False "connection issue" warnings on mobile (MOBILE-SAVE-01)**
+  - Auto-save showed a toast warning on the VERY FIRST save failure — one mobile network blip triggered it
+  - Added 10-second `AbortSignal.timeout` to `saveProgress` API call (was hanging forever)
+  - Added `consecutiveSaveFailures` counter: warning only shown after 2+ consecutive failures
+  - Warning auto-dismisses on the next successful save
+  - Files: `app/src/services/api.ts`, `app/src/hooks/useFormState.ts`
+
 ### 🔧 In Progress
 - None
 
