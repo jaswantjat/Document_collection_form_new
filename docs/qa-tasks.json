@@ -101,13 +101,14 @@
       "type": "coding",
       "date": "2026-04-02",
       "runBy": "Coding Agent",
-      "status": "in-progress",
-      "summary": "Write E2E tests (COND-01, COND-02, COND-03) and unit tests (UNIT-COND-01..06) verifying the 3 conditional visibility fixes",
+      "status": "completed",
+      "summary": "Wrote E2E tests (COND-01, COND-02, COND-03) and unit tests (UNIT-COND-01..06) verifying the 3 conditional visibility fixes. Also added E2E-FLOW-01 and E2E-FLOW-02.",
       "filesChanged": [
         "app/src/lib/energyCertificateValidation.test.ts",
-        "tests/e2e/energy-certificate.spec.ts"
+        "tests/e2e/energy-certificate.spec.ts",
+        "tests/e2e/energy-certificate-flow.spec.ts"
       ],
-      "completedAt": null
+      "completedAt": "2026-04-02T00:00:00Z"
     },
     {
       "id": "CYCLE-5",
@@ -115,10 +116,84 @@
       "type": "qa",
       "date": "2026-04-02",
       "runBy": "QA Agent",
-      "status": "in-progress",
-      "summary": "Run full suite after COND fixes + new tests. Expected: 41 existing + 9 new = 50 total.",
+      "status": "superseded",
+      "summary": "Locator issues surfaced during run — superseded by Cycle 6 which includes all fixes.",
       "results": null,
-      "completedAt": null
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-6",
+      "name": "EC Flow + Locator Fixes",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "Main Agent",
+      "status": "passed",
+      "summary": "All 29 E2E + 23 unit tests passing after fixing YesNoField locators, spinbutton locators, and door/window section locators. E2E-FLOW-01 and E2E-FLOW-02 added and passing.",
+      "results": { "unit": { "pass": 23, "fail": 0 }, "e2e": { "pass": 29, "fail": 0 } },
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "TASK-CODING-2",
+      "name": "Production Readiness + Bug Fixes",
+      "type": "coding",
+      "date": "2026-04-02",
+      "runBy": "Orchestrator (Main Agent)",
+      "status": "completed",
+      "summary": "Added helmet, CORS restriction, rate limiting, global error handler, startup env-var validation. Fixed submit stuck, slow submission, data loss on refresh, false save warnings, international phone support, driving licence rejection. Added useLocalStorageBackup + useBeforeUnloadSave. Fixed SignedDocumentPreview to use 0.25-scale render + useDebounce + template preloading.",
+      "filesChanged": [
+        "backend/server.js",
+        "backend/package.json",
+        "app/src/sections/RepresentationSection.tsx",
+        "app/src/sections/ReviewSection.tsx",
+        "app/src/hooks/useDebounce.ts",
+        "app/src/hooks/useLocalStorageBackup.ts",
+        "app/src/hooks/useBeforeUnloadSave.ts",
+        "app/src/hooks/useFormState.ts",
+        "app/src/lib/energyCertificateDocument.ts",
+        "app/src/lib/phone.ts",
+        "app/src/lib/documentValidation.ts",
+        "app/src/services/api.ts",
+        "app/src/App.tsx"
+      ],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-7",
+      "name": "Production Readiness + Text Overlay Fix",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "Main Agent (Orchestrator)",
+      "status": "passed",
+      "summary": "56/56 tests passing. Backend security hardened, frontend performance fixed, API + mobile E2E tests added.",
+      "results": { "unit": { "pass": 23, "fail": 0 }, "e2e": { "pass": 33, "fail": 0 } },
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "TASK-CODING-3",
+      "name": "E2E-FLOW-03 + E2E-FLOW-04 + Signature PDF Readability",
+      "type": "coding",
+      "date": "2026-04-02",
+      "runBy": "Orchestrator (Main Agent)",
+      "status": "completed",
+      "summary": "Added E2E-FLOW-03 (EC resume path) and E2E-FLOW-04 (follow-up path routing) with 4 new backend test endpoints. Added tap-to-expand fullscreen modal for signature documents (DocumentFullscreenModal + renderSignedDocumentModalPreview at 0.5 scale). Fixed DASH-01/DASH-02 (already implemented — confirmed). Added ELT20250005 seed project.",
+      "filesChanged": [
+        "backend/server.js",
+        "app/src/lib/signedDocumentOverlays.ts",
+        "app/src/sections/RepresentationSection.tsx",
+        "tests/e2e/energy-certificate-flow.spec.ts"
+      ],
+      "completedAt": "2026-04-02T00:00:00Z"
+    },
+    {
+      "id": "CYCLE-8",
+      "name": "E2E Flow Tests + Signature Readability Verification",
+      "type": "qa",
+      "date": "2026-04-02",
+      "runBy": "Main Agent (Orchestrator)",
+      "status": "passed",
+      "summary": "58/58 tests passing (35 E2E + 23 unit). All PRD acceptance criteria covered. Task queue empty. Project production-ready.",
+      "results": { "unit": { "pass": 23, "fail": 0 }, "e2e": { "pass": 35, "fail": 0 } },
+      "completedAt": "2026-04-02T00:00:00Z"
     }
   ],
   "bugs": [

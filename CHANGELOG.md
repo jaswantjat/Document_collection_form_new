@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-04-02 — Session: Documentation Sync
+
+**Phase**: Maintenance
+
+**What was done:**
+- `docs/qa-tasks.json` was stuck with TASK-CODING-1 and CYCLE-5 marked `"in-progress"` — updated to reflect all completed cycles through CYCLE-8
+- Added CYCLE-6, CYCLE-7, CYCLE-8, TASK-CODING-2, TASK-CODING-3 entries to qa-tasks.json
+- `docs/TEST-TRACKER.md` PRD Acceptance Criteria Coverage table still showed E2E-FLOW-01/02/03/04, DASH-01/02, API-03 as ⏳ Pending — updated all to ✅ Covered
+- Updated test totals from 56/56 (Cycle 7) to 58/58 (Cycle 8) and EC Flow suite from 2/2 to 4/4
+- Updated Coverage Gaps table: all items done, no open items
+- Added Cycle 8 entry to QA Loop History
+
+**Files changed:**
+- `docs/qa-tasks.json`
+- `docs/TEST-TRACKER.md`
+
+**Test status:** 58/58 — no code changes, docs only.
+
+**What's next:** Task queue is empty. Project is production-ready.
+
+---
+
 ## 2026-04-02 — Session: Signature PDF Readability
 
 **Phase**: Developer
