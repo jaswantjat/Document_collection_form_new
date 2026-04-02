@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-04-02T12:10:00Z",
+  "category": "workflow",
+  "text": "An effective QA loop orchestration pattern is: Orchestrator → Coding Agent → QA Agent. The Orchestrator plans, the Coding Agent implements fixes, and a separate QA Agent independently verifies the changes against acceptance criteria to ensure objectivity.",
+  "pointers": ["docs/TEST-TRACKER.md", ".local/session_plan.md"],
+  "issue": "Need for structured verification of bug fixes and new features."
+}

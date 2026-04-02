@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-04-02T12:15:00Z",
+  "category": "workflow",
+  "text": "Test coverage must explicitly map to PRD acceptance criteria. This ensures that every functional requirement is verified by at least one automated test, preventing regressions and ensuring compliance with the original specification.",
+  "pointers": ["docs/prds/energy-certificate-survey-v1-prd.md", "docs/TEST-TRACKER.md", ".local/session_plan.md"],
+  "issue": "Identified coverage gaps in energy-certificate acceptance criteria."
+}
