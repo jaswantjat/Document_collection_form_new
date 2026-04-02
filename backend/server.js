@@ -1103,40 +1103,37 @@ app.post('/api/pdf-to-images', pdfUpload.single('file'), async (req, res) => {
 
 // ── AI Document Extraction ─────────────────────────────────────────────────────
 
-// Safety-net: catch driving licenses that slipped past the AI prompt
-const DRIVING_LICENSE_KEYWORDS = [
-  'driving', 'driver', 'license', 'licence',
-  'carnet de conducir', 'permiso de conducir', 'permiso de conducción',
-  'conducir', 'conducción', 'dl ', ' dl', 'driving license', 'driving licence',
-];
-
-function isDrivingLicenseDetected(extraction) {
-  if (!extraction) return false;
-  const haystack = [
-    extraction.documentTypeDetected || '',
-    extraction.notes || '',
-  ].join(' ').toLowerCase();
-  return DRIVING_LICENSE_KEYWORDS.some((kw) => haystack.includes(kw));
+// Validate that an extracted identity number looks like a real DNI, NIE, or passport number.
+// Used as a safety-net: if the AI says isCorrectDocument=true but extracted no recognisable number,
+// we flag it for manual review rather than silently accepting garbage.
+function isValidIdentityNumber(number) {
+  if (!number || typeof number !== 'string') return false;
+  const n = number.toUpperCase().replace(/[\s\-\.]/g, '');
+  if (/^\d{8}[A-Z]$/.test(n)) return true;           // Spanish DNI
+  if (/^[XYZT]\d{7}[A-Z]$/.test(n)) return true;     // Spanish NIE
+  if (/^[A-Z]{1,3}\d{5,9}[A-Z0-9]?$/.test(n)) return true; // Passport (most formats)
+  if (/^[A-Z0-9]{6,12}$/.test(n)) return true;        // Other international identity numbers
+  return false;
 }
 
 const PROMPTS = {
-  dniFront: `You are a document data extractor for Spanish government documents.
+  dniFront: `You are a document data extractor for Spanish identity documents.
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
 
-Extract from the FRONT of a Spanish DNI or NIE:
+Your PRIMARY goal is to find and extract an identity number from this document. Accepted documents include:
+- Spanish DNI card (number format: 8 digits + letter, e.g. 12345678A)
+- Spanish NIE card or certificate (number format: X/Y/Z + 7 digits + letter, e.g. X1234567A)
+- Passport (any country — extract the passport number into dniNumber field)
+
+Extract:
 1. Full name (apellidos + nombre exactly as printed)
-2. DNI/NIE number (e.g. 12345678A or X1234567A) — must be fully visible
+2. Identity number (DNI/NIE number OR passport number) — put it in the dniNumber field
 3. Date of birth — YYYY-MM-DD
 4. Expiry date — YYYY-MM-DD
 5. Sex (M or F)
 
-CRITICAL — Documents that are NOT valid and must be rejected (isCorrectDocument: false):
-- Driving license / carnet de conducir / permiso de conducción (even if it looks like a card with a photo and ID number)
-- Passport / pasaporte
-- Any document that is NOT specifically a Spanish DNI or NIE
-
-If this is NOT a DNI/NIE front (including if it is a driving license), set isCorrectDocument: false.
+Set isCorrectDocument: false ONLY if the image does NOT contain any recognisable identity number. Do not reject based on document type alone.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"string or null","expiryDate":"string or null","sex":"M or F or null","nationality":"string or null"},"confidence":0.95,"notes":"string"}`,
@@ -1145,18 +1142,13 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
 
-Extract from the BACK of a Spanish DNI:
+Extract from the BACK of a Spanish DNI or NIE card:
 1. Full address (domicilio) — street, number, floor, door — every character must be readable
 2. Municipality (municipio/localidad)
 3. Province (provincia)
 4. Place of birth (lugar de nacimiento)
 
-CRITICAL — Documents that are NOT valid and must be rejected (isCorrectDocument: false):
-- Driving license / carnet de conducir / permiso de conducción
-- Passport / pasaporte
-- Any document that is NOT specifically a Spanish DNI or NIE
-
-If this is NOT a DNI back (including if it is a driving license), set isCorrectDocument: false.
+Set isCorrectDocument: false if this image clearly has no address data and is not the back of any identity document.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"DNI back","isReadable":true,"extractedData":{"address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}`,
@@ -1207,34 +1199,35 @@ Only set isCorrectDocument: false if the image is clearly NOT an electricity bil
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"electricity bill","isReadable":true,"extractedData":{"titular":"string or null","nifTitular":"string or null","direccionSuministro":"string or null","codigoPostal":"string or null","municipio":"string or null","provincia":"string or null","cups":"string or null","potenciaContratada":"string or null","tipoFase":"monofasica or trifasica or null","tarifaAcceso":"string or null","comercializadora":"string or null","distribuidora":"string or null","fechaFactura":"string or null","periodoFacturacion":"string or null","importe":"string or null"},"confidence":0.95,"notes":"string"}`,
 
-  dniAuto: `You are a document data extractor for Spanish government documents.
+  dniAuto: `You are a document data extractor for Spanish identity documents.
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
 
-You are analyzing a Spanish identity document. Supported variants:
-- DNI plastic card
-- NIE green card / EU citizen registration card
+Your PRIMARY goal is to extract a person's identity number from whatever document is shown. Accepted documents include:
+- Spanish DNI plastic card
+- Spanish NIE green card / EU citizen registration card
 - One-page NIE certificate on paper
+- Passport (any country)
 
-First classify identityDocumentKind as:
-- "dni-card"
-- "nie-card"
-- "nie-certificate"
+Classify identityDocumentKind as:
+- "dni-card" — Spanish DNI
+- "nie-card" — Spanish NIE card or EU registration card
+- "nie-certificate" — One-page NIE certificate on paper
+- "passport" — Any passport booklet or card
 
 Then determine side:
-- "front": the page/side with the holder identity details (full name, DNI/NIE number, nationality, birth date, expiry date) OR the main page of a one-page NIE certificate
-- "back": the reverse/legal-text side of a DNI/NIE card, even if it contains mostly legal text and little or no personal data
+- "front": the side with the holder's identity number, full name, birth date, expiry date — OR the main page of a NIE certificate or passport
+- "back": the reverse of a DNI/NIE card (legal text, address, place of birth)
 
 Important rules:
-- A green NIE card with holder data and address is still the FRONT, even if address appears there.
-- The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-card", side: "back", and return null for fields that are not visible there.
-- A one-page NIE certificate is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-certificate", side: "front".
-- CRITICAL: A driving license (carnet de conducir / permiso de conducción) is NOT a valid document — set isCorrectDocument: false even if it contains a photo, name, and ID number similar to a DNI.
-- CRITICAL: A passport (pasaporte) is NOT a valid document for this field — set isCorrectDocument: false.
-- If this is NOT a DNI/NIE at all (including driving license or passport), set isCorrectDocument: false.
+- A green NIE card with holder data and address is still the FRONT.
+- The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as isCorrectDocument: true, identityDocumentKind: "nie-card", side: "back".
+- A one-page NIE certificate is always side: "front".
+- A passport is always side: "front".
+- Set isCorrectDocument: false ONLY if the image does NOT contain any recognisable identity number (DNI/NIE/passport number). Do not reject based on document type alone.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
-{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
+{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
 
 Respond ONLY with this exact JSON (no markdown, no extra text).`
 ,
@@ -1263,7 +1256,7 @@ Important rules:
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"Eltex sales contract","isReadable":true,"extractedData":{"fullName":"string or null","nif":"string or null","address":"string or null","postalCode":"string or null","municipality":"string or null","province":"string or null","email":"string or null","assessorName":"string or null","productType":"solo-paneles or solo-aerotermia or paneles-y-aerotermia or null","contractNumber":"string or null"},"confidence":0.95,"notes":"string"}`,
 
-  dniAutoBatch: `You are a document data extractor for Spanish government documents.
+  dniAutoBatch: `You are a document data extractor for Spanish identity documents.
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.
 
@@ -1272,32 +1265,32 @@ Note: A single image may sometimes show BOTH sides of the document simultaneousl
 2. Add "combined image" to the 'notes' field.
 3. Extract as much data as possible from the prominent side.
 
-You are analyzing multiple Spanish DNI/NIE images in one request. Supported variants:
-- DNI plastic card
-- NIE green card / EU citizen registration card
+Your PRIMARY goal is to extract a person's identity number from whatever documents are shown. Accepted documents include:
+- Spanish DNI plastic card
+- Spanish NIE green card / EU citizen registration card
 - One-page NIE certificate on paper
+- Passport (any country)
 
 For EACH attached image, in the SAME ORDER as received:
-1. Determine identityDocumentKind: "dni-card", "nie-card", or "nie-certificate"
-2. Determine side: "front" or "back"
-3. If it is not a DNI/NIE, set isCorrectDocument: false
+1. Determine identityDocumentKind: "dni-card", "nie-card", "nie-certificate", or "passport"
+2. Determine side: "front" or "back" (passports and NIE certificates are always "front")
+3. Set isCorrectDocument: false ONLY if the image contains NO recognisable identity number (DNI/NIE/passport number). Do not reject based on document type alone.
 4. If it is unreadable, set isReadable: false
-5. Extract the visible fields and set fields not present on that page to null
+5. Extract the visible fields and set fields not present on that page to null. Put the identity number (DNI/NIE number or passport number) in the dniNumber field.
 
 Important rules:
 - A green NIE card side with holder data is the FRONT, even if it also shows address.
 - The reverse/legal-text side of a green NIE card is STILL a correct document. Mark it as identityDocumentKind: "nie-card", side: "back", even if it has little or no personal data.
-- A one-page NIE certificate is STILL a correct document. Mark it as identityDocumentKind: "nie-certificate", side: "front".
-- CRITICAL: A driving license (carnet de conducir / permiso de conducción) is NOT a valid document — set isCorrectDocument: false even if it has a photo, name, and ID number like a DNI.
-- CRITICAL: A passport (pasaporte) is NOT a valid document for this field — set isCorrectDocument: false.
+- A one-page NIE certificate is STILL a correct document: identityDocumentKind: "nie-certificate", side: "front".
+- A passport is always side: "front" and identityDocumentKind: "passport".
 
 Respond ONLY with this exact JSON shape (no markdown, no extra text):
-{"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
+{"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
 
 Return exactly one result object per image, preserving the same order as the input images.`
 };
 
-const IDENTITY_DOCUMENT_KINDS = new Set(['dni-card', 'nie-card', 'nie-certificate']);
+const IDENTITY_DOCUMENT_KINDS = new Set(['dni-card', 'nie-card', 'nie-certificate', 'passport']);
 
 function normalizeExtractedStringFields(extractedData) {
   if (!extractedData || typeof extractedData !== 'object') return extractedData;
@@ -1360,9 +1353,8 @@ function normalizeIdentityExtraction(item) {
     ? normalized.side
     : null;
 
-  // nie-certificate is always single-page → always front, regardless of any extracted fields
-  // (birth city/municipality extracted from the certificate must not trigger the address→back rule)
-  if (identityDocumentKind === 'nie-certificate') {
+  // passport and nie-certificate are always single-page → always front
+  if (identityDocumentKind === 'nie-certificate' || identityDocumentKind === 'passport') {
     side = 'front';
   } else if (hasAddressData) {
     // Address data only appears on the back of a Spanish DNI/NIE card — strongest signal
@@ -1462,17 +1454,6 @@ app.post('/api/extract', async (req, res) => {
         isWrongDocument: true,
         reason: 'wrong-document',
         message: `Documento incorrecto. Por favor sube ${documentType.includes('dni') ? 'el DNI/NIE' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'la factura de electricidad'}.`
-      });
-    }
-
-    // Safety-net: reject driving licenses even if AI marked isCorrectDocument: true
-    if (documentType.includes('dni') && isDrivingLicenseDetected(extraction)) {
-      console.log(`[extract:${documentType}] Driving license detected via safety-net, rejecting.`);
-      return res.json({
-        success: false,
-        isWrongDocument: true,
-        reason: 'wrong-document',
-        message: 'Documento incorrecto. El carnet de conducir no es válido. Por favor sube el DNI/NIE.'
       });
     }
 
@@ -1730,15 +1711,14 @@ app.post('/api/extract-dni-batch', async (req, res) => {
         };
       }
 
-      // Safety-net: reject driving licenses even if AI marked isCorrectDocument: true
-      if (isDrivingLicenseDetected(normalizedItem)) {
-        console.log('[extract-dni-batch] Driving license detected via safety-net, rejecting.');
-        return {
-          side: normalizedItem.side || null,
-          isWrongDocument: true,
-          reason: 'wrong-document',
-          message: 'Documento incorrecto. El carnet de conducir no es válido. Por favor sube el DNI/NIE.'
-        };
+      // Safety-net: if the AI accepted the document but couldn't extract any identity number
+      // on a front page, flag for manual review so an assessor can check it.
+      const isFrontSide = normalizedItem.side === 'front';
+      const extractedNumber = normalizedItem.extractedData?.dniNumber;
+      if (isFrontSide && !isValidIdentityNumber(extractedNumber)) {
+        console.log('[extract-dni-batch] Front page accepted but no valid identity number found — flagging for manual review.');
+        normalizedItem.needsManualReview = true;
+        normalizedItem.confidence = Math.min(normalizedItem.confidence ?? 0.75, 0.7);
       }
 
       return {

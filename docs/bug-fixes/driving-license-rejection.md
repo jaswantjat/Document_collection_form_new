@@ -1,72 +1,55 @@
-# Bug Fix: Driving License Accepted in DNI Upload Field
+# Bug Fix: ID Upload Field — Identity Number Validation
 
 **Date:** 2026-04-02  
 **Status:** Fixed  
-**Severity:** High — incorrect document accepted as valid identity proof
+**Severity:** Medium — wrong approach to document validation
 
 ## Problem
 
-The ID upload field (DNI/NIE slot) was accepting Spanish driving licenses (`carnet de conducir / permiso de conducción`) as valid documents. Even when a user uploaded a driving license instead of a DNI or NIE, the system accepted it and proceeded with extraction.
+The ID upload field (DNI/NIE slot) was only designed to accept Spanish DNI/NIE cards and would accept any card-shaped document because validation was document-type-based, not content-based. The real requirement is: **extract a valid identity number** (DNI, NIE, or passport number) from whatever the user uploads. If no identity number is found, reject it.
 
 ## Root Cause
 
-The AI validation prompts in `backend/server.js` said only:
-> "If this is NOT a DNI/NIE, set `isCorrectDocument: false`."
+Original prompts gated acceptance on document type ("is this a DNI/NIE card?") rather than on the presence of a valid identity number. This caused two problems:
+1. Documents with identity numbers but unusual formats (passports, EU cards) were being rejected
+2. Without verifying the extracted number format, some documents without real identity numbers could slip through
 
-A driving license looks nearly identical to a DNI/NIE card:
-- Same plastic card format
-- Has a photo, full name, ID number, birth date, expiry date
-- The AI confused it as a valid identity document
-
-No explicit exclusion of driving licenses existed in the prompts, and no post-processing check caught this case.
-
-## Fix (Two-Layer Defence)
+## Fix — Identity-Number-First Validation
 
 ### Layer 1 — AI Prompt Updates (`backend/server.js`, `PROMPTS` constant)
 
-All four DNI-related prompts were updated to explicitly call out driving licenses.
-
-Prompts updated: `dniFront`, `dniBack`, `dniAuto`, `dniAutoBatch`
-
-Each now includes a CRITICAL section:
-
-```
-CRITICAL — Documents that are NOT valid and must be rejected (isCorrectDocument: false):
-- Driving license / carnet de conducir / permiso de conducción (even if it looks like a card with a photo and ID number)
-- Passport / pasaporte
-- Any document that is NOT specifically a Spanish DNI or NIE
-```
+All four DNI-related prompts (`dniFront`, `dniBack`, `dniAuto`, `dniAutoBatch`) were updated to:
+- Accept any document that contains a recognisable identity number: DNI, NIE, or passport
+- Add "passport" as a valid `identityDocumentKind`
+- Set `isCorrectDocument: false` ONLY if the image contains NO recognisable identity number
+- Put the identity number (DNI/NIE number OR passport number) into the `dniNumber` field
 
 ### Layer 2 — Backend Safety-Net (`backend/server.js`)
 
-Added a `isDrivingLicenseDetected()` function that scans the AI's `documentTypeDetected` and `notes` fields for driving license keywords in both English and Spanish:
+Added `isValidIdentityNumber(number)` function that validates:
+- Spanish DNI: 8 digits + 1 letter (e.g. 12345678A)
+- Spanish NIE: X/Y/Z/T + 7 digits + 1 letter (e.g. X1234567A)
+- Passport: most international formats (alphanumeric, 6–12 chars)
 
-```javascript
-const DRIVING_LICENSE_KEYWORDS = [
-  'driving', 'driver', 'license', 'licence',
-  'carnet de conducir', 'permiso de conducir', 'permiso de conducción',
-  'conducir', 'conducción', 'dl ', ' dl', 'driving license', 'driving licence',
-];
-```
+Applied in `/api/extract-dni-batch`: if the AI accepts a front-page document but no valid identity number was extracted → `needsManualReview: true` so an assessor can check it manually (not hard-rejected, since the number might be there but unclear).
 
-This check is applied after the `isCorrectDocument` check in:
-- `/api/extract` — for `dniFront`, `dniBack`, `dniAuto` document types
-- `/api/extract-dni-batch` — for the batch DNI processing endpoint
+### Layer 3 — normalizeIdentityExtraction() update
 
-Scope: Only applied when `documentType.includes('dni')` — not applied to IBI, electricity, or contract types.
+Passports are now recognised as a valid `identityDocumentKind`. They are always treated as `side: "front"`.
 
-Error message returned to user:
-> "Documento incorrecto. El carnet de conducir no es válido. Por favor sube el DNI/NIE."
+`IDENTITY_DOCUMENT_KINDS` now includes `'passport'`.
 
 ## Files Changed
 
-- `backend/server.js` — prompts + safety-net function + checks in both endpoints
+- `backend/server.js` — prompts, `isValidIdentityNumber()`, safety-net, `IDENTITY_DOCUMENT_KINDS`, `normalizeIdentityExtraction()`
 
 ## QA Verification
 
 An independent testing agent verified the fix from first principles:
-- All 4 prompts contain explicit driving license rejection language
-- Safety-net function covers English and Spanish keyword variants
-- Safety-net is correctly scoped to DNI document types only
-- Error message is specific and actionable for users
-- No false positive risk for valid DNI/NIE documents
+- `isValidIdentityNumber()` correctly validates DNI, NIE, and international passport formats
+- `dniAutoBatch` prompt accepts passports and focuses on identity number extraction
+- `IDENTITY_DOCUMENT_KINDS` includes 'passport'
+- `normalizeIdentityExtraction()` forces passports to side "front"
+- Safety-net uses `isValidIdentityNumber()`, not document-type keywords
+- No hard-rejection for uncertain documents — flags for manual review instead
+- All secondary prompts (`dniAuto`, `dniFront`) also updated consistently
