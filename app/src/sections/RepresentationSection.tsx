@@ -218,84 +218,90 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="flex-1 px-5 pt-5 pb-28 max-w-sm mx-auto w-full space-y-5">
-        <div className="pt-2 pb-1">
-          <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Revisa todos los documentos y firma una sola vez para aprobarlos todos.
-          </p>
-        </div>
+    <div className="h-dvh bg-white flex flex-col overflow-hidden">
 
-        {/* Document counter */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-600">
-            {activeDocIndex + 1} de {docs.length} — {docs[activeDocIndex]?.title}
-          </span>
-          <div className="flex gap-1.5">
-            {docs.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => goToDoc(i)}
-                className={`w-2 h-2 rounded-full transition-all ${
-                  i === activeDocIndex ? 'bg-eltex-blue w-4' : 'bg-gray-200'
-                }`}
-              />
-            ))}
+      {/* ── Scrollable top area: title + document carousel ── */}
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="px-5 pt-5 pb-4 max-w-sm mx-auto space-y-4">
+          <div className="pt-2 pb-1">
+            <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              Revisa todos los documentos y firma en la parte inferior.
+            </p>
           </div>
-        </div>
 
-        {/* Carousel */}
-        <div className="relative">
-          <div
-            ref={carouselRef}
-            onScroll={handleCarouselScroll}
-            className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-            style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-          >
-            {docs.map((doc) => (
-              <div
-                key={doc.kind}
-                className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
-              >
-                <SignedDocumentPreview formData={previewFormData} kind={doc.kind} alt={doc.title} />
-              </div>
-            ))}
+          {/* Document counter */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-600">
+              {activeDocIndex + 1} de {docs.length} — {docs[activeDocIndex]?.title}
+            </span>
+            <div className="flex gap-1.5">
+              {docs.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => goToDoc(i)}
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    i === activeDocIndex ? 'bg-eltex-blue w-4' : 'bg-gray-200'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Carousel */}
+          <div className="relative">
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
+              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+            >
+              {docs.map((doc) => (
+                <div
+                  key={doc.kind}
+                  className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
+                >
+                  <SignedDocumentPreview formData={previewFormData} kind={doc.kind} alt={doc.title} />
+                </div>
+              ))}
+            </div>
+
+            {docs.length > 1 && (
+              <>
+                {activeDocIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => goToDoc(activeDocIndex - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                )}
+                {activeDocIndex < docs.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => goToDoc(activeDocIndex + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           {docs.length > 1 && (
-            <>
-              {activeDocIndex > 0 && (
-                <button
-                  type="button"
-                  onClick={() => goToDoc(activeDocIndex - 1)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-              )}
-              {activeDocIndex < docs.length - 1 && (
-                <button
-                  type="button"
-                  onClick={() => goToDoc(activeDocIndex + 1)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-            </>
+            <p className="text-xs text-center text-gray-400">
+              Desliza para ver todos los documentos antes de firmar
+            </p>
           )}
         </div>
+      </div>
 
-        {docs.length > 1 && (
-          <p className="text-xs text-center text-gray-400">
-            Desliza para ver todos los documentos antes de firmar
-          </p>
-        )}
-
-        {/* Signature pad */}
-        <div className="space-y-3">
+      {/* ── Always-visible bottom panel: signature + buttons ── */}
+      <div className="shrink-0 bg-white border-t border-gray-100">
+        <div className="px-5 pt-4 pb-3 max-w-sm mx-auto space-y-3">
           <p className="text-sm font-bold text-gray-800">
             Firma para aprobar todos los documentos <span className="text-eltex-error">*</span>
           </p>
@@ -303,38 +309,37 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             onSignature={(sig) => { setSharedSignature(sig); setApplyError(null); }}
             existingSignature={sharedSignature}
           />
+          {applyError && (
+            <p className="text-sm text-red-600 text-center">{applyError}</p>
+          )}
         </div>
 
-        {applyError && (
-          <p className="text-sm text-red-600 text-center">{applyError}</p>
-        )}
-
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 px-4 py-3 safe-area-bottom sm:static sm:border-0 sm:bg-transparent sm:px-5 sm:pb-5">
-        <div className="max-w-sm mx-auto flex gap-3">
-          <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleContinue}
-            disabled={!sharedSignature || applying}
-            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {applying ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Aplicando firma...
-              </>
-            ) : (
-              <>
-                Continuar <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
+        <div className="px-4 pb-4 safe-area-bottom max-w-sm mx-auto">
+          <div className="flex gap-3">
+            <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={!sharedSignature || applying}
+              className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {applying ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Aplicando firma...
+                </>
+              ) : (
+                <>
+                  Continuar <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
     </div>
   );
 }

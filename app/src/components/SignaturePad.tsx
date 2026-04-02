@@ -103,7 +103,8 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     ctx.stroke();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.preventDefault();
     if (!isDrawing) return;
     setIsDrawing(false);
     
