@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'reac
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
 import { useLocalStorageBackup, readLocalBackup } from '@/hooks/useLocalStorageBackup';
+import { readIndexedDBBackup } from '@/hooks/useIndexedDBBackup';
 import { fetchProject } from '@/services/api';
 import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
@@ -22,6 +23,16 @@ const ReviewSection = lazy(() => import('@/sections/ReviewSection').then((module
 const SuccessSection = lazy(() => import('@/sections/SuccessSection').then((module) => ({ default: module.SuccessSection })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const DashboardLogin = lazy(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
+
+// Pre-warm all lazy section chunks during idle time so transitions feel instant.
+function preloadSections() {
+  const idle = typeof requestIdleCallback !== 'undefined' ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 200);
+  idle(() => { import('@/sections/ProvinceSelectionSection'); });
+  idle(() => { import('@/sections/RepresentationSection'); });
+  idle(() => { import('@/sections/EnergyCertificateSection'); });
+  idle(() => { import('@/sections/ReviewSection'); });
+  idle(() => { import('@/sections/SuccessSection'); });
+}
 
 // ── Dashboard wrapper (handles login gate) ────────────────────────────────────
 function DashboardApp() {
@@ -160,25 +171,27 @@ function FormApp() {
     prepareProjectLoad();
 
     fetchProject(urlCode, token, { signal: controller.signal })
-      .then((res) => {
+      .then(async (res) => {
         if (controller.signal.aborted) return;
 
         if (res.success && res.project) {
           let normalizedProject = normalizeLoadedProject(res.project);
 
-          // Merge localStorage backup if it's newer than the server data.
-          // This recovers form changes made within the 2-second auto-save debounce window.
+          const serverTs = normalizedProject.lastActivity
+            ? new Date(normalizedProject.lastActivity).getTime()
+            : 0;
+
+          // Prefer localStorage (synchronous, fastest) then fall back to IndexedDB.
+          // IndexedDB never fails due to storage quota, so it's the reliable long-term store.
           const localBackup = readLocalBackup(urlCode);
-          if (localBackup) {
-            const serverTs = normalizedProject.lastActivity
-              ? new Date(normalizedProject.lastActivity).getTime()
-              : 0;
-            if (localBackup.savedAt > serverTs + 500) {
-              normalizedProject = {
-                ...normalizedProject,
-                formData: normalizeFormData(localBackup.formData as Parameters<typeof normalizeFormData>[0]),
-              };
-            }
+          const idbBackup = localBackup ? null : await readIndexedDBBackup(urlCode);
+          const bestBackup = localBackup ?? idbBackup;
+
+          if (bestBackup && bestBackup.savedAt > serverTs + 500) {
+            normalizedProject = {
+              ...normalizedProject,
+              formData: normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]),
+            };
           }
 
           setProject(normalizedProject);
@@ -259,6 +272,9 @@ function FormApp() {
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
   useBeforeUnloadSave(activeProject?.code ?? null, formData, activeProjectToken);
+
+  // Pre-warm lazy section chunks during idle time to eliminate loading spinners
+  useEffect(() => { preloadSections(); }, []);
 
   // Auto-set location from contract province when no location is selected yet
   useEffect(() => {

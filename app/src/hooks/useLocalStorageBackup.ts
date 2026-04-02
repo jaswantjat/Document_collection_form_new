@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { writeIndexedDBBackup, clearIndexedDBBackup } from './useIndexedDBBackup';
 
 const BACKUP_VERSION = 1;
 const BACKUP_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -22,16 +23,23 @@ function cleanFormDataForStorage(formData: unknown): unknown {
 }
 
 export function writeLocalBackup(projectCode: string, formData: unknown): void {
+  const cleaned = cleanFormDataForStorage(formData);
+  const now = Date.now();
+
+  // Always write to IndexedDB first (no size limit, survives large photo payloads).
+  void writeIndexedDBBackup(projectCode, cleaned);
+
+  // Also try localStorage as a fast-path fallback (synchronous read on next load).
   try {
     const entry: LocalBackupEntry = {
       version: BACKUP_VERSION,
-      savedAt: Date.now(),
+      savedAt: now,
       projectCode,
-      formData: cleanFormDataForStorage(formData),
+      formData: cleaned,
     };
     localStorage.setItem(backupKey(projectCode), JSON.stringify(entry));
   } catch {
-    // Storage might be full or unavailable — fail silently
+    // Storage quota exceeded — IndexedDB backup covers this case, so fail silently.
   }
 }
 
@@ -58,6 +66,7 @@ export function clearLocalBackup(projectCode: string): void {
   } catch {
     // ignore
   }
+  void clearIndexedDBBackup(projectCode);
 }
 
 export function useLocalStorageBackup(

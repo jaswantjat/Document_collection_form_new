@@ -210,8 +210,13 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function fileToPreview(file: File): Promise<string> {
-  return fileToBase64(file);
+export async function fileToPreview(file: File): Promise<string> {
+  const dataUrl = await fileToBase64(file);
+  if (!file.type.startsWith('image/')) return dataUrl;
+  // Compress preview to max 1200px, 80% quality.
+  // Full-resolution base64 (2-5 MB) overflows localStorage and bloats server payloads.
+  // 1200px at 80% yields ~50-150 KB — still sharp enough for display and storage.
+  return compressImageForAI(dataUrl, 1200, 0.80);
 }
 
 /**
