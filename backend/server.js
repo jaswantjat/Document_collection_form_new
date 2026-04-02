@@ -118,6 +118,26 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Build a base formData with representation done (location: 'other') for flow tests
+function buildBaseFlowFormData() {
+  return {
+    dni: { front: { photo: 'data:image/jpeg;base64,/9j/TEST_FRONT', extraction: null }, back: { photo: 'data:image/jpeg;base64,/9j/TEST_BACK', extraction: null }, originalPdfs: [] },
+    ibi: { photo: 'data:image/jpeg;base64,/9j/TEST_IBI', pages: [], originalPdfs: [], extraction: null },
+    electricityBill: { pages: [{ photo: 'data:image/jpeg;base64,/9j/TEST_BILL', extraction: null }], originalPdfs: [] },
+    contract: null,
+    location: 'other',
+    representation: { location: 'other', isCompany: false, companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '', postalCode: '', ivaPropertyAddress: '', ivaCertificateSignature: null, representacioSignature: null, generalitatRole: 'titular', generalitatSignature: null, poderRepresentacioSignature: null, ivaCertificateEsSignature: null, renderedDocuments: {} },
+    signatures: {},
+    energyCertificate: {
+      status: 'not-started',
+      housing: { cadastralReference: '', habitableAreaM2: '', floorCount: '', averageFloorHeight: null, bedroomCount: '', doorsByOrientation: { north: '', east: '', south: '', west: '' }, windowsByOrientation: { north: '', east: '', south: '', west: '' }, windowFrameMaterial: null, doorMaterial: '', windowGlassType: null, hasShutters: null, shutterWindowCount: '' },
+      thermal: { thermalInstallationType: null, boilerFuelType: null, equipmentDetails: '', hasAirConditioning: null, airConditioningType: null, airConditioningDetails: '', heatingEmitterType: null, radiatorMaterial: null },
+      additional: { soldProduct: null, isExistingCustomer: null, hasSolarPanels: null, solarPanelDetails: '' },
+      customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
+    }
+  };
+}
+
 // Test-only: reset EC state for a test project (dev only)
 app.post('/api/test/reset-ec/:code', (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
@@ -126,6 +146,91 @@ app.post('/api/test/reset-ec/:code', (req, res) => {
   if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
   const project = database.projects[code];
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.formData) project.formData = buildBaseFlowFormData();
+  project.formData.energyCertificate = {
+    status: 'not-started',
+    housing: {
+      cadastralReference: '', habitableAreaM2: '', floorCount: '', averageFloorHeight: null,
+      bedroomCount: '', doorsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowFrameMaterial: null, doorMaterial: '', windowGlassType: null,
+      hasShutters: null, shutterWindowCount: ''
+    },
+    thermal: {
+      thermalInstallationType: null, boilerFuelType: null, equipmentDetails: '',
+      hasAirConditioning: null, airConditioningType: null, airConditioningDetails: '',
+      heatingEmitterType: null, radiatorMaterial: null
+    },
+    additional: {
+      soldProduct: null, isExistingCustomer: null, hasSolarPanels: null, solarPanelDetails: ''
+    },
+    customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
+  };
+  saveDB();
+  res.json({ success: true });
+});
+
+// Test-only: reset EC with partial housing data (simulates in-progress state for FLOW-03)
+app.post('/api/test/reset-ec-partial/:code', (req, res) => {
+  if (isProduction) return res.status(403).json({ error: 'Not available in production' });
+  const testCodes = ['ELT20250004', 'ELT20250005'];
+  const code = req.params.code;
+  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.formData) project.formData = buildBaseFlowFormData();
+  project.formData.energyCertificate = {
+    status: 'not-started',
+    housing: {
+      cadastralReference: '1234567VK1234A0001RT',
+      habitableAreaM2: '85',
+      floorCount: '2',
+      averageFloorHeight: null,
+      bedroomCount: '3',
+      doorsByOrientation: { north: '1', east: '0', south: '1', west: '0' },
+      windowsByOrientation: { north: '2', east: '1', south: '3', west: '1' },
+      windowFrameMaterial: null, doorMaterial: '', windowGlassType: null,
+      hasShutters: null, shutterWindowCount: ''
+    },
+    thermal: {
+      thermalInstallationType: null, boilerFuelType: null, equipmentDetails: '',
+      hasAirConditioning: null, airConditioningType: null, airConditioningDetails: '',
+      heatingEmitterType: null, radiatorMaterial: null
+    },
+    additional: {
+      soldProduct: null, isExistingCustomer: null, hasSolarPanels: null, solarPanelDetails: ''
+    },
+    customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
+  };
+  saveDB();
+  res.json({ success: true });
+});
+
+// Test-only: restore full base flow state (property docs done, EC not-started) for FLOW-04 step 2
+app.post('/api/test/restore-base-flow/:code', (req, res) => {
+  if (isProduction) return res.status(403).json({ error: 'Not available in production' });
+  const testCodes = ['ELT20250004', 'ELT20250005'];
+  const code = req.params.code;
+  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  project.formData = buildBaseFlowFormData();
+  saveDB();
+  res.json({ success: true });
+});
+
+// Test-only: clear property docs so the form starts at property-docs step (for FLOW-04)
+app.post('/api/test/reset-property-docs/:code', (req, res) => {
+  if (isProduction) return res.status(403).json({ error: 'Not available in production' });
+  const testCodes = ['ELT20250004', 'ELT20250005'];
+  const code = req.params.code;
+  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.formData) project.formData = buildBaseFlowFormData();
+  project.formData.dni = { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] };
+  project.formData.ibi = { photo: null, pages: [], originalPdfs: [], extraction: null };
+  project.formData.electricityBill = { pages: [], originalPdfs: [] };
   project.formData.energyCertificate = {
     status: 'not-started',
     housing: {
@@ -233,6 +338,21 @@ function getDefaultProjects() {
       productType: 'solar',
       assessor: 'Test Assessor',
       assessorId: 'ASR004',
+      accessToken: 'ec-test-token-4444',
+      formData: null,
+      submissions: [],
+      lastActivity: null,
+      createdAt: '2026-04-02T10:00:00Z'
+    },
+    'ELT20250005': {
+      code: 'ELT20250005',
+      customerName: 'Test EC Flow Usuario',
+      phone: '+34666000005',
+      email: 'test.ec.flow@eltex.es',
+      productType: 'solar',
+      assessor: 'Test Assessor',
+      assessorId: 'ASR005',
+      accessToken: 'ec-flow-token-5555',
       formData: null,
       submissions: [],
       lastActivity: null,
@@ -2277,20 +2397,19 @@ app.listen(PORT, () => {
   } else {
     console.log('🔧 Development mode: proxying to Vite on port 5000');
   }
-  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003', 'ELT20250004'];
+  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003', 'ELT20250004', 'ELT20250005'];
   const availableTestProjects = testCodes
     .map((code) => database.projects[code])
     .filter(Boolean);
 
   if (!isProduction && availableTestProjects.length > 0) {
-    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec)');
-    console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004');
+    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec) | ELT20250005 (ec-flow)');
+    console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004 | +34666000005');
     availableTestProjects.forEach((project) => {
       if (project?.accessToken) {
         console.log(`🔗 ${project.code}: /?code=${project.code}&token=${project.accessToken}`);
       }
     });
-    console.log('🔗 ELT20250004: /?code=ELT20250004&token=ec-test-token-4444');
   }
 });
 
