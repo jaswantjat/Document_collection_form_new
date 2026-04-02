@@ -197,7 +197,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return _imageCache.get(src)!;
 }
 
-/** Template src by kind — used for preloading */
+/** Full-resolution template src — used for final stored artifacts (admin download). */
 function templateSrcForKind(kind: SignedDocumentKind): string | null {
   if (kind === 'cataluna-iva') return '/certificat-iva-10-cat.png';
   if (kind === 'cataluna-generalitat') return '/generalitat-declaration.png';
@@ -208,11 +208,57 @@ function templateSrcForKind(kind: SignedDocumentKind): string | null {
 }
 
 /**
+ * 25%-scale WebP thumbnail — used for the live carousel preview.
+ *
+ * These are 11–29 KB each (vs 148–943 KB for the originals), so they arrive
+ * in <0.5 s on a bad 3G connection where the originals would take 8+ seconds.
+ * The canvas dimensions are identical to rendering the full image at scale=0.25,
+ * so all text/signature overlays align perfectly.
+ */
+function thumbnailSrcForKind(kind: SignedDocumentKind): string | null {
+  if (kind === 'cataluna-iva') return '/thumbs/certificat-iva-10-cat.webp';
+  if (kind === 'cataluna-generalitat') return '/thumbs/generalitat-declaration.webp';
+  if (kind === 'cataluna-representacio') return '/thumbs/autoritzacio-representacio.webp';
+  if (kind === 'spain-iva') return '/thumbs/certificat-iva-10-es.webp';
+  if (kind === 'spain-poder') return '/thumbs/poder-representacio.webp';
+  return null;
+}
+
+/**
+ * 50%-scale WebP — used for the fullscreen read modal.
+ *
+ * These are 39–84 KB each (vs 148–943 KB for the originals).
+ * Sharp enough to read comfortably, downloads ~5–12× faster than the full image.
+ */
+function modalSrcForKind(kind: SignedDocumentKind): string | null {
+  if (kind === 'cataluna-iva') return '/thumbs/certificat-iva-10-cat-modal.webp';
+  if (kind === 'cataluna-generalitat') return '/thumbs/generalitat-declaration-modal.webp';
+  if (kind === 'cataluna-representacio') return '/thumbs/autoritzacio-representacio-modal.webp';
+  if (kind === 'spain-iva') return '/thumbs/certificat-iva-10-es-modal.webp';
+  if (kind === 'spain-poder') return '/thumbs/poder-representacio-modal.webp';
+  return null;
+}
+
+/**
  * Warm the image cache for a set of document kinds.
- * Call this when the RepresentationSection mounts so images are decoded
- * before the user needs them.
+ *
+ * Loading order matters on slow connections: thumbnails (11–29 KB) land in <0.5 s
+ * and immediately unblock the preview render. Modal images (39–84 KB) and the
+ * full-resolution originals (148–943 KB) follow in the background so they are
+ * cached by the time the user taps "expand" or clicks "Continue".
  */
 export function preloadDocumentTemplates(kinds: SignedDocumentKind[]): void {
+  // Priority 1 — tiny thumbnails for the live carousel (show up almost immediately)
+  for (const kind of kinds) {
+    const src = thumbnailSrcForKind(kind);
+    if (src) void loadImage(src);
+  }
+  // Priority 2 — modal WebPs (readable when user taps to expand)
+  for (const kind of kinds) {
+    const src = modalSrcForKind(kind);
+    if (src) void loadImage(src);
+  }
+  // Priority 3 — full-resolution originals (needed for the final stored artifact)
   for (const kind of kinds) {
     const src = templateSrcForKind(kind);
     if (src) void loadImage(src);
@@ -389,18 +435,27 @@ export function getSignedDocumentDefinitions(project: any) {
 }
 
 /**
- * Render a signed document at a custom scale.
- * scale=1.0 → full resolution (used for final stored artifacts).
- * scale=0.25 → quarter resolution (used for fast live preview in carousel).
- * Coordinates are NOT changed — the drawXxx() helpers scale themselves via ctx.canvas.
+ * Render a signed document at a given scale.
+ *
+ * @param scale      1.0 for pre-scaled WebP thumbs/modals; 1.0 also for final full-res artifacts.
+ * @param getSrc     Optional resolver for the template image path. When provided it overrides
+ *                   the default full-resolution PNG/JPG. Pass `thumbnailSrcForKind` for carousel
+ *                   previews (25%-scale WebPs), `modalSrcForKind` for fullscreen modal (50%-scale
+ *                   WebPs), or leave undefined for full-resolution final artifacts.
  */
-async function renderSignedDocumentOverlayAtScale(project: any, kind: SignedDocumentKind, scale: number) {
+async function renderSignedDocumentOverlayAtScale(
+  project: any,
+  kind: SignedDocumentKind,
+  scale: number,
+  getSrc?: (kind: SignedDocumentKind) => string | null
+) {
   const snapshot = getSnapshot(project);
   const representation = snapshot.representation;
 
   if (kind === 'cataluna-iva') {
     const date = getCurrentCatalanDate();
-    return renderTemplate('/certificat-iva-10-cat.png', async (ctx) => {
+    const src = getSrc?.('cataluna-iva') ?? '/certificat-iva-10-cat.png';
+    return renderTemplate(src, async (ctx) => {
       drawPercentText(ctx, snapshot.fullName, 20.5, 15.1, ctx.canvas.width * 0.0175);
       drawPercentText(ctx, snapshot.dniNumber, 27.2, 18.0, ctx.canvas.width * 0.0175);
       drawPercentText(ctx, snapshot.address, 22.3, 21.1, ctx.canvas.width * 0.016);
@@ -416,7 +471,8 @@ async function renderSignedDocumentOverlayAtScale(project: any, kind: SignedDocu
   }
 
   if (kind === 'cataluna-generalitat') {
-    return renderTemplate('/generalitat-declaration.png', async (ctx) => {
+    const src = getSrc?.('cataluna-generalitat') ?? '/generalitat-declaration.png';
+    return renderTemplate(src, async (ctx) => {
       drawBoxText(ctx, snapshot.fullName, GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.nom, 1.7);
       drawBoxText(ctx, snapshot.dniNumber, GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.dni, 1.7);
       drawBoxText(ctx, representation.isCompany ? '' : 'X', GENERALITAT_PAGE_SIZE, GENERALITAT_FIELDS.checkboxTitular, 1.7, 'center');
@@ -427,7 +483,8 @@ async function renderSignedDocumentOverlayAtScale(project: any, kind: SignedDocu
 
   if (kind === 'cataluna-representacio') {
     const date = getCurrentCatalanDate();
-    return renderTemplate('/autoritzacio-representacio.jpg', async (ctx) => {
+    const src = getSrc?.('cataluna-representacio') ?? '/autoritzacio-representacio.jpg';
+    return renderTemplate(src, async (ctx) => {
       drawBoxText(ctx, snapshot.fullName, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.personaNom, 1.7);
       drawBoxText(ctx, snapshot.dniNumber, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.personaNif, 1.7);
       drawBoxText(ctx, snapshot.address, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.personaAdreca, 1.7);
@@ -448,7 +505,8 @@ async function renderSignedDocumentOverlayAtScale(project: any, kind: SignedDocu
 
   if (kind === 'spain-iva') {
     const date = getCurrentSpanishDate();
-    return renderTemplate('/certificat-iva-10-es.png', async (ctx) => {
+    const src = getSrc?.('spain-iva') ?? '/certificat-iva-10-es.png';
+    return renderTemplate(src, async (ctx) => {
       drawLineText(ctx, snapshot.fullName, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.sr_sra, 1.6);
       drawLineText(ctx, snapshot.dniNumber, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.dni, 1.6);
       drawLineText(ctx, snapshot.address, IVA_ES_PAGE_SIZE, IVA_ES_FIELDS.domicilio, 1.6);
