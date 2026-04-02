@@ -8,6 +8,7 @@
 | 2 | Document upload progress lost on refresh | Critical | ✅ Done | Full photo data (base64) persisted to localStorage within 300ms |
 | 3 | Energy certificate summary image too slow (1.1MB JPEG 2481×3509px) | High | ✅ Done | Compressed to 116KB — 89% reduction |
 | 4 | Thermal images slow (64–152KB PNG with transparency) | Medium | ✅ Done | Converted to optimized JPG: 8–16KB each — up to 93% reduction |
+| 5 | Blur detection UX — blurry rejections showed no preview and generic error | High | ✅ Done | BlurWarningCard with preview, tips, and retry; BLUR_THRESHOLD raised 100→150; `reason` field on validation result; 'blurry' errorCode added |
 
 ---
 
@@ -111,6 +112,36 @@ On page load:
 - [x] Thermal images: 8–16KB (down from 64–152KB)
 - [x] Summary image: 116KB (down from 1.1MB)
 - [x] Energy certificate section initial load: instant (no console errors)
+
+---
+
+### Issue 5: Blur Detection UX
+
+**Why it failed silently:**
+- Old `validatePhoto` returned `{ valid: false, error: '...' }` with no `reason` field — callers couldn't distinguish blur from size/format errors
+- Preview (`fileToPreview`) was only generated AFTER validation passed — blur rejections had no image to show
+- All 3 pipelines (DocCard, DNI, Electricity) showed the same generic red error banner regardless of cause
+- `BLUR_THRESHOLD=100` only caught severely blurry images; many government-portal-rejectable images still passed
+
+**Fix applied (2026-04-02):**
+1. `PhotoValidationResult` extended with `reason?: 'blurry' | 'too-small' | 'too-large' | 'other'` and `blurScore?`
+2. `BLUR_THRESHOLD` raised from 100 → 150
+3. `validatePhoto` now returns `reason: 'blurry'` on blur failures
+4. All 3 pipelines generate an immediate `URL.createObjectURL` preview BEFORE running validation, so the photo can be shown even on rejection
+5. `'blurry'` added to `DocumentProcessingErrorCode`
+6. New `BlurWarningCard` component shows: blurred preview image, amber warning badge, 4 actionable tips, prominent amber "Volver a fotografiar" button
+7. DocCard uses `'blurry'` errorCode and shows BlurWarningCard for first-time uploads; replacement note updated for blur-specific message
+8. DNI and Electricity `PendingItem` gains `reason` field; blur items render BlurWarningCard instead of generic error
+
+**QA checklist:**
+- [ ] Upload a clearly blurry photo to DNI section → see BlurWarningCard with preview and tips
+- [ ] Upload blurry photo to IBI/DocCard → see BlurWarningCard (no generic red error)
+- [ ] Upload blurry electricity bill → see BlurWarningCard
+- [ ] "Volver a fotografiar" button dismisses the card and shows upload area again
+- [ ] X button on blur card dismisses without retrying
+- [ ] Sharp photo after dismissing blur card → processes correctly
+- [ ] PDF upload skips blur check (skipBlurCheck=true) as before
+- [ ] Non-blur errors (too small, too large) still show generic red error
 
 ---
 

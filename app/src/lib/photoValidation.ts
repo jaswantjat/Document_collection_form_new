@@ -2,14 +2,16 @@ import type { PhotoValidationResult, StoredDocumentFile, UploadedPhoto } from '@
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
-// Laplacian variance threshold — below this = blurry and rejected
-// 100 catches truly blurry/unreadable images while accepting normal phone photos
-const BLUR_THRESHOLD = 100;
+// Laplacian variance threshold — below this = blurry and rejected.
+// Raised to 150 to better match government portal quality requirements.
+// Most sharp phone photos score 400+; blurry ones score below 100.
+const BLUR_THRESHOLD = 150;
 
 export async function validatePhoto(file: File, options?: { skipBlurCheck?: boolean }): Promise<PhotoValidationResult> {
   if (file.size > MAX_SIZE_BYTES) {
     return {
       valid: false,
+      reason: 'too-large',
       error: `El archivo es demasiado grande (${(file.size / 1024 / 1024).toFixed(1)} MB). Máximo 20 MB.`,
       sizeBytes: file.size,
     };
@@ -27,6 +29,7 @@ export async function validatePhoto(file: File, options?: { skipBlurCheck?: bool
     if (width < 600 || height < 400) {
       return {
         valid: false,
+        reason: 'too-small',
         error: 'La imagen es demasiado pequeña. Acércate más al documento o usa una cámara de mayor resolución.',
         sizeBytes: file.size, width, height,
       };
@@ -38,10 +41,13 @@ export async function validatePhoto(file: File, options?: { skipBlurCheck?: bool
       if (blurScore < BLUR_THRESHOLD) {
         return {
           valid: false,
-          error: 'La imagen está desenfocada. Asegúrate de que el texto sea perfectamente legible y vuelve a fotografiar el documento.',
+          reason: 'blurry',
+          blurScore,
+          error: 'La imagen está desenfocada.',
           sizeBytes: file.size, width, height,
         };
       }
+      return { valid: true, width, height, sizeBytes: file.size, blurScore };
     }
 
     return { valid: true, width, height, sizeBytes: file.size };

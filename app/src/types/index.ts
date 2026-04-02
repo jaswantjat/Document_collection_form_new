@@ -70,6 +70,7 @@ export type DocumentProcessingStatus =
   | 'rejected';
 
 export type DocumentProcessingErrorCode =
+  | 'blurry'
   | 'unreadable'
   | 'wrong-document'
   | 'wrong-side'
@@ -235,6 +236,8 @@ export interface FormErrors {
 export type PhotoValidationResult = {
   valid: boolean;
   error?: string;
+  reason?: 'blurry' | 'too-small' | 'too-large' | 'other';
+  blurScore?: number;
   width?: number;
   height?: number;
   sizeBytes?: number;

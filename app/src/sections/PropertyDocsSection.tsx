@@ -97,6 +97,59 @@ interface PendingItem {
   preview: string | null;
   status: 'validating' | 'extracting' | 'failed';
   error?: string;
+  reason?: 'blurry' | 'other';
+}
+
+// ── Blur warning card ──────────────────────────────────────────────────────────
+const BLUR_TIPS = [
+  '📱 Mantén el móvil completamente fijo mientras fotografías',
+  '💡 Busca una zona bien iluminada, sin reflejos ni sombras',
+  '📄 Coloca el documento sobre una superficie plana y lisa',
+  '📏 Sitúate a 20–30 cm del documento',
+];
+
+function BlurWarningCard({ preview, onRetry }: { preview: string | null; onRetry: () => void }) {
+  return (
+    <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden">
+      {preview && (
+        <div className="relative">
+          <img
+            src={preview}
+            alt="Documento desenfocado"
+            className="w-full h-28 object-cover"
+            style={{ filter: 'blur(2px)', opacity: 0.55 }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-amber-500 rounded-full p-2 shadow-lg">
+              <AlertTriangle className="w-6 h-6 text-white" />
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-900">Imagen desenfocada</p>
+          <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+            Los portales gubernamentales pueden rechazar este documento porque el texto no es legible.
+            Por favor, vuelve a fotografiarlo siguiendo estos consejos:
+          </p>
+        </div>
+        <ul className="space-y-1">
+          {BLUR_TIPS.map((tip) => (
+            <li key={tip} className="text-xs text-amber-800">{tip}</li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          <Camera className="w-4 h-4" />
+          Volver a fotografiar
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface PreparedDniItem {
@@ -373,16 +426,19 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
 
       const preparedPages: Array<{ file: File; preview: string; base64: string; width?: number; height?: number }> = [];
       for (const { file, skipBlurCheck } of expandedFiles) {
+        // Generate a quick object URL preview BEFORE validation so it can be shown on blur rejection
+        const tempPreviewUrl = URL.createObjectURL(file);
         const check = await validatePhoto(file, { skipBlurCheck });
         if (!check.valid) {
           onProcessingChange(slotKey, {
             status: hadAcceptedDocument ? 'accepted' : 'rejected',
-            errorCode: 'validation',
+            errorCode: check.reason === 'blurry' ? 'blurry' : 'validation',
             errorMessage: check.error || 'Imagen no válida.',
-            pendingPreview: null,
+            pendingPreview: check.reason === 'blurry' ? tempPreviewUrl : null,
           });
           return;
         }
+        URL.revokeObjectURL(tempPreviewUrl);
 
         const preview = await fileToPreview(file);
         preparedPages.push({
@@ -504,10 +560,26 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
         </div>
       )}
 
-      {showError && (
+      {showError && processing.errorCode === 'blurry' && (
+        <BlurWarningCard
+          preview={processing.pendingPreview ?? null}
+          onRetry={() => {
+            onDocumentChange([], null, []);
+            onProcessingChange(slotKey, { status: 'idle', pendingPreview: null });
+          }}
+        />
+      )}
+      {showError && processing.errorCode !== 'blurry' && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
           <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{processing.errorMessage}</p>
+          <div className="space-y-1">
+            <p className="text-sm text-red-700">{processing.errorMessage}</p>
+            {processing.errorCode === 'unreadable' && (
+              <p className="text-xs text-red-500">
+                Consejo: asegúrate de que el texto esté bien enfocado y con buena iluminación.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -527,7 +599,14 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
           {showReplacementNote && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-700">El nuevo documento no pudo procesarse — se mantiene el anterior. Inténtalo de nuevo si quieres sustituirlo.</p>
+              {processing.errorCode === 'blurry' ? (
+                <div className="space-y-1">
+                  <p className="text-sm text-amber-800 font-medium">La imagen estaba desenfocada — se mantiene el anterior.</p>
+                  <p className="text-xs text-amber-700">Mantén el móvil fijo, busca buena luz y sitúate a 20-30 cm del documento.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-amber-700">El nuevo documento no pudo procesarse — se mantiene el anterior. Inténtalo de nuevo si quieres sustituirlo.</p>
+              )}
             </div>
           )}
           <div className="space-y-1.5">
@@ -644,16 +723,27 @@ function DNICard({
 
     const preparedFileResults = await Promise.all(splitFiles.map(async ({ file, skipBlurCheck }, index) => {
       const id = newItems[index].id;
+      // Generate preview immediately so it can be shown even if blur check fails
+      const tempPreviewUrl = URL.createObjectURL(file);
+      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
+
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
-        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
+        setPendingItems(prev => prev.map(p => p.id === id ? {
+          ...p,
+          status: 'failed' as const,
+          error: check.error || 'Imagen no válida.',
+          reason: check.reason === 'blurry' ? 'blurry' : 'other',
+        } : p));
         return null;
       }
 
+      // Convert to persistent base64 preview and revoke the temp object URL
       const [preview, raw] = await Promise.all([
         fileToPreview(file),
         fileToBase64(file),
       ]);
+      URL.revokeObjectURL(tempPreviewUrl);
       const base64 = await compressImageForAI(raw);
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
 
@@ -857,29 +947,49 @@ function DNICard({
 
       {/* Pending items */}
       {pendingItems.map(item => (
-        <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
-          {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-16 object-cover rounded-lg opacity-70" />}
-          {item.status === 'failed' ? (
-            <div className="space-y-2">
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
-                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-700 flex-1">{item.error}</p>
-                <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        <div key={item.id}>
+          {item.status === 'failed' && item.reason === 'blurry' ? (
+            <div className="relative">
+              <BlurWarningCard
+                preview={item.preview}
+                onRetry={() => dismissError(item.id)}
+              />
               <button
                 type="button"
-                onClick={() => { dismissError(item.id); processFiles([item.file]); }}
-                className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+                onClick={() => dismissError(item.id)}
+                className="absolute top-2 right-2 text-amber-600 hover:text-amber-800 bg-white/70 rounded-full p-0.5"
+                aria-label="Descartar"
               >
-                Reintentar
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
+          ) : item.status === 'failed' ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
+              {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-16 object-cover rounded-lg opacity-70" />}
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700 flex-1">{item.error}</p>
+                  <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { dismissError(item.id); processFiles([item.file]); }}
+                  className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-eltex-blue animate-spin" />
-              <p className="text-xs text-gray-500">{item.status === 'validating' ? 'Verificando calidad...' : 'Detectando cara y extrayendo datos...'}</p>
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
+              {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-16 object-cover rounded-lg opacity-70" />}
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-eltex-blue animate-spin" />
+                <p className="text-xs text-gray-500">{item.status === 'validating' ? 'Verificando calidad...' : 'Detectando cara y extrayendo datos...'}</p>
+              </div>
             </div>
           )}
         </div>
@@ -937,12 +1047,24 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
 
     const validFileResults: Array<ValidFile | null> = await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
+      // Generate preview immediately so it can be shown even if blur check fails
+      const tempPreviewUrl = URL.createObjectURL(file);
+      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
+
       const check = await validatePhoto(file, { skipBlurCheck });
       if (!check.valid) {
-        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' as const, error: check.error || 'Imagen no válida.' } : p));
+        setPendingItems(prev => prev.map(p => p.id === id ? {
+          ...p,
+          status: 'failed' as const,
+          error: check.error || 'Imagen no válida.',
+          reason: check.reason === 'blurry' ? 'blurry' : 'other',
+        } : p));
         return null;
       }
+
+      // Convert to persistent base64 preview and revoke the temp object URL
       const preview = await fileToPreview(file);
+      URL.revokeObjectURL(tempPreviewUrl);
       const raw = await fileToBase64(file);
       const base64 = await compressImageForAI(raw);
       setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
@@ -1091,31 +1213,51 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
 
       {/* Pending items (parallel) */}
       {pendingItems.map(item => (
-        <div key={item.id} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
-          {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
-          {item.status === 'failed' ? (
-            <div className="space-y-2">
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
-                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-700 flex-1">{item.error}</p>
-                <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        <div key={item.id}>
+          {item.status === 'failed' && item.reason === 'blurry' ? (
+            <div className="relative">
+              <BlurWarningCard
+                preview={item.preview}
+                onRetry={() => dismissError(item.id)}
+              />
               <button
                 type="button"
-                onClick={() => { dismissError(item.id); processFiles([item.file]); }}
-                className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+                onClick={() => dismissError(item.id)}
+                className="absolute top-2 right-2 text-amber-600 hover:text-amber-800 bg-white/70 rounded-full p-0.5"
+                aria-label="Descartar"
               >
-                Reintentar
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
+          ) : item.status === 'failed' ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
+              {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700 flex-1">{item.error}</p>
+                  <button type="button" onClick={() => dismissError(item.id)} className="text-red-400 hover:text-red-600 shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { dismissError(item.id); processFiles([item.file]); }}
+                  className="w-full text-xs text-eltex-blue hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-              <p className="text-sm text-gray-500">
-                {item.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}
-              </p>
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 space-y-2">
+              {item.preview && <img src={item.preview} alt="Procesando" className="w-full h-20 object-cover rounded-lg opacity-70" />}
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+                <p className="text-sm text-gray-500">
+                  {item.status === 'validating' ? 'Verificando calidad...' : 'Extrayendo datos...'}
+                </p>
+              </div>
             </div>
           )}
         </div>
