@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, X } from 'lucide-react';
-import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador.png';
-import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera.png';
-import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia.png';
-import thermalTermoElectricoImage from '@/assets/energy-certificate/thermal-termo-electrico.png';
+import thermalCalentadorImage from '@/assets/energy-certificate/thermal-calentador-web.jpg';
+import thermalCalderaImage from '@/assets/energy-certificate/thermal-caldera-web.jpg';
+import thermalAerotermiaImage from '@/assets/energy-certificate/thermal-aerotermia-web.jpg';
+import thermalTermoElectricoImage from '@/assets/energy-certificate/thermal-termo-electrico-web.jpg';
 import { createRenderedEnergyCertificateAsset, renderEnergyCertificateOverlay } from '@/lib/energyCertificateDocument';
 import type { EnergyCertificateData, FormData, ProjectData } from '@/types';
 import {

@@ -2,6 +2,8 @@ import { lazy, Suspense, useState, useEffect, useEffectEvent } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
+import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
+import { useLocalStorageBackup, readLocalBackup } from '@/hooks/useLocalStorageBackup';
 import { fetchProject } from '@/services/api';
 import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
@@ -162,7 +164,23 @@ function FormApp() {
         if (controller.signal.aborted) return;
 
         if (res.success && res.project) {
-          const normalizedProject = normalizeLoadedProject(res.project);
+          let normalizedProject = normalizeLoadedProject(res.project);
+
+          // Merge localStorage backup if it's newer than the server data.
+          // This recovers form changes made within the 2-second auto-save debounce window.
+          const localBackup = readLocalBackup(urlCode);
+          if (localBackup) {
+            const serverTs = normalizedProject.lastActivity
+              ? new Date(normalizedProject.lastActivity).getTime()
+              : 0;
+            if (localBackup.savedAt > serverTs + 500) {
+              normalizedProject = {
+                ...normalizedProject,
+                formData: normalizeFormData(localBackup.formData as Parameters<typeof normalizeFormData>[0]),
+              };
+            }
+          }
+
           setProject(normalizedProject);
 
           // Persist whichever token we have so refreshes keep working.
@@ -237,6 +255,10 @@ function FormApp() {
     { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
+
+  // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
+  useLocalStorageBackup(activeProject?.code ?? null, formData);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData, activeProjectToken);
 
   // Auto-set location from contract province when no location is selected yet
   useEffect(() => {
