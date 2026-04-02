@@ -505,3 +505,13 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
 export async function renderSignedDocumentPreview(project: any, kind: SignedDocumentKind): Promise<string> {
   return renderSignedDocumentOverlayAtScale(project, kind, 0.25);
 }
+
+/**
+ * Render a signed document at half resolution (0.5 scale) for the fullscreen read modal.
+ *
+ * At 0.5 scale the heaviest template becomes ~1241×1754 px — sharp enough to read
+ * at 2× CSS zoom on a phone but renders in ~50–100ms (vs 300–600ms at full res).
+ */
+export async function renderSignedDocumentModalPreview(project: any, kind: SignedDocumentKind): Promise<string> {
+  return renderSignedDocumentOverlayAtScale(project, kind, 0.5);
+}

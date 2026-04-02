@@ -247,6 +247,15 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 ### 📋 To Do
 - None
 
+### ✅ Completed (continued)
+
+- **[2026-04-02] Signature PDF readability — tap-to-expand fullscreen modal**
+  - Documents in the signing carousel were unreadable because the preview renders at 0.25 scale (quarter size) for performance — A4 text becomes too small on a phone
+  - Added `renderSignedDocumentModalPreview` (0.5 scale) to `signedDocumentOverlays.ts` — sharper but still fast (~50–100ms)
+  - `SignedDocumentPreview` now renders as a tappable button with a "Toca para leer" zoom-in hint overlay
+  - New `DocumentFullscreenModal` component: dark overlay, document title in header, scrollable image at `width: max(100%, 700px)` so users can scroll and read the full document, close button
+  - Files: `app/src/lib/signedDocumentOverlays.ts`, `app/src/sections/RepresentationSection.tsx`
+
 ---
 
 ## Session Log

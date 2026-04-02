@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
-import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2, ZoomIn, X } from 'lucide-react';
 import { SignaturePad } from '@/components/SignaturePad';
 import type { FormData, RenderedDocumentAsset, RepresentationData, LocationRegion } from '@/types';
 import {
   createRenderedDocumentAsset,
   renderedDocumentKeyForKind,
   renderSignedDocumentPreview,
+  renderSignedDocumentModalPreview,
   preloadDocumentTemplates,
   type SignedDocumentKind,
 } from '@/lib/signedDocumentOverlays';
@@ -41,14 +42,96 @@ function getDocsForLocation(location: LocationRegion | null): DocDef[] {
   return [];
 }
 
+function DocumentFullscreenModal({
+  formData,
+  kind,
+  title,
+  onClose,
+}: {
+  formData: FormData;
+  kind: SignedDocumentKind;
+  title: string;
+  onClose: () => void;
+}) {
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    renderSignedDocumentModalPreview({ formData }, kind)
+      .then((image) => {
+        if (!cancelled) {
+          setImageDataUrl(image);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error(`Failed to render ${kind} modal preview:`, err);
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [formData, kind]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <span className="text-white text-sm font-semibold truncate pr-4">{title}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+          aria-label="Cerrar"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto overscroll-contain">
+        {loading ? (
+          <div className="h-full flex items-center justify-center gap-2 text-white/60 text-sm">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Cargando documento...
+          </div>
+        ) : imageDataUrl ? (
+          <img
+            src={imageDataUrl}
+            alt={title}
+            className="block mx-auto"
+            style={{ width: 'max(100%, 700px)' }}
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center text-white/40 text-sm">
+            No disponible
+          </div>
+        )}
+      </div>
+
+      <div className="shrink-0 px-4 py-3 border-t border-white/10">
+        <p className="text-white/40 text-xs text-center">Desplázate para leer el documento completo</p>
+      </div>
+    </div>
+  );
+}
+
 function SignedDocumentPreview({
   formData,
   kind,
   alt,
+  onExpand,
 }: {
   formData: FormData;
   kind: SignedDocumentKind;
   alt: string;
+  onExpand: () => void;
 }) {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +176,22 @@ function SignedDocumentPreview({
     );
   }
 
-  return <img src={imageDataUrl} alt={alt} className="w-full block" />;
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      className="relative w-full block group focus:outline-none"
+      aria-label={`Ampliar ${alt}`}
+    >
+      <img src={imageDataUrl} alt={alt} className="w-full block" />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 group-active:bg-black/15 transition-colors rounded-2xl">
+        <div className="flex items-center gap-1.5 bg-black/50 text-white text-xs font-medium px-3 py-1.5 rounded-full opacity-70 group-hover:opacity-100 transition-opacity">
+          <ZoomIn className="w-3.5 h-3.5" />
+          Toca para leer
+        </div>
+      </div>
+    </button>
+  );
 }
 
 export function RepresentationSection({ formData, location, onChange, onBack, onContinue }: Props) {
@@ -104,6 +202,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [sharedSignature, setSharedSignature] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [fullscreenDoc, setFullscreenDoc] = useState<DocDef | null>(null);
   const applyingRef = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -218,84 +317,99 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   }
 
   return (
-    <div className="h-dvh bg-white flex flex-col overflow-hidden">
+    <>
+      {fullscreenDoc && (
+        <DocumentFullscreenModal
+          formData={previewFormData}
+          kind={fullscreenDoc.kind}
+          title={fullscreenDoc.title}
+          onClose={() => setFullscreenDoc(null)}
+        />
+      )}
 
-      {/* ── Scrollable top area: title + document carousel ── */}
-      <div className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="px-5 pt-5 pb-4 max-w-sm mx-auto space-y-4">
-          <div className="pt-2 pb-1">
-            <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
-            <p className="text-gray-400 text-sm mt-1">
-              Revisa todos los documentos y firma en la parte inferior.
-            </p>
-          </div>
+      <div className="h-dvh bg-white flex flex-col overflow-hidden">
 
-          {/* Document counter */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">
-              {activeDocIndex + 1} de {docs.length} — {docs[activeDocIndex]?.title}
-            </span>
-            <div className="flex gap-1.5">
-              {docs.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => goToDoc(i)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    i === activeDocIndex ? 'bg-eltex-blue w-4' : 'bg-gray-200'
-                  }`}
-                />
-              ))}
+        {/* ── Scrollable top area: title + document carousel ── */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div className="px-5 pt-5 pb-4 max-w-sm mx-auto space-y-4">
+            <div className="pt-2 pb-1">
+              <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
+              <p className="text-gray-400 text-sm mt-1">
+                Revisa todos los documentos y firma en la parte inferior.
+              </p>
             </div>
-          </div>
 
-          {/* Carousel */}
-          <div className="relative">
-            <div
-              ref={carouselRef}
-              onScroll={handleCarouselScroll}
-              className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-            >
-              {docs.map((doc) => (
-                <div
-                  key={doc.kind}
-                  className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
-                >
-                  <SignedDocumentPreview formData={previewFormData} kind={doc.kind} alt={doc.title} />
-                </div>
-              ))}
+            {/* Document counter */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-600">
+                {activeDocIndex + 1} de {docs.length} — {docs[activeDocIndex]?.title}
+              </span>
+              <div className="flex gap-1.5">
+                {docs.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => goToDoc(i)}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      i === activeDocIndex ? 'bg-eltex-blue w-4' : 'bg-gray-200'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Carousel */}
+            <div className="relative">
+              <div
+                ref={carouselRef}
+                onScroll={handleCarouselScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
+                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+              >
+                {docs.map((doc) => (
+                  <div
+                    key={doc.kind}
+                    className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
+                  >
+                    <SignedDocumentPreview
+                      formData={previewFormData}
+                      kind={doc.kind}
+                      alt={doc.title}
+                      onExpand={() => setFullscreenDoc(doc)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {docs.length > 1 && (
+                <>
+                  {activeDocIndex > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => goToDoc(activeDocIndex - 1)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                  )}
+                  {activeDocIndex < docs.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => goToDoc(activeDocIndex + 1)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
 
             {docs.length > 1 && (
-              <>
-                {activeDocIndex > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => goToDoc(activeDocIndex - 1)}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                )}
-                {activeDocIndex < docs.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => goToDoc(activeDocIndex + 1)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                )}
-              </>
+              <p className="text-xs text-center text-gray-400">
+                Desliza para ver todos los documentos antes de firmar
+              </p>
             )}
-          </div>
-
-          {docs.length > 1 && (
-            <p className="text-xs text-center text-gray-400">
-              Desliza para ver todos los documentos antes de firmar
-            </p>
-          )}
         </div>
       </div>
 
@@ -341,5 +455,6 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       </div>
 
     </div>
+    </>
   );
 }

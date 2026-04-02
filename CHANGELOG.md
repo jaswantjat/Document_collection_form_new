@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-04-02 — Session: Signature PDF Readability
+
+**Phase**: Developer
+
+**What was done:**
+- Added `renderSignedDocumentModalPreview` (0.5 scale) to `app/src/lib/signedDocumentOverlays.ts`
+- Updated `SignedDocumentPreview` in `RepresentationSection.tsx` to be tappable — shows a "Toca para leer" hint badge with a zoom-in icon
+- Added `DocumentFullscreenModal` component: dark fullscreen overlay, scrollable document at wider CSS width (700px min), document title + close button
+- Fullscreen modal uses `document.body.overflow = 'hidden'` while open so the background doesn't scroll
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+- `app/src/sections/RepresentationSection.tsx`
+
+**Test status:** TypeScript compiles cleanly. App loads and runs with no errors.
+
+**What's next:** Task queue is empty.
+
+---
+
 ## 2026-04-02 — Session: Production Readiness & Bug Fixes
 
 **Phase**: Developer + QA
