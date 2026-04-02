@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-04-02 — Session: Blurry Document Preview Fix
+
+**Phase**: Developer
+
+**Root cause:**
+The carousel preview was loading the full-resolution PNGs (148–943 KB) and downscaling to 0.25, which produced a ~350 px wide JPEG. On retina phones (2×/3× DPI) the browser upscaled this 2–3× making text visibly blurry. The fullscreen modal was at 0.5 scale (~700 px wide) — also severely blurry on 3× screens that need ≥2100 px for a crisp render at 700 px CSS width. There was also a bug: the `spain-poder` document type hardcoded its template path and completely ignored the `getSrc` parameter.
+
+**What was done:**
+- `renderSignedDocumentPreview` → now uses the pre-baked 25%-scale thumbnail WebPs (11–29 KB) as the template source via `thumbnailSrcForKind`. `scale=1.0` — canvas is at the WebP's native (already-small) dimensions, renders in <10ms, no blurry upscaling in the carousel.
+- `renderSignedDocumentModalPreview` → now renders at full scale (`scale=1.0`) using the original high-res PNG. Text is pixel-perfect on 2× and 3× retina screens. A spinner covers the 300–600 ms render time (acceptable for a user-triggered tap).
+- `preloadDocumentTemplates` → removed the no-longer-needed modal WebP preload step; priorities are now thumbnails first, then full-res PNGs (used by both modal and final artifact).
+- Fixed `spain-poder` bug: the fallback `renderTemplate` call was hardcoded to `/poder-representacio.png` and ignored `getSrc` entirely. Now uses `getSrc?.('spain-poder') ?? '/poder-representacio.png'`.
+- Updated JSDoc comments throughout to reflect the new render strategy.
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+
+**Test status:** TypeScript compiles cleanly. App loads with no errors.
+
+**What's next:** Task queue is empty.
+
+---
+
 ## 2026-04-02 — Session: Documentation Sync
 
 **Phase**: Maintenance

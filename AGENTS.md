@@ -249,6 +249,14 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 
 ### ✅ Completed (continued)
 
+- **[2026-04-02] Blurry document preview fix**
+  - Carousel preview used full-res PNGs downscaled to 0.25 → blurry on retina phones (2×/3× DPI)
+  - Modal used 0.5 scale → still blurry on 3× screens (needs ≥2100 px, had ~700 px)
+  - Fixed: `renderSignedDocumentPreview` now uses pre-baked thumbnail WebPs (11–29 KB) via `thumbnailSrcForKind`, scale=1.0 — tiny canvas, fast, no upscaling blurriness
+  - Fixed: `renderSignedDocumentModalPreview` now uses full-res PNG at scale=1.0 — pixel-perfect text on all retina screens; spinner covers 300–600 ms render
+  - Fixed: `spain-poder` case hardcoded template path and ignored `getSrc` — now uses `getSrc?.('spain-poder') ?? '/poder-representacio.png'`
+  - File: `app/src/lib/signedDocumentOverlays.ts`
+
 - **[2026-04-02] Signature PDF readability — tap-to-expand fullscreen modal**
   - Documents in the signing carousel were unreadable because the preview renders at 0.25 scale (quarter size) for performance — A4 text becomes too small on a phone
   - Added `renderSignedDocumentModalPreview` (0.5 scale) to `signedDocumentOverlays.ts` — sharper but still fast (~50–100ms)
@@ -323,6 +331,12 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - **What happened**: 300–600ms render on every signature stroke — UI froze
 - **Fix**: Use `renderSignedDocumentPreview` (0.25 scale) for previews; full-res only on final commit
 - **Rule**: Preview = `renderSignedDocumentPreview`. Final artifact = `renderSignedDocumentOverlay`.
+
+### ❌ Hardcoded template path in `spain-poder` fallback, ignoring `getSrc`
+- **When**: Adding `getSrc` support to `renderSignedDocumentOverlayAtScale`
+- **What happened**: All `if (kind === ...)` blocks correctly used `getSrc?.(...) ?? defaultSrc`, but the final `spain-poder` fallback was a `return renderTemplate('/poder-representacio.png', ...)` — hardcoded, no `getSrc` call
+- **Fix**: Extract `const poderSrc = getSrc?.('spain-poder') ?? '/poder-representacio.png'` before the `renderTemplate` call
+- **Rule**: Any `getSrc` resolver must be applied to ALL document kinds, including the fallback case at the bottom
 
 ### ❌ Added import before creating the file
 - **When**: Adding `useDebounce` import to `RepresentationSection.tsx`

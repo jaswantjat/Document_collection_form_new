@@ -242,23 +242,19 @@ function modalSrcForKind(kind: SignedDocumentKind): string | null {
 /**
  * Warm the image cache for a set of document kinds.
  *
- * Loading order matters on slow connections: thumbnails (11–29 KB) land in <0.5 s
- * and immediately unblock the preview render. Modal images (39–84 KB) and the
- * full-resolution originals (148–943 KB) follow in the background so they are
- * cached by the time the user taps "expand" or clicks "Continue".
+ * Loading order matters on slow connections:
+ *   Priority 1 — tiny thumbnail WebPs (11–29 KB) land in <0.5 s and unblock the carousel render.
+ *   Priority 2 — full-resolution originals (148–943 KB) are needed by both the fullscreen modal
+ *                and the final stored artifact. By the time the user taps "expand" the download
+ *                is already in progress (or complete on a fast connection).
  */
 export function preloadDocumentTemplates(kinds: SignedDocumentKind[]): void {
-  // Priority 1 — tiny thumbnails for the live carousel (show up almost immediately)
+  // Priority 1 — tiny thumbnails for the live carousel (arrive almost immediately)
   for (const kind of kinds) {
     const src = thumbnailSrcForKind(kind);
     if (src) void loadImage(src);
   }
-  // Priority 2 — modal WebPs (readable when user taps to expand)
-  for (const kind of kinds) {
-    const src = modalSrcForKind(kind);
-    if (src) void loadImage(src);
-  }
-  // Priority 3 — full-resolution originals (needed for the final stored artifact)
+  // Priority 2 — full-resolution originals (modal + final artifact)
   for (const kind of kinds) {
     const src = templateSrcForKind(kind);
     if (src) void loadImage(src);
@@ -366,9 +362,9 @@ async function drawPercentSignature(
 /**
  * Render a document template onto a canvas and return a JPEG data URL.
  *
- * @param scale - 1.0 = full resolution (for final stored artifacts).
- *                0.25 = quarter resolution (for live preview in carousel).
- *                All coordinate math in drawXxx() uses ctx.canvas dimensions
+ * @param scale - Multiplied against the template's natural dimensions to set canvas size.
+ *                1.0 = canvas is the same size as the template (default for all render paths).
+ *                All coordinate math in drawXxx() uses ctx.canvas.width/height at runtime,
  *                so scaling is transparent — do NOT change coordinate values.
  */
 async function renderTemplate(
@@ -435,13 +431,14 @@ export function getSignedDocumentDefinitions(project: any) {
 }
 
 /**
- * Render a signed document at a given scale.
+ * Render a signed document overlay and return a JPEG data URL.
  *
- * @param scale      1.0 for pre-scaled WebP thumbs/modals; 1.0 also for final full-res artifacts.
- * @param getSrc     Optional resolver for the template image path. When provided it overrides
- *                   the default full-resolution PNG/JPG. Pass `thumbnailSrcForKind` for carousel
- *                   previews (25%-scale WebPs), `modalSrcForKind` for fullscreen modal (50%-scale
- *                   WebPs), or leave undefined for full-resolution final artifacts.
+ * @param scale      Canvas scale factor applied to the template's natural dimensions (default 1.0).
+ * @param getSrc     Optional resolver for the template image source. When provided it overrides
+ *                   the default full-resolution PNG/JPG.
+ *                   - Pass `thumbnailSrcForKind` for the carousel preview (loads tiny WebPs,
+ *                     already at 25% size, so scale should stay at 1.0).
+ *                   - Leave undefined for full-resolution rendering (modal + final artifact).
  */
 async function renderSignedDocumentOverlayAtScale(
   project: any,
@@ -521,7 +518,8 @@ async function renderSignedDocumentOverlayAtScale(
     }, scale);
   }
 
-  return renderTemplate('/poder-representacio.png', async (ctx) => {
+  const poderSrc = getSrc?.('spain-poder') ?? '/poder-representacio.png';
+  return renderTemplate(poderSrc, async (ctx) => {
     const date = getCurrentSpanishDate();
     drawAnchoredText(ctx, snapshot.fullName, PODER_ES_PAGE_SIZE, PODER_ES_FIELDS.persona_interesada_nombre_razon_social, 1.36, 18, 2);
     drawAnchoredText(ctx, snapshot.dniNumber, PODER_ES_PAGE_SIZE, PODER_ES_FIELDS.persona_interesada_nif, 1.32, 14, 2);
@@ -550,26 +548,32 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
 }
 
 /**
- * Render a signed document at quarter resolution (0.25 scale) for fast live preview.
+ * Render a signed document for the live carousel thumbnail.
  *
- * Why 0.25: The carousel is shown at ~350px wide on mobile. The heaviest template
- * (certificat-iva-10-es.png) is 2482×3509. At 0.25 scale that becomes 620×877 —
- * still 1.8× wider than needed, so it looks sharp, but the canvas has ~30× fewer
- * pixels to process. toDataURL on a 620×877 canvas takes <10ms vs 300-600ms at full res.
+ * Uses the pre-baked 25%-scale WebP thumbnails (11–29 KB) as the template source
+ * instead of the full-resolution PNGs (148–943 KB). The canvas is drawn at scale=1.0
+ * on top of the already-small WebP, so toDataURL completes in <10ms and no large
+ * network download is required. Text and signature overlays scale correctly because
+ * all drawXxx() helpers derive positions from ctx.canvas dimensions at runtime.
  *
- * IMPORTANT: Do NOT change coordinate values — drawXxx() helpers compute positions
- * from ctx.canvas dimensions at runtime, so all overlays scale correctly.
+ * IMPORTANT: Do NOT change coordinate values in the drawXxx() calls — they are
+ * expressed relative to the full-resolution page size and are scaled at runtime.
  */
 export async function renderSignedDocumentPreview(project: any, kind: SignedDocumentKind): Promise<string> {
-  return renderSignedDocumentOverlayAtScale(project, kind, 0.25);
+  return renderSignedDocumentOverlayAtScale(project, kind, 1.0, thumbnailSrcForKind);
 }
 
 /**
- * Render a signed document at half resolution (0.5 scale) for the fullscreen read modal.
+ * Render a signed document at full resolution (1.0 scale) for the fullscreen read modal.
  *
- * At 0.5 scale the heaviest template becomes ~1241×1754 px — sharp enough to read
- * at 2× CSS zoom on a phone but renders in ~50–100ms (vs 300–600ms at full res).
+ * The fullscreen modal is opened explicitly by the user (tap "Toca para leer"), so the
+ * 300–600 ms render time is acceptable and a spinner is shown while it loads.
+ * Using the full-resolution PNG ensures text is pixel-perfect on retina screens
+ * (2× and 3× DPI) regardless of how wide the modal CSS width stretches the image.
+ *
+ * The full-res PNG is already being preloaded in the background by preloadDocumentTemplates,
+ * so on good connections the image is already decoded by the time the user taps.
  */
 export async function renderSignedDocumentModalPreview(project: any, kind: SignedDocumentKind): Promise<string> {
-  return renderSignedDocumentOverlayAtScale(project, kind, 0.5);
+  return renderSignedDocumentOverlayAtScale(project, kind, 1.0);
 }
