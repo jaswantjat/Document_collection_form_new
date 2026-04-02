@@ -68,6 +68,37 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Test-only: reset EC state for a test project (dev only)
+app.post('/api/test/reset-ec/:code', (req, res) => {
+  if (isProduction) return res.status(403).json({ error: 'Not available in production' });
+  const testCodes = ['ELT20250004', 'ELT20250005'];
+  const code = req.params.code;
+  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = database.projects[code];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  project.formData.energyCertificate = {
+    status: 'not-started',
+    housing: {
+      cadastralReference: '', habitableAreaM2: '', floorCount: '', averageFloorHeight: null,
+      bedroomCount: '', doorsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      windowFrameMaterial: null, doorMaterial: '', windowGlassType: null,
+      hasShutters: null, shutterWindowCount: ''
+    },
+    thermal: {
+      thermalInstallationType: null, boilerFuelType: null, equipmentDetails: '',
+      hasAirConditioning: null, airConditioningType: null, airConditioningDetails: '',
+      heatingEmitterType: null, radiatorMaterial: null
+    },
+    additional: {
+      soldProduct: null, isExistingCustomer: null, hasSolarPanels: null, solarPanelDetails: ''
+    },
+    customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
+  };
+  saveDB();
+  res.json({ success: true });
+});
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -143,6 +174,19 @@ function getDefaultProjects() {
       submissions: [],
       lastActivity: null,
       createdAt: '2025-03-20T09:15:00Z'
+    },
+    'ELT20250004': {
+      code: 'ELT20250004',
+      customerName: 'Test EC Usuario',
+      phone: '+34666000004',
+      email: 'test.ec@eltex.es',
+      productType: 'solar',
+      assessor: 'Test Assessor',
+      assessorId: 'ASR004',
+      formData: null,
+      submissions: [],
+      lastActivity: null,
+      createdAt: '2026-04-02T10:00:00Z'
     }
   };
 }
@@ -2172,19 +2216,20 @@ app.listen(PORT, () => {
   } else {
     console.log('🔧 Development mode: proxying to Vite on port 5000');
   }
-  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003'];
+  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003', 'ELT20250004'];
   const availableTestProjects = testCodes
     .map((code) => database.projects[code])
     .filter(Boolean);
 
   if (!isProduction && availableTestProjects.length > 0) {
-    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar)');
-    console.log('Test phones: +34612345678 | +34623456789 | +34655443322');
+    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec)');
+    console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004');
     availableTestProjects.forEach((project) => {
       if (project?.accessToken) {
         console.log(`🔗 ${project.code}: /?code=${project.code}&token=${project.accessToken}`);
       }
     });
+    console.log('🔗 ELT20250004: /?code=ELT20250004&token=ec-test-token-4444');
   }
 });
 

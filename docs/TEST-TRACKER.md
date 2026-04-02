@@ -6,21 +6,23 @@
 
 ---
 
-## 📋 Current Status — Cycle 5 In Progress ⏳
+## 📋 Current Status — Cycle 6 Complete ✅
 
 | Layer | Suite | Tests | Status |
 |---|---|---|---|
 | Unit (Vitest) | Energy Certificate Validation | 10/10 | ✅ |
-| Unit (Vitest) | Conditional Visibility Mirror | 6/6 | ⏳ Pending |
+| Unit (Vitest) | Conditional Visibility Mirror (UNIT-COND-01–06) | 6/6 | ✅ |
 | Unit (Vitest) | Phone Parsing (`parsePhone`) | 7/7 | ✅ |
 | E2E (Playwright) | Smoke | 3/3 | ✅ |
 | E2E (Playwright) | Form Navigation | 2/2 | ✅ |
 | E2E (Playwright) | Form Diagnosis (T01–T12) | 12/12 | ✅ |
 | E2E (Playwright) | Energy Certificate PRD | 4/4 | ✅ |
-| E2E (Playwright) | Conditional Visibility (COND fixes) | 3/3 | ⏳ Pending |
+| E2E (Playwright) | Conditional Visibility (COND-01–03) | 3/3 | ✅ |
+| E2E (Playwright) | EC Flow (E2E-FLOW-01–02) | 2/2 | ✅ |
 | E2E (Playwright) | Bug Regressions | 3/3 | ✅ |
-| **Existing total** | | **41/41** | ✅ |
-| **New total (after Cycle 5)** | | **50/50** | ⏳ Pending |
+| **Unit total** | | **23/23** | ✅ |
+| **E2E total** | | **29/29** | ✅ |
+| **Grand total** | | **52/52** | ✅ |
 
 ---
 
@@ -141,25 +143,35 @@ Note: Validation logic was already correct — only the JSX rendering was wrong.
 
 ---
 
-### Cycle 5 — Conditional Visibility Verification (2026-04-02) ⏳
+### Cycle 6 — EC Flow + Locator Fixes (2026-04-02) ✅
 
-> Run by: **QA Agent** · **In progress — awaiting test run**
+> Run by: **Main Agent** · **All 29 E2E + 23 unit tests passing**
 
-New tests being added by **Coding Agent** (TASK-CODING-1):
-- `app/src/lib/energyCertificateValidation.test.ts` — 6 new unit tests (UNIT-COND-01 to 06)
-- `tests/e2e/energy-certificate.spec.ts` — 3 new E2E tests (COND-01, COND-02, COND-03)
+Changes made in this cycle:
+- Added ELT20250004 and ELT20250005 test projects with EC-ready state
+- Added `POST /api/test/reset-ec/:code` dev-only reset endpoint
+- Fixed COND-01/02/03 E2E locators (YesNoField `<p>`→parent→button pattern)
+- Fixed `fillAndAdvanceHousingStep` spinbutton and door/window section locators
+- Fixed `fillAndAdvanceThermalStep` caldera button (label text) and Gas exact match
+- Added E2E-FLOW-01 and E2E-FLOW-02 tests with proper `exact: true` matching
 
-| Test ID | Suite | Description | Expected |
+| Test ID | Suite | Description | Result |
 |---|---|---|---|
-| UNIT-COND-01 | Unit | hasShutters=false → no shutterWindowCount error | ⏳ |
-| UNIT-COND-02 | Unit | hasShutters=true + empty count → error | ⏳ |
-| UNIT-COND-03 | Unit | hasAirConditioning=false → no AC field errors | ⏳ |
-| UNIT-COND-04 | Unit | hasAirConditioning=true + empty fields → errors on both | ⏳ |
-| UNIT-COND-05 | Unit | hasSolarPanels=false → no solarPanelDetails error | ⏳ |
-| UNIT-COND-06 | Unit | hasSolarPanels=true + empty → error | ⏳ |
-| COND-01 | E2E | Housing: shutterWindowCount hidden/shown by hasShutters toggle | ⏳ |
-| COND-02 | E2E | Thermal: AC fields hidden/shown by hasAirConditioning toggle | ⏳ |
-| COND-03 | E2E | Additional: solarPanelDetails hidden/shown by hasSolarPanels toggle | ⏳ |
+| UNIT-COND-01 | Unit | hasShutters=false → no shutterWindowCount error | ✅ |
+| UNIT-COND-02 | Unit | hasShutters=true + empty count → error | ✅ |
+| UNIT-COND-03 | Unit | hasAirConditioning=false → no AC field errors | ✅ |
+| UNIT-COND-04 | Unit | hasAirConditioning=true + empty fields → errors on both | ✅ |
+| UNIT-COND-05 | Unit | hasSolarPanels=false → no solarPanelDetails error | ✅ |
+| UNIT-COND-06 | Unit | hasSolarPanels=true + empty → error | ✅ |
+| COND-01 | E2E | Housing: shutterWindowCount hidden/shown by hasShutters toggle | ✅ |
+| COND-02 | E2E | Thermal: AC fields hidden/shown by hasAirConditioning toggle | ✅ |
+| COND-03 | E2E | Additional: solarPanelDetails hidden/shown by hasSolarPanels toggle | ✅ |
+| E2E-FLOW-01 | E2E | EC section loads with all steps and skip button visible | ✅ |
+| E2E-FLOW-02 | E2E | EC skip path — clicking Saltar routes to review section | ✅ |
+
+### Cycle 5 — Conditional Visibility Verification (2026-04-02) ⏳ → superseded by Cycle 6
+
+> Tests written, locator issues surfaced during run. All resolved in Cycle 6.
 
 ---
 

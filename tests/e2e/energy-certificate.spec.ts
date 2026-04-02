@@ -1,36 +1,37 @@
 import { test, expect } from '@playwright/test';
 
 const TOKEN_1 = 'b43df737-e202-40d8-ba45-277dceb9d323';
+const EC04_CODE = 'ELT20250004';
+const EC04_TOKEN = 'ec-test-token-4444';
+const BACKEND = 'http://localhost:3001';
+
+async function resetEC(request: any, code: string) {
+  const res = await request.post(`${BACKEND}/api/test/reset-ec/${code}`);
+  if (!res.ok()) {
+    console.warn(`[RESET] Failed to reset ${code}:`, await res.text());
+  }
+}
 
 test.describe('Energy Certificate PRD Tests', () => {
   
-  test('EC-01: skip path — can reach and click skip on energy-certificate step', async ({ page }) => {
-    // Start from a project that should reach EC section (ELT20250001)
-    await page.goto(`/?code=ELT20250001&token=${TOKEN_1}`);
+  test('EC-01: skip path — can reach and click skip on energy-certificate step', async ({ page, request }) => {
+    await resetEC(request, EC04_CODE);
+    // Start from a project that should reach EC section (ELT20250004)
+    await page.goto(`/?code=${EC04_CODE}&token=${EC04_TOKEN}`);
     await page.waitForLoadState('networkidle');
 
-    // Find and click Skip button if we are on EC section
-    // We need to know what the Skip button looks like. 
-    // Usually it says "Saltar", "Omitir" or "Ahora no"
-    const skipBtn = page.getByRole('button', { name: /saltar|omitir|ahora no/i }).first();
-    
-    // If not immediately on EC section, we might need to navigate there.
-    // But based on T001 description, it assumes we can reach it.
-    
     const heading = page.locator('h1').first();
-    const headingText = await heading.textContent();
+    await expect(heading).toHaveText(/certificado energético|vivienda/i);
+
+    // Find and click Skip button
+    const skipBtn = page.getByRole('button', { name: /saltar|omitir|ahora no/i }).first();
+    await expect(skipBtn).toBeVisible();
+    await skipBtn.click();
+    await page.waitForLoadState('networkidle');
     
-    if (headingText?.toLowerCase().includes('certificado energético') || headingText?.toLowerCase().includes('vivienda')) {
-        await expect(skipBtn).toBeVisible();
-        await skipBtn.click();
-        await page.waitForLoadState('networkidle');
-        
-        // After skipping, it should go to ReviewSection
-        const nextHeading = page.locator('h1').first();
-        await expect(nextHeading).not.toHaveText(/certificado energético/i);
-    } else {
-        console.log('Skipping EC-01: Project ELT20250001 not on EC section. Currently on:', headingText);
-    }
+    // After skipping, it should go to ReviewSection
+    const nextHeading = page.locator('h1').first();
+    await expect(nextHeading).not.toHaveText(/certificado energético/i);
   });
 
   test('EC-02: dashboard shows pending status for project with no EC data', async ({ page }) => {
@@ -76,21 +77,26 @@ test.describe('Energy Certificate PRD Tests', () => {
   });
 
   test.describe('Conditional Field Visibility (COND fixes)', () => {
-    const TOKEN_1 = 'b43df737-e202-40d8-ba45-277dceb9d323';
-    const URL = `/?code=ELT20250001&token=${TOKEN_1}`;
+    const URL = `/?code=${EC04_CODE}&token=${EC04_TOKEN}`;
+
+    test.beforeEach(async ({ request }) => {
+      await resetEC(request, EC04_CODE);
+    });
 
     async function fillAndAdvanceHousingStep(page: any) {
-      await page.getByPlaceholder('120').fill('120');
-      await page.getByPlaceholder('2').fill('2');
-      await page.getByPlaceholder('3').fill('3');
+      await page.getByRole('spinbutton', { name: /tamaño/i }).fill('120');
+      await page.getByRole('spinbutton', { name: /plantas/i }).fill('2');
+      await page.getByRole('spinbutton', { name: /dormitorios/i }).fill('3');
       await page.getByRole('button', { name: 'Entre 2,7m y 3,2m' }).click();
       
-      const orientations = ['Norte', 'Este', 'Sur', 'Oeste'];
-      const doorInputs = page.locator('div:has-text("Nº PUERTAS Exterior")').locator('input');
+      // Navigate from the section label <p> → its parent div → inputs (avoids matching outer ancestor divs)
+      const doorSection = page.locator('p', { hasText: 'Nº PUERTAS Exterior' }).locator('xpath=..');
+      const doorInputs = doorSection.locator('input');
       for (let i = 0; i < 4; i++) {
         await doorInputs.nth(i).fill('1');
       }
-      const windowInputs = page.locator('div:has-text("Nº VENTANAS Exterior")').locator('input');
+      const windowSection = page.locator('p', { hasText: 'Nº VENTANAS Exterior' }).locator('xpath=..');
+      const windowInputs = windowSection.locator('input');
       for (let i = 0; i < 4; i++) {
         await windowInputs.nth(i).fill('2');
       }
@@ -98,16 +104,21 @@ test.describe('Energy Certificate PRD Tests', () => {
       await page.getByRole('button', { name: 'PVC' }).click();
       await page.getByPlaceholder('Madera').fill('Madera');
       await page.getByRole('button', { name: 'Doble vidrio' }).click();
-      await page.getByRole('button', { name: 'No' }).nth(0).click(); // "¿Ventanas con persiana?"
+      // "¿Ventanas con persiana?" No button — navigate from the label <p> to parent div
+      const shutterLabel = page.locator('p', { hasText: '¿Ventanas con persiana?' });
+      await shutterLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
 
       await page.getByRole('button', { name: /siguiente/i }).click();
     }
 
     async function fillAndAdvanceThermalStep(page: any) {
-      await page.locator('button:has(img[src*="thermal-caldera"])').click();
-      await page.getByRole('button', { name: 'Gas' }).click();
-      await page.getByPlaceholder('Samsung 2020').fill('Samsung 2020');
-      await page.getByRole('button', { name: 'No' }).nth(1).click(); // "¿Aire Acondicionado?"
+      // Click the "Caldera" thermal installation type button by its visible label text
+      await page.getByRole('button', { name: 'Caldera (ACS y calefacción)' }).click();
+      await page.getByRole('button', { name: 'Gas', exact: true }).click();
+      await page.getByPlaceholder('Marca y año de la instalación').fill('Samsung 2020');
+      // "¿Aire Acondicionado?" No button — navigate from the label <p> to parent div
+      const acLabel = page.locator('p', { hasText: '¿Aire Acondicionado?' });
+      await acLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
       await page.getByRole('button', { name: 'Radiadores de Agua' }).click();
       await page.getByRole('button', { name: 'Aluminio' }).click();
 
@@ -119,19 +130,18 @@ test.describe('Energy Certificate PRD Tests', () => {
       await page.waitForLoadState('networkidle');
 
       const heading = page.locator('h1').first();
-      const headingText = await heading.textContent();
-      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
-        console.log('Skipping COND-01: Not on EC section');
-        return;
-      }
+      await expect(heading).toHaveText(/certificado energético|vivienda/i);
 
-      // Click "No" on "¿Ventanas con persiana?"
-      const noBtn = page.locator('div:has-text("¿Ventanas con persiana?")').getByRole('button', { name: 'No' });
+      // YesNoField renders: <p>label</p> then sibling <div> with <button>Sí</button><button>No</button>
+      // Navigate: p element → parent div → buttons
+      const shutterLabel = page.locator('p', { hasText: '¿Ventanas con persiana?' });
+      const shutterContainer = shutterLabel.locator('xpath=..');
+      const noBtn = shutterContainer.getByRole('button', { name: 'No', exact: true });
+      const yesBtn = shutterContainer.getByRole('button', { name: 'Sí', exact: true });
+
       await noBtn.click();
       await expect(page.getByLabel('Nº ventanas con persianas')).not.toBeVisible();
 
-      // Click "Sí" on "¿Ventanas con persiana?"
-      const yesBtn = page.locator('div:has-text("¿Ventanas con persiana?")').getByRole('button', { name: 'Sí' });
       await yesBtn.click();
       await expect(page.getByLabel('Nº ventanas con persianas')).toBeVisible();
     });
@@ -141,22 +151,20 @@ test.describe('Energy Certificate PRD Tests', () => {
       await page.waitForLoadState('networkidle');
 
       const heading = page.locator('h1').first();
-      const headingText = await heading.textContent();
-      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
-        console.log('Skipping COND-02: Not on EC section');
-        return;
-      }
+      await expect(heading).toHaveText(/certificado energético|vivienda/i);
 
       await fillAndAdvanceHousingStep(page);
 
-      // Click "No" on "¿Aire Acondicionado?"
-      const noBtn = page.locator('div:has-text("¿Aire Acondicionado?")').getByRole('button', { name: 'No' });
+      // Navigate from label <p> → parent div → buttons (same pattern as COND-01)
+      const acLabel = page.locator('p', { hasText: '¿Aire Acondicionado?' });
+      const acContainer = acLabel.locator('xpath=..');
+      const noBtn = acContainer.getByRole('button', { name: 'No', exact: true });
+      const yesBtn = acContainer.getByRole('button', { name: 'Sí', exact: true });
+
       await noBtn.click();
       await expect(page.getByText('Detalles (marca y año)')).not.toBeVisible();
       await expect(page.getByText('¿Tipo de Bomba?')).not.toBeVisible();
 
-      // Click "Sí" on "¿Aire Acondicionado?"
-      const yesBtn = page.locator('div:has-text("¿Aire Acondicionado?")').getByRole('button', { name: 'Sí' });
       await yesBtn.click();
       await expect(page.getByText('Detalles (marca y año)')).toBeVisible();
       await expect(page.getByText('¿Tipo de Bomba?')).toBeVisible();
@@ -167,22 +175,20 @@ test.describe('Energy Certificate PRD Tests', () => {
       await page.waitForLoadState('networkidle');
 
       const heading = page.locator('h1').first();
-      const headingText = await heading.textContent();
-      if (!headingText?.toLowerCase().includes('certificado energético') && !headingText?.toLowerCase().includes('vivienda')) {
-        console.log('Skipping COND-03: Not on EC section');
-        return;
-      }
+      await expect(heading).toHaveText(/certificado energético|vivienda/i);
 
       await fillAndAdvanceHousingStep(page);
       await fillAndAdvanceThermalStep(page);
 
-      // Click "No" on "¿Placas solares?"
-      const noBtn = page.locator('div:has-text("¿Placas solares?")').getByRole('button', { name: 'No' });
+      // Navigate from label <p> → parent div → buttons
+      const solarLabel = page.locator('p', { hasText: '¿Placas solares?' });
+      const solarContainer = solarLabel.locator('xpath=..');
+      const noBtn = solarContainer.getByRole('button', { name: 'No', exact: true });
+      const yesBtn = solarContainer.getByRole('button', { name: 'Sí', exact: true });
+
       await noBtn.click();
       await expect(page.getByText('Detalles de la Instalación Fotovoltaica')).not.toBeVisible();
 
-      // Click "Sí" on "¿Placas solares?"
-      const yesBtn = page.locator('div:has-text("¿Placas solares?")').getByRole('button', { name: 'Sí' });
       await yesBtn.click();
       await expect(page.getByText('Detalles de la Instalación Fotovoltaica')).toBeVisible();
     });
