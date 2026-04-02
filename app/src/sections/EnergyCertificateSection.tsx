@@ -137,6 +137,7 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         inputMode={type === 'number' ? 'numeric' : 'text'}
+        min={type === 'number' ? 0 : undefined}
         className={`form-input ${error ? 'error' : ''}`}
       />
       {error && <p data-ec-field-error className="text-sm text-red-500">{error}</p>}
@@ -342,13 +343,14 @@ export function EnergyCertificateSection({
     direction: 'north' | 'east' | 'south' | 'west',
     value: string
   ) => {
+    const clamped = value === '' ? '' : String(Math.max(0, parseInt(value, 10) || 0));
     mutate((prev) => ({
       ...prev,
       housing: {
         ...prev.housing,
         [kind]: {
           ...prev.housing[kind],
-          [direction]: value,
+          [direction]: clamped,
         },
       },
     }));
@@ -614,7 +616,10 @@ export function EnergyCertificateSection({
                 <Field
                   label="Nº ventanas con persianas"
                   value={data.housing.shutterWindowCount}
-                  onChange={(value) => mutate((prev) => ({ ...prev, housing: { ...prev.housing, shutterWindowCount: value } }))}
+                  onChange={(value) => {
+                    const clamped = value === '' ? '' : String(Math.max(0, parseInt(value, 10) || 0));
+                    mutate((prev) => ({ ...prev, housing: { ...prev.housing, shutterWindowCount: clamped } }));
+                  }}
                   placeholder="0"
                   error={errors.housingShutterWindowCount}
                   type="number"
