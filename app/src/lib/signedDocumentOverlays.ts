@@ -243,18 +243,24 @@ function modalSrcForKind(kind: SignedDocumentKind): string | null {
  * Warm the image cache for a set of document kinds.
  *
  * Loading order matters on slow connections:
- *   Priority 1 — tiny thumbnail WebPs (11–29 KB) land in <0.5 s and unblock the carousel render.
- *   Priority 2 — full-resolution originals (148–943 KB) are needed by both the fullscreen modal
- *                and the final stored artifact. By the time the user taps "expand" the download
- *                is already in progress (or complete on a fast connection).
+ *   Priority 1 — tiny thumbnail WebPs (11–29 KB) land in <0.5 s (1× DPR fallback).
+ *   Priority 2 — 50%-scale modal WebPs (39–84 KB) — used for the carousel preview on 2× DPR
+ *                devices (pixel-perfect for the most common mobile screen density).
+ *   Priority 3 — full-resolution originals (148–943 KB) — used for 3× DPR carousel preview,
+ *                the fullscreen read modal, and the final stored artifact.
  */
 export function preloadDocumentTemplates(kinds: SignedDocumentKind[]): void {
-  // Priority 1 — tiny thumbnails for the live carousel (arrive almost immediately)
+  // Priority 1 — tiny thumbnails (1× DPR fallback, arrive almost immediately)
   for (const kind of kinds) {
     const src = thumbnailSrcForKind(kind);
     if (src) void loadImage(src);
   }
-  // Priority 2 — full-resolution originals (modal + final artifact)
+  // Priority 2 — 50%-scale modal WebPs (2× DPR carousel preview)
+  for (const kind of kinds) {
+    const src = modalSrcForKind(kind);
+    if (src) void loadImage(src);
+  }
+  // Priority 3 — full-resolution originals (3× DPR preview + modal + final artifact)
   for (const kind of kinds) {
     const src = templateSrcForKind(kind);
     if (src) void loadImage(src);
@@ -548,19 +554,56 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
 }
 
 /**
- * Render a signed document for the live carousel thumbnail.
+ * Render a signed document preview whose canvas resolution matches the physical
+ * screen density of the device.
  *
- * Uses the pre-baked 25%-scale WebP thumbnails (11–29 KB) as the template source
- * instead of the full-resolution PNGs (148–943 KB). The canvas is drawn at scale=1.0
- * on top of the already-small WebP, so toDataURL completes in <10ms and no large
- * network download is required. Text and signature overlays scale correctly because
- * all drawXxx() helpers derive positions from ctx.canvas dimensions at runtime.
+ * **First-principles sizing:**
+ * The carousel `<img>` fills the full viewport width (`w-full`).  On a modern
+ * phone the CSS width is ≈390 px and the devicePixelRatio is 3, so the browser
+ * needs 1,170 physical pixels for a crisp image.  Rendering onto the 310 px
+ * thumbnail (the original approach) caused 3.8× upscaling — hence severe blur.
+ *
+ * We compute:
+ *   targetPx = Math.min(window.innerWidth, 430) × window.devicePixelRatio
+ *
+ * …then pick the cheapest source that satisfies that budget:
+ *
+ * | targetPx    | Source              | Network cost | Canvas size |
+ * |-------------|---------------------|--------------|-------------|
+ * | ≤ 310       | 25% thumbnail WebP  | 11–29 KB     | 310×439     |
+ * | 311–620     | 50% modal WebP      | 39–84 KB     | 620×878     |
+ * | > 620       | Full-res PNG/JPG    | 148–943 KB   | ≈ targetPx  |
+ *
+ * The full-res files are already being preloaded by `preloadDocumentTemplates`
+ * so on good connections they are already decoded before the user reaches the
+ * signing step.
  *
  * IMPORTANT: Do NOT change coordinate values in the drawXxx() calls — they are
  * expressed relative to the full-resolution page size and are scaled at runtime.
  */
 export async function renderSignedDocumentPreview(project: any, kind: SignedDocumentKind): Promise<string> {
-  return renderSignedDocumentOverlayAtScale(project, kind, 1.0, thumbnailSrcForKind);
+  const FULL_WIDTH = 1241;
+  const MODAL_WIDTH = 620;
+  const THUMB_WIDTH = 310;
+
+  const cssWidth = Math.min(
+    typeof window !== 'undefined' ? window.innerWidth : 390,
+    430, // cap at widest common mobile viewport
+  );
+  const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
+  const targetPx = Math.ceil(cssWidth * dpr);
+
+  if (targetPx <= THUMB_WIDTH) {
+    // 1× DPR narrow screen — tiny thumbnail is sufficient
+    return renderSignedDocumentOverlayAtScale(project, kind, 1.0, thumbnailSrcForKind);
+  } else if (targetPx <= MODAL_WIDTH) {
+    // 2× DPR — 50% modal WebP gives pixel-perfect output at low network cost
+    return renderSignedDocumentOverlayAtScale(project, kind, 1.0, modalSrcForKind);
+  } else {
+    // 3× DPR (or large 2× tablet) — render full-res at the exact fraction needed
+    const scale = Math.min(targetPx / FULL_WIDTH, 1.0);
+    return renderSignedDocumentOverlayAtScale(project, kind, scale);
+  }
 }
 
 /**

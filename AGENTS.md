@@ -234,6 +234,15 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - DASH-02 (`EnergyCertificatePanel` + table cell badge): shows "Saltado por cliente" label/badge when EC is skipped
   - No code changes needed
 
+- **[2026-04-02] DPR-Aware Preview Rendering (blur fix)**
+  - Root cause: carousel renders at 310 px and `<img class="w-full">` is shown at full viewport width; on 3× DPR iPhones this causes 3.8× upscaling → extreme blur
+  - Fix: `renderSignedDocumentPreview` now reads `window.innerWidth × window.devicePixelRatio` and picks the cheapest source image that satisfies the physical pixel budget:
+    - ≤ 310 px → thumbnail WebP (1× DPR, unchanged)
+    - 311–620 px → modal WebP at scale 1.0 (2× DPR — pixel-perfect)
+    - > 620 px → full-res PNG at fractional scale (3× DPR — pixel-perfect)
+  - `preloadDocumentTemplates` now loads modal WebPs as priority 2 (between thumb and full-res)
+  - File: `app/src/lib/signedDocumentOverlays.ts`
+
 - **[2026-04-02] Representació Field Alignment Fix**
   - Pixel-level scan of `autoritzacio-representacio.jpg` (1241×1754 px) revealed all persona/empresa box tops were 8–12px above actual template content rows
   - Adjusted REPRESENTACIO_FIELDS y-coordinates to match actual pixel rows (+8 to +12px per field)

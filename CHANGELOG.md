@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-04-02 — Session: DPR-Aware Preview Rendering (blur fix)
+
+**Phase**: Developer
+
+**Problem solved:**
+Carousel previews were extremely blurry on modern phones. Root cause from first principles:
+- `renderSignedDocumentPreview` rendered onto the 25%-scale thumbnail (310×439 px)
+- The `<img class="w-full">` fills the carousel, e.g. 390px CSS on an iPhone 14
+- At 3× DPR the browser needs 390×3=1,170 physical pixels but only 310 exist → 3.8× upscale → extreme blur
+
+**What was done:**
+- Made `renderSignedDocumentPreview` DPR-aware: reads `window.innerWidth` and `window.devicePixelRatio` to compute the exact physical pixel target
+- Selects the smallest source that satisfies the target (cheapest correct answer):
+  - Target ≤ 310 px → 25% thumbnail WebP at scale 1.0 (unchanged path, 1× screens)
+  - Target ≤ 620 px → 50% modal WebP at scale 1.0 (2× DPR devices — crisp, 39–84 KB)
+  - Target  > 620 px → full-resolution PNG at fractional scale (3× DPR devices — pixel-perfect)
+- Added modal WebPs to `preloadDocumentTemplates` priority queue (between thumbnails and full-res)
+- Updated JSDoc to reflect new behaviour
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+
+**Test status:** TypeScript compiles cleanly (0 errors). Visual rendering change only.
+
+**What's next:** Complete changelog reorganisation per user feedback.
+
+---
+
 ## 2026-04-02 — Session: Representació Field Alignment Fix
 
 **Phase**: Developer
