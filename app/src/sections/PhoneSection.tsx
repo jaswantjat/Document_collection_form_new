@@ -8,6 +8,17 @@ interface Props {
   onContinue: () => void;
 }
 
+const DIAL_CODES = [
+  { code: '+34', flag: '🇪🇸', label: 'España',       placeholder: '612 345 678' },
+  { code: '+44', flag: '🇬🇧', label: 'Reino Unido',  placeholder: '7700 900000' },
+  { code: '+351', flag: '🇵🇹', label: 'Portugal',     placeholder: '912 345 678' },
+  { code: '+33', flag: '🇫🇷', label: 'Francia',       placeholder: '6 12 34 56 78' },
+  { code: '+49', flag: '🇩🇪', label: 'Alemania',      placeholder: '151 12345678' },
+  { code: '+39', flag: '🇮🇹', label: 'Italia',        placeholder: '312 345 6789' },
+  { code: '+31', flag: '🇳🇱', label: 'Países Bajos',  placeholder: '6 12345678' },
+  { code: '+1',  flag: '🇺🇸', label: 'EE. UU. / CA', placeholder: '202 555 0123' },
+] as const;
+
 /**
  * Parse and normalise a phone number — Spanish or international.
  *
@@ -41,14 +52,23 @@ function parsePhone(raw: string): string | null {
   return null;
 }
 
-function getPhoneError(val: string): string | null {
-  if (!val.trim()) return 'El teléfono es obligatorio.';
-  if (!parsePhone(val)) return 'Introduce un número de teléfono válido (ej: +34 600 000 000 o +44 7700 900000).';
+/** Build the E.164 string from the split dial-code + local-number fields. */
+function buildPhone(dialCode: string, localNumber: string): string {
+  // Strip leading zero (some countries write local numbers with a leading 0)
+  const digits = localNumber.replace(/[\s\-.()\u00A0]/g, '').replace(/^0/, '');
+  return dialCode + digits;
+}
+
+function getPhoneError(dialCode: string, localNumber: string): string | null {
+  if (!localNumber.trim()) return 'El teléfono es obligatorio.';
+  const combined = buildPhone(dialCode, localNumber);
+  if (!parsePhone(combined)) return 'Número incompleto o no válido.';
   return null;
 }
 
 export function PhoneSection({ onPhoneConfirmed }: Props) {
-  const [phone, setPhone] = useState('');
+  const [dialCode, setDialCode] = useState('+34');
+  const [localNumber, setLocalNumber] = useState('');
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,22 +76,24 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
   const [newEmail, setNewEmail] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<'solar' | 'aerothermal'>>(new Set(['solar']));
   const [newAssessor, setNewAssessor] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const numberInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { numberInputRef.current?.focus(); }, []);
+
+  const selectedDialEntry = DIAL_CODES.find(d => d.code === dialCode) ?? DIAL_CODES[0];
 
   // Live validation once the field has been touched
-  const liveError = touched ? getPhoneError(phone) : null;
+  const liveError = touched ? getPhoneError(dialCode, localNumber) : null;
 
   const lookup = async () => {
     setTouched(true);
-    const val = phone.trim();
-    const phoneError = getPhoneError(val);
-    if (phoneError) { setError(phoneError); return; }
+    const err = getPhoneError(dialCode, localNumber);
+    if (err) { setError(err); return; }
+    const combined = buildPhone(dialCode, localNumber);
     setLoading(true); setError('');
     try {
-      const res = await lookupByPhone(val);
-      if (res.success && res.project) { onPhoneConfirmed(val, res.project); }
+      const res = await lookupByPhone(combined);
+      if (res.success && res.project) { onPhoneConfirmed(combined, res.project); }
       else { setShowNewForm(true); }
     } catch { setError('Sin conexión. Inténtalo de nuevo.'); }
     finally { setLoading(false); }
@@ -79,9 +101,9 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
 
   const create = async () => {
     setTouched(true);
-    const val = phone.trim();
-    const phoneError = getPhoneError(val);
-    if (phoneError) { setError(phoneError); return; }
+    const err = getPhoneError(dialCode, localNumber);
+    if (err) { setError(err); return; }
+    const combined = buildPhone(dialCode, localNumber);
     setLoading(true); setError('');
     try {
       const productType = selectedProducts.has('solar') && selectedProducts.has('aerothermal')
@@ -90,16 +112,18 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
           ? 'aerothermal'
           : 'solar';
       const res = await createProject({
-        phone: val,
+        phone: combined,
         email: newEmail.trim() || undefined,
         productType,
         assessor: newAssessor.trim() || undefined,
       });
-      if (res.success && res.project) { onPhoneConfirmed(val, res.project); }
+      if (res.success && res.project) { onPhoneConfirmed(combined, res.project); }
       else { setError(res.message || 'No se pudo crear el expediente.'); }
     } catch { setError('Sin conexión. Inténtalo de nuevo.'); }
     finally { setLoading(false); }
   };
+
+  const displayPhone = `${dialCode} ${localNumber}`.trim();
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
@@ -118,20 +142,56 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
             </div>
 
             <div className="space-y-3">
-              <input
-                ref={inputRef}
-                type="tel"
-                value={phone}
-                onChange={e => { setPhone(e.target.value); setError(''); setTouched(true); }}
-                onKeyDown={e => e.key === 'Enter' && lookup()}
-                placeholder="+34 600 000 000 / +44 7700 900000"
-                autoComplete="tel"
-                maxLength={20}
-                className={`form-input text-lg ${(liveError || error) ? 'error' : ''}`}
-              />
+              {/* Country code + number row */}
+              <div className={`flex gap-2 ${(liveError || error) ? 'has-error' : ''}`}>
+                {/* Dial-code picker */}
+                <div className="relative shrink-0">
+                  <select
+                    value={dialCode}
+                    onChange={e => {
+                      setDialCode(e.target.value);
+                      setLocalNumber('');
+                      setTouched(false);
+                      setError('');
+                      setTimeout(() => numberInputRef.current?.focus(), 0);
+                    }}
+                    aria-label="Prefijo internacional"
+                    className="form-input !w-auto appearance-none pr-7 pl-3 text-base cursor-pointer"
+                    style={{ minWidth: '5.5rem' }}
+                  >
+                    {DIAL_CODES.map(d => (
+                      <option key={d.code} value={d.code}>
+                        {d.flag} {d.code}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Custom chevron */}
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
+                </div>
+
+                {/* Local number */}
+                <input
+                  ref={numberInputRef}
+                  type="tel"
+                  inputMode="numeric"
+                  value={localNumber}
+                  onChange={e => {
+                    setLocalNumber(e.target.value);
+                    setError('');
+                    setTouched(true);
+                  }}
+                  onKeyDown={e => e.key === 'Enter' && lookup()}
+                  placeholder={selectedDialEntry.placeholder}
+                  autoComplete="tel-national"
+                  maxLength={15}
+                  className={`form-input text-lg flex-1 min-w-0 ${(liveError || error) ? 'error' : ''}`}
+                />
+              </div>
+
               {(liveError || error) && (
                 <p className="text-sm text-red-500">{liveError || error}</p>
               )}
+
               <button
                 type="button"
                 onClick={lookup}
@@ -146,7 +206,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
           <>
             <div className="space-y-1">
               <h1 className="text-2xl font-bold text-gray-900">Nuevo expediente</h1>
-              <p className="text-gray-400 text-sm">No existe expediente para <strong className="text-gray-700">{phone}</strong>. Completa los datos para crearlo.</p>
+              <p className="text-gray-400 text-sm">No existe expediente para <strong className="text-gray-700">{displayPhone}</strong>. Completa los datos para crearlo.</p>
             </div>
 
             <div className="space-y-4">

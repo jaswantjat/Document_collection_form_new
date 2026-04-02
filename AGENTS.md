@@ -234,6 +234,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - DASH-02 (`EnergyCertificatePanel` + table cell badge): shows "Saltado por cliente" label/badge when EC is skipped
   - No code changes needed
 
+- **[2026-04-02] Phone entry — country-code picker + friction removal**
+  - Replaced single free-text phone field with [country dropdown] + [local-number input] pair
+  - Dropdown defaults to 🇪🇸 +34; covers ES/GB/PT/FR/DE/IT/NL/US
+  - Placeholder in number field updates to match country (e.g. "612 345 678" for Spain)
+  - Combined value flows through existing `parsePhone` E.164 normaliser — no backend changes
+  - File: `app/src/sections/PhoneSection.tsx`
+
 - **[2026-04-02] DPR-Aware Preview Rendering (blur fix)**
   - Root cause: carousel renders at 310 px and `<img class="w-full">` is shown at full viewport width; on 3× DPR iPhones this causes 3.8× upscaling → extreme blur
   - Fix: `renderSignedDocumentPreview` now reads `window.innerWidth × window.devicePixelRatio` and picks the cheapest source image that satisfies the physical pixel budget:

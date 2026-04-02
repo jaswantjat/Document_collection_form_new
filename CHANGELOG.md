@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-04-02 — Session: Phone entry — country-code picker + friction removal
+
+**Phase**: Developer
+
+**Problem solved:**
+High friction on the first screen: customers were asked to type "+34 612 345 678" — four non-obvious characters before the real number. The `+`, `3`, `4`, and a space are pure friction; the user knows their 9-digit local number but has to figure out the international format.
+
+**What was done:**
+- Replaced the single free-text phone input with a [country code dropdown] + [local number input] pair
+- Dropdown defaults to 🇪🇸 +34 (Spain); includes ES/GB/PT/FR/DE/IT/NL/US
+- Number input placeholder updates to match the selected country (e.g. "612 345 678" for Spain, "7700 900000" for UK)
+- The combined value (dialCode + stripped local number) flows through the existing `parsePhone` E.164 normaliser unchanged — no backend or API changes needed
+- Local-number input type="tel" with inputMode="numeric" for numeric keyboard on iOS
+- Validation messages simplified ("Número incompleto." instead of a full international example)
+- `localNumber` state is cleared and focus returns to the number input when the dial code changes
+
+**Files changed:**
+- `app/src/sections/PhoneSection.tsx`
+
+**Test status:** TypeScript compiles cleanly. Existing phone.test.ts tests unaffected (they test `parsePhone` with E.164 strings, not the UI).
+
+**What's next:** —
+
+---
+
 ## 2026-04-02 — Session: DPR-Aware Preview Rendering (blur fix)
 
 **Phase**: Developer
