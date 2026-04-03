@@ -234,6 +234,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - DASH-02 (`EnergyCertificatePanel` + table cell badge): shows "Saltado por cliente" label/badge when EC is skipped
   - No code changes needed
 
+- **[2026-04-02] Full searchable country picker (WhatsApp-style)**
+  - Created `app/src/lib/countries.ts`: 200+ countries with Spanish names, flag emoji, dial code, placeholder
+  - Custom `CountryPickerSheet` component: full-screen overlay, search input (auto-focused), top-countries section + full alphabetical list, Escape / tap-outside to dismiss
+  - Country button (flag + code + chevron) replaces native `<select>`
+  - Auto-formats Spanish (+34) numbers as XXX XXX XXX while typing
+  - Files: `app/src/lib/countries.ts` (new), `app/src/sections/PhoneSection.tsx`
+
 - **[2026-04-02] Phone entry — country-code picker + friction removal**
   - Replaced single free-text phone field with [country dropdown] + [local-number input] pair
   - Dropdown defaults to 🇪🇸 +34; covers ES/GB/PT/FR/DE/IT/NL/US

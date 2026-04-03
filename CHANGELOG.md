@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-04-02 — Session: Full searchable country picker (WhatsApp-style)
+
+**Phase**: Developer
+
+**Problem solved:**
+The native `<select>` dropdown had only 8 hard-coded countries, no search, and poor mobile UX (iOS/Android native pickers are ugly and non-filterable). Users couldn't find their country.
+
+**What was done:**
+- Created `app/src/lib/countries.ts` — comprehensive list of 200+ countries with Spanish names, flag emojis, and dial codes; sorted alphabetically with ES/GB/PT/FR/DE/IT/NL/US pinned at the top
+- Replaced the `<select>` with a custom bottom-sheet `CountryPickerSheet` component:
+  - Tap the flag/code button → full-screen overlay with search input (auto-focused)
+  - Live search filters by country name or dial code as you type
+  - "Top countries" section (Spain first, then common EU + UK) always visible above the full list
+  - Selecting a country closes the sheet and focuses the number input
+  - Tap outside / press Escape to dismiss
+- Auto-format Spanish (+34) numbers as XXX XXX XXX while typing
+- Country picker sheet uses `inputMode="search"` so mobile keyboard opens immediately
+
+**Files changed:**
+- `app/src/lib/countries.ts` (new)
+- `app/src/sections/PhoneSection.tsx`
+
+**Test status:** TypeScript compiles cleanly. phone.test.ts unaffected.
+
+**What's next:** —
+
+---
+
 ## 2026-04-02 — Session: Phone entry — country-code picker + friction removal
 
 **Phase**: Developer
