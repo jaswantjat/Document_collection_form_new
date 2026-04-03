@@ -271,6 +271,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Warning auto-dismisses on the next successful save
   - Files: `app/src/services/api.ts`, `app/src/hooks/useFormState.ts`
 
+- **[2026-04-03] Phone validation hardening**
+  - Spain (+34): `parsePhone('+34512345678')` passed because E.164 path only checks digit count — numbers starting with 1–5 wrongly accepted
+  - Fixed: `getPhoneError` now applies Spain-specific rules (9 digits, starts with 6–9) before falling through to E.164 check
+  - `buildPhone` `^0` → `^0+` to strip all leading zeros
+  - Extracted `parsePhone`, `buildPhone`, `getPhoneError`, `formatLocalNumber` to `app/src/lib/phone.ts` — `PhoneSection.tsx` imports from it; test file imports from it (no more copy-paste)
+  - Tests: 7 → 21 (added `buildPhone`, `getPhoneError`, `formatLocalNumber` coverage)
+
 - **[2026-04-03] Deferred-signature routing fix**
   - `hasRepresentationDone()` was treating `signatureDeferred: true` as "section done" — users who clicked "Firmar más tarde" could never see the signature section again on reload
   - Removed the `signatureDeferred` early-return from `hasRepresentationDone()`; the "Firmar más tarde" in-session navigation was never affected (it calls `onContinue()` directly)

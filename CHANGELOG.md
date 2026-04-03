@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-04-03.7 — Session: Phone number validation hardening
+
+**Phase**: Developer
+
+**Problems found:**
+
+1. **Spain numbers starting with 1–5 passed validation.** `parsePhone('+34512345678')` returned a valid result because the E.164 path only checks total digit count (7–15), not country-specific start-digit rules. A staff member entering an invalid Spanish number like `512345678` would see no error and trigger a pointless lookup.
+
+2. **Functions were duplicated.** `parsePhone`, `buildPhone`, `getPhoneError`, and `formatLocalNumber` were defined inline in `PhoneSection.tsx` and then *copied manually* into `phone.test.ts` for unit testing. Any fix to the real code wouldn't automatically be tested.
+
+3. **`buildPhone` only stripped a single leading zero.** `'00612345678'.replace(/^0/, '')` → `'0612345678'` — still incorrect. Fixed to strip all leading zeros (`/^0+/`).
+
+**Fix:**
+
+- Extracted all four functions to `app/src/lib/phone.ts` (new exported module)
+- Added Spain-specific validation in `getPhoneError`: when `dialCode === '+34'`, the local digits must be exactly 9 and start with 6, 7, 8, or 9 — specific error messages for too short / too long / wrong start digit
+- `PhoneSection.tsx` now imports from `@/lib/phone` — no more inline duplicates
+- `phone.test.ts` now imports from the module and covers all four functions: 21 test cases across `parsePhone`, `buildPhone`, `getPhoneError` (Spain + international), and `formatLocalNumber`
+
+**Files changed:**
+- `app/src/lib/phone.ts` (new)
+- `app/src/sections/PhoneSection.tsx` (replaced inline defs with imports)
+- `app/src/lib/phone.test.ts` (full rewrite — now imports from module, 21 tests)
+
+**Test status:** 37/37 passing (was 37 before; phone tests were 7, now 21). TypeScript: 0 errors.
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.6 — Session: Fix deferred-signature routing (users can sign on return visit)
 
 **Phase**: Developer

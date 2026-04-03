@@ -1,33 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { parsePhone, buildPhone, getPhoneError, formatLocalNumber } from './phone';
 
-/**
- * Parse and normalise a phone number — Spanish or international.
- * (Copied from PhoneSection.tsx for unit testing)
- */
-function parsePhone(raw: string): string | null {
-  // Strip spaces, dashes, dots, parentheses — keep + and digits
-  let clean = raw.replace(/[\s\-.()\u00A0]/g, '');
+// ── parsePhone ────────────────────────────────────────────────────────────────
 
-  // Convert 00XX international prefix → +XX
-  if (/^00\d/.test(clean)) clean = '+' + clean.slice(2);
-
-  // International format: starts with +
-  if (clean.startsWith('+')) {
-    const digits = clean.slice(1);
-    // E.164 allows 7–15 digits after the country code
-    if (/^\d{7,15}$/.test(digits)) return '+' + digits;
-    return null;
-  }
-
-  // Spanish shorthand: exactly 9 digits starting with 6, 7, 8, or 9
-  if (/^\d{9}$/.test(clean) && /^[6-9]/.test(clean)) {
-    return '+34' + clean;
-  }
-
-  return null;
-}
-
-describe('parsePhone (Frontend)', () => {
+describe('parsePhone', () => {
   it('UNIT-PHONE-01: accepts Spanish 9-digit numbers', () => {
     expect(parsePhone('612345678')).toBe('+34612345678');
     expect(parsePhone('912345678')).toBe('+34912345678');
@@ -59,9 +35,93 @@ describe('parsePhone (Frontend)', () => {
   });
 
   it('rejects invalid numbers', () => {
-    expect(parsePhone('12345678')).toBeNull(); // Too short
-    expect(parsePhone('1234567890123456')).toBeNull(); // Too long (16 digits)
-    expect(parsePhone('512345678')).toBeNull(); // Invalid Spanish start digit
-    expect(parsePhone('abc123456')).toBeNull(); // Non-numeric
+    expect(parsePhone('12345678')).toBeNull();          // Too short, no country code
+    expect(parsePhone('1234567890123456')).toBeNull();  // Too long (16 digits)
+    expect(parsePhone('512345678')).toBeNull();          // Invalid Spanish start digit
+    expect(parsePhone('abc123456')).toBeNull();          // Non-numeric
+  });
+});
+
+// ── buildPhone ────────────────────────────────────────────────────────────────
+
+describe('buildPhone', () => {
+  it('combines dial code and local number', () => {
+    expect(buildPhone('+34', '612345678')).toBe('+34612345678');
+    expect(buildPhone('+34', '612 345 678')).toBe('+34612345678');
+    expect(buildPhone('+44', '7700900000')).toBe('+447700900000');
+  });
+
+  it('strips a leading zero from local number (common in UK / DE / FR)', () => {
+    expect(buildPhone('+44', '07700900000')).toBe('+447700900000');
+    expect(buildPhone('+33', '0612345678')).toBe('+33612345678');
+  });
+
+  it('strips multiple leading zeros', () => {
+    expect(buildPhone('+34', '00612345678')).toBe('+34612345678');
+  });
+});
+
+// ── getPhoneError ─────────────────────────────────────────────────────────────
+
+describe('getPhoneError — Spain (+34)', () => {
+  it('returns null for valid Spanish mobile numbers', () => {
+    expect(getPhoneError('+34', '612345678')).toBeNull();
+    expect(getPhoneError('+34', '712345678')).toBeNull();
+    expect(getPhoneError('+34', '812345678')).toBeNull();
+    expect(getPhoneError('+34', '912345678')).toBeNull();
+    expect(getPhoneError('+34', '612 345 678')).toBeNull(); // formatted with spaces
+  });
+
+  it('rejects empty local number', () => {
+    expect(getPhoneError('+34', '')).toBeTruthy();
+    expect(getPhoneError('+34', '   ')).toBeTruthy();
+  });
+
+  it('rejects Spanish numbers that are too short', () => {
+    expect(getPhoneError('+34', '61234')).toBeTruthy();
+    expect(getPhoneError('+34', '61234567')).toBeTruthy(); // 8 digits
+  });
+
+  it('rejects Spanish numbers that are too long', () => {
+    expect(getPhoneError('+34', '6123456789')).toBeTruthy(); // 10 digits
+  });
+
+  it('rejects Spanish numbers starting with 1–5', () => {
+    expect(getPhoneError('+34', '512345678')).toBeTruthy();
+    expect(getPhoneError('+34', '412345678')).toBeTruthy();
+    expect(getPhoneError('+34', '112345678')).toBeTruthy();
+  });
+});
+
+describe('getPhoneError — international', () => {
+  it('returns null for valid UK numbers', () => {
+    expect(getPhoneError('+44', '7700900000')).toBeNull();
+    expect(getPhoneError('+44', '07700900000')).toBeNull(); // leading 0 stripped by buildPhone
+  });
+
+  it('returns null for valid French numbers', () => {
+    expect(getPhoneError('+33', '612345678')).toBeNull();
+  });
+
+  it('returns null for valid US numbers', () => {
+    expect(getPhoneError('+1', '2025550123')).toBeNull();
+  });
+
+  it('rejects numbers that are too short after combining', () => {
+    expect(getPhoneError('+44', '123')).toBeTruthy();
+  });
+});
+
+// ── formatLocalNumber ─────────────────────────────────────────────────────────
+
+describe('formatLocalNumber', () => {
+  it('formats Spanish numbers as XXX XXX XXX', () => {
+    expect(formatLocalNumber('612', '+34')).toBe('612');
+    expect(formatLocalNumber('612345', '+34')).toBe('612 345');
+    expect(formatLocalNumber('612345678', '+34')).toBe('612 345 678');
+  });
+
+  it('returns non-Spanish input unchanged', () => {
+    expect(formatLocalNumber('7700900000', '+44')).toBe('7700900000');
   });
 });

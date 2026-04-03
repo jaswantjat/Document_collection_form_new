@@ -3,55 +3,11 @@ import { ArrowRight, Loader2, UserPlus, Search, ChevronDown, X } from 'lucide-re
 import type { ProjectData } from '@/types';
 import { lookupByPhone, createProject } from '@/services/api';
 import { COUNTRIES_SORTED, TOP_COUNTRIES, findCountry, type Country } from '@/lib/countries';
+import { buildPhone, getPhoneError, formatLocalNumber } from '@/lib/phone';
 
 interface Props {
   onPhoneConfirmed: (phone: string, project: ProjectData) => void;
   onContinue: () => void;
-}
-
-/**
- * Parse and normalise a phone number — Spanish or international.
- *
- * Accepts:
- *  - Spanish 9-digit numbers starting with 6/7/8/9 (with or without +34 / 0034 prefix)
- *  - Any international number in E.164 format (+CC…) or with 00CC prefix
- *
- * Returns the normalised E.164 string (e.g. "+34612345678", "+447700900000")
- * or null if the input cannot be parsed as a valid phone number.
- */
-function parsePhone(raw: string): string | null {
-  let clean = raw.replace(/[\s\-.()\u00A0]/g, '');
-  if (/^00\d/.test(clean)) clean = '+' + clean.slice(2);
-  if (clean.startsWith('+')) {
-    const digits = clean.slice(1);
-    if (/^\d{7,15}$/.test(digits)) return '+' + digits;
-    return null;
-  }
-  if (/^\d{9}$/.test(clean) && /^[6-9]/.test(clean)) return '+34' + clean;
-  return null;
-}
-
-function buildPhone(dialCode: string, localNumber: string): string {
-  const digits = localNumber.replace(/[\s\-.()\u00A0]/g, '').replace(/^0/, '');
-  return dialCode + digits;
-}
-
-function getPhoneError(dialCode: string, localNumber: string): string | null {
-  if (!localNumber.trim()) return 'El teléfono es obligatorio.';
-  const combined = buildPhone(dialCode, localNumber);
-  if (!parsePhone(combined)) return 'Número incompleto o no válido.';
-  return null;
-}
-
-/** Format Spanish numbers as XXX XXX XXX while typing */
-function formatLocalNumber(raw: string, dialCode: string): string {
-  const digits = raw.replace(/\D/g, '');
-  if (dialCode === '+34' && digits.length <= 9) {
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
-  }
-  return raw;
 }
 
 // ── Country Picker Sheet ─────────────────────────────────────────────────────
