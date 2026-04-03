@@ -151,6 +151,33 @@ export async function createRenderedDocumentAsset(source: any, kind: SignedDocum
   };
 }
 
+/**
+ * Stamp renderedDocuments metadata for all present signed documents WITHOUT
+ * rendering any canvas.
+ *
+ * Use this on the submit path: the submit flow calls `stripRenderedImages` right
+ * after, which discards `imageDataUrl` anyway — the server only needs
+ * `{ generatedAt, templateVersion }`.  Skipping the full-res canvas render saves
+ * 500–1500 ms of main-thread blocking on every submit.
+ *
+ * The admin dashboard regenerates documents on demand via `renderSignedDocumentOverlay`
+ * (it always falls through because `imageDataUrl` is null after the server round-trip).
+ */
+export function stampRenderedDocumentMetadata(source: FormData): FormData {
+  const definitions = getSignedDocumentDefinitions({ formData: source, code: 'project' }).filter(item => item.present);
+  if (definitions.length === 0) return source;
+  const now = new Date().toISOString();
+  let nextFormData = source;
+  for (const item of definitions) {
+    nextFormData = setStoredRenderedDocument(nextFormData, item.key, {
+      imageDataUrl: '',
+      generatedAt: now,
+      templateVersion: SIGNED_DOCUMENT_TEMPLATE_VERSION,
+    });
+  }
+  return nextFormData;
+}
+
 export async function ensureRenderedDocuments(source: FormData): Promise<FormData> {
   const definitions = getSignedDocumentDefinitions({ formData: source, code: 'project' }).filter((item) => item.present);
 

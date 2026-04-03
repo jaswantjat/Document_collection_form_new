@@ -3,7 +3,7 @@ import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, 
 import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
 import { submitForm } from '@/services/api';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
-import { ensureRenderedDocuments } from '@/lib/signedDocumentOverlays';
+import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
@@ -107,7 +107,11 @@ export function ReviewSection({
     setSubmitting(true);
     setSubmitError('');
     try {
-      const renderedRepresentation = await ensureRenderedDocuments(formData);
+      // Stamp metadata (generatedAt + templateVersion) without rendering any canvas.
+      // stripRenderedImages() immediately discards imageDataUrl anyway — the server
+      // only stores { generatedAt, templateVersion }.  Full-res rendering is done
+      // on demand by the admin dashboard (renderSignedDocumentOverlay).
+      const renderedRepresentation = stampRenderedDocumentMetadata(formData);
       let renderedFormData = renderedRepresentation;
 
       if (renderedRepresentation.energyCertificate.status === 'completed') {

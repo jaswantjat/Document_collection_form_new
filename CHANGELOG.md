@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-04-03.2 — Session: Eliminate wasted canvas render on submit
+
+**Phase**: Developer
+
+**Root cause:**
+`submit()` called `ensureRenderedDocuments(formData)` which rendered up to 3 signed documents at full resolution (1241×1754 JPEG, 300–500 ms each). Immediately after, `stripRenderedImages()` discarded every `imageDataUrl` — only `{ generatedAt, templateVersion }` metadata was kept and sent to the server. The server dashboard determines "present" status from signature fields, not from renderedDocuments. The admin dashboard re-renders on demand anyway (dashboard.tsx line 236–238: falls through to `renderSignedDocumentOverlay` when `imageDataUrl` is null). Net result: 500–1500 ms of main-thread blocking on every submit, producing ~2–3 MB of data that was never used.
+
+**Fix:**
+Added `stampRenderedDocumentMetadata(source)` to `signedDocumentOverlays.ts` — a synchronous function that writes `{ generatedAt, templateVersion }` for all present documents directly without touching Canvas.  `ReviewSection.submit` now calls this instead of `ensureRenderedDocuments`. The Energy Certificate rendering (`createRenderedEnergyCertificateAsset`) is unchanged — its `imageDataUrl` is kept by `stripRenderedImages` and is used by the backend ZIP download.
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+- `app/src/sections/ReviewSection.tsx`
+
+**Test status:** TypeScript compiles cleanly.
+
+---
+
 ## 2026-04-03 — Session: Name coordinate fix + preview speed
 
 **Phase**: Developer
