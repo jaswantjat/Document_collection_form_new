@@ -16,6 +16,7 @@ import { getLocationInfo } from '@/lib/provinceMapping';
 // SuccessSection is imported statically (not lazy) — it's tiny and must render
 // instantly after submit completes, avoiding a Suspense/LoadingSection flash.
 import { SuccessSection } from '@/sections/SuccessSection';
+import { FlowProgressBar } from '@/components/FlowProgressBar';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
@@ -185,6 +186,14 @@ function FormApp() {
 
     prepareProjectLoad();
 
+    const timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        controller.abort();
+        setLoadError('NETWORK_ERROR');
+        setLoading(false);
+      }
+    }, 12000);
+
     fetchProject(urlCode, token, { signal: controller.signal })
       .then(async (res) => {
         if (controller.signal.aborted) return;
@@ -301,7 +310,7 @@ function FormApp() {
         }
       });
 
-    return () => controller.abort();
+    return () => { controller.abort(); clearTimeout(timeoutId); };
   }, [urlCode, urlToken]);
 
   useEffect(() => {
@@ -419,7 +428,7 @@ function FormApp() {
             onRemoveElectricityPage={removeElectricityPage}
             onDocumentProcessingChange={setDocumentProcessingState}
             onContractChange={setContract}
-            onBack={() => goTo('phone')}
+            onBack={source === 'assessor' ? () => goTo('phone') : undefined}
             onContinue={() => {
               if (!validatePropertyDocs()) return;
               if (followUpDocumentFlow) {
@@ -504,13 +513,17 @@ function FormApp() {
     }
   };
 
+  const showProgressBar = !activeLoading && !activeLoadError && !!activeProject
+    && activeSection !== 'phone' && activeSection !== 'success';
+
   return (
     <div className="min-h-screen bg-white">
       <Toaster
         position="top-center"
         toastOptions={{ style: { background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '12px' } }}
       />
-      <main>
+      {showProgressBar && <FlowProgressBar currentSection={activeSection} />}
+      <main className={showProgressBar ? 'pt-11' : ''}>
         <Suspense fallback={<LoadingSection />}>
           {renderSection()}
         </Suspense>

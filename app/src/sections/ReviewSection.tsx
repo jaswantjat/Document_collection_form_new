@@ -81,7 +81,7 @@ export function ReviewSection({
       description: 'Recibo del IBI o escritura de la propiedad',
       hint: 'Puede ser una foto o un PDF',
       icon: FileText,
-      done: !!ibi.photo,
+      done: !!ibi.photo || (ibi.pages?.length ?? 0) > 0,
       section: 'property-docs',
     },
     {

@@ -8,7 +8,7 @@ interface Props {
 
 export function SuccessSection({ project }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const firstName = project.customerName.split(' ')[0];
+  const firstName = project.customerName?.split(' ')[0] || null;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -38,7 +38,7 @@ export function SuccessSection({ project }: Props) {
 
         <div data-animate className="space-y-2">
           <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-            ¡Todo listo, {firstName}!
+            {firstName ? `¡Todo listo, ${firstName}!` : '¡Todo listo!'}
           </h1>
           <p className="text-sm text-gray-400 leading-relaxed">
             Hemos recibido tu documentación correctamente.<br />
