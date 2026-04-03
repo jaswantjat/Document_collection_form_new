@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-04-03.6 — Session: Fix deferred-signature routing (users can sign on return visit)
+
+**Phase**: Developer
+
+**Root cause (first principles):**
+`hasRepresentationDone()` contained this check:
+```js
+if (rep.signatureDeferred) return true;
+```
+This made the routing system treat "user clicked Firmar más tarde" as equivalent to "user has actually signed." On every subsequent page load, `getInitialSection()` would see `signatureDeferred: true`, call `hasRepresentationDone()` → `true`, and route the user straight to energy-certificate or review — permanently skipping the signature section.
+
+The in-session "allow proceeding past signature" behaviour never needed this check at all. When a user clicks "Firmar más tarde", `handleDeferSignature()` directly calls `onContinue()` — the routing function is not consulted at all during that navigation. The `signatureDeferred` flag in `hasRepresentationDone()` only affected the **reload** path, where it was wrong.
+
+**Fix:**
+Removed the three-line `signatureDeferred` early-return block from `hasRepresentationDone()` in `App.tsx`. The function now only returns `true` when actual signature values are present. The "Firmar más tarde" button continues to work for in-session navigation (direct `onContinue()` call). On reload, deferred users correctly land on the representation section where they can sign.
+
+**Files changed:**
+- `app/src/App.tsx`
+
+**Test status:** TypeScript compiles cleanly (0 errors).
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.5 — Session: Optional "Firmar más tarde" (remote / deferred signature)
 
 **Phase**: Developer

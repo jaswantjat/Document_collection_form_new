@@ -66,9 +66,6 @@ function hasRepresentationDone(formData: FormData | null, location: string | nul
   if (location === 'other') return true;
   const rep = formData.representation;
   if (!rep) return false;
-  // Customer chose to sign later (remote signing) — treat as done for routing purposes.
-  // The review screen will still warn them that the signature is pending.
-  if (rep.signatureDeferred) return true;
   if (location === 'cataluna') {
     return !!(rep.ivaCertificateSignature && rep.generalitatSignature && rep.representacioSignature);
   }

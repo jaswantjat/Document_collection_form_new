@@ -271,6 +271,11 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Warning auto-dismisses on the next successful save
   - Files: `app/src/services/api.ts`, `app/src/hooks/useFormState.ts`
 
+- **[2026-04-03] Deferred-signature routing fix**
+  - `hasRepresentationDone()` was treating `signatureDeferred: true` as "section done" — users who clicked "Firmar más tarde" could never see the signature section again on reload
+  - Removed the `signatureDeferred` early-return from `hasRepresentationDone()`; the "Firmar más tarde" in-session navigation was never affected (it calls `onContinue()` directly)
+  - File: `app/src/App.tsx`
+
 ### 🔧 In Progress
 - None
 
