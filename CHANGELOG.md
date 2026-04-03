@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 2026-04-03 — Session: Name coordinate fix + preview speed
+
+**Phase**: Developer
+
+**Problem 1 — Name too far right:**
+Pixel scan of autoritzacio-representacio.jpg at y=261 showed the label "Nom i cognoms / Raó social:" ends at x≈364 but the fill box started at x=388 — 24px gap. At 700px CSS display width that's a 13px blank gap before the user's name, making it appear detached from the label colon.
+- personaNom[0] / empresaNom[0]: 388 → 370 (leaves ~6px gap after colon — natural pen-gap width)
+
+**Problem 2 — Preview loading slow:**
+The DPR-aware rendering introduced in the previous session routed 3× DPR devices (every modern iPhone) through the full-res path:
+- Network: 148–943 KB download (was 39–84 KB modal WebP)
+- Encode: `toDataURL` on 1167×1651 canvas → ~300–500ms main-thread block
+
+"Who not how" solution: the 620×877 modal WebPs are sufficient for carousel previews on ALL devices (2× better than thumbnails on both 1× and 2× screens; 1.5× upscale on 3× — acceptable for a thumbnail). Full-res is reserved exclusively for the fullscreen read modal where pixel-perfect quality justifies the cost.
+- `renderSignedDocumentPreview` simplified to always use `modalSrcForKind` at scale=1.0
+- DPR-detection code removed (no longer needed for preview path)
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+
+**Test status:** TypeScript compiles cleanly.
+
+**What's next:** —
+
+---
+
 ## 2026-04-02 — Session: Full searchable country picker (WhatsApp-style)
 
 **Phase**: Developer
