@@ -101,6 +101,17 @@ function airTypeLabel(v: FormData['energyCertificate']['thermal']['airConditioni
   if (v === 'frio') return 'Frío';
   return '';
 }
+function windowFrameMaterialLabel(v: FormData['energyCertificate']['housing']['windowFrameMaterial']) {
+  if (v === 'madera') return 'Madera';
+  if (v === 'aluminio') return 'Aluminio';
+  if (v === 'pvc') return 'PVC';
+  return v || '';
+}
+function windowGlassTypeLabel(v: FormData['energyCertificate']['housing']['windowGlassType']) {
+  if (v === 'simple') return 'Simple';
+  if (v === 'doble') return 'Doble vidrio';
+  return v || '';
+}
 
 // ─── Canvas drawing primitives ────────────────────────────────────────────────
 function setFont(ctx: CanvasRenderingContext2D, size: number, weight: number | string = 400, color = DARK) {
