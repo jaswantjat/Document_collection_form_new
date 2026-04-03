@@ -49,6 +49,10 @@ export function ReviewSection({
   const submitInProgress = useRef(false);
   const autoSubmitFired = useRef(false);
   const autoSubmitProp = useRef(autoSubmit);
+  // Pre-render the energy certificate canvas on mount so submit() is instant.
+  // The user spends at least a second reading the review screen — we use that
+  // time to run the expensive canvas + JPEG encode in the background.
+  const energyCertPreRender = useRef<Promise<RenderedDocumentAsset> | null>(null);
   const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
@@ -115,10 +119,12 @@ export function ReviewSection({
       let renderedFormData = renderedRepresentation;
 
       if (renderedRepresentation.energyCertificate.status === 'completed') {
-        const renderedDocument = await createRenderedEnergyCertificateAsset({
-          project,
-          formData: renderedRepresentation,
-        });
+        // Re-use the pre-rendered result that was kicked off on mount.
+        // Falls back to rendering on-demand if somehow the ref is null.
+        const renderedDocument = await (
+          energyCertPreRender.current ??
+          createRenderedEnergyCertificateAsset({ project, formData: renderedRepresentation })
+        );
         renderedFormData = {
           ...renderedRepresentation,
           energyCertificate: {
@@ -145,6 +151,14 @@ export function ReviewSection({
     autoSubmitFired.current = true;
     submit();
   // Runs once on mount — autoSubmitProp.current captures the initial value
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fire-and-forget: start rendering the energy cert canvas immediately on mount
+  // so the expensive toDataURL() is done before the user taps submit.
+  useEffect(() => {
+    if (formData.energyCertificate.status !== 'completed') return;
+    energyCertPreRender.current = createRenderedEnergyCertificateAsset({ project, formData });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

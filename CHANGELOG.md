@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-04-03.4 — Session: Energy certificate submission speed fix
+
+**Phase**: Developer
+
+**Root cause (first principles):**
+On submit, `createRenderedEnergyCertificateAsset()` was called synchronously in the submission path. This function:
+1. Allocates a 1240×1754 pixel canvas (2.17M pixels)
+2. Fetches `/eltex-logo.png` (network round-trip if uncached)
+3. Draws ~30 table rows with text measurement on each
+4. Calls `canvas.toDataURL('image/jpeg', 0.82)` — single-threaded JPEG encoder on 2.17M pixels → **1–3 seconds on mobile**
+
+The user was staring at the spinner while all this blocked the submit.
+
+**Fix:**
+Pre-render the energy certificate canvas as soon as `ReviewSection` mounts — while the user is reading the review page. A new `useEffect` (empty deps, runs once) fires `createRenderedEnergyCertificateAsset()` and stores the Promise in a `energyCertPreRender` ref. In `submit()`, the existing `createRenderedEnergyCertificateAsset()` call is replaced with `await (energyCertPreRender.current ?? createRenderedEnergyCertificateAsset(...))`:
+- User spends ≥1s reading review screen (almost always) → Promise is already settled → `await` returns instantly → submit is fast
+- User taps submit immediately on mount → awaits the in-flight Promise (same timing as before, no regression)
+
+**Files changed:**
+- `app/src/sections/ReviewSection.tsx`
+
+**Test status:** TypeScript compiles cleanly. QA subagent: 7/7 checks PASS.
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.3 — Session: windowFrameMaterial + windowGlassType label fix
 
 **Phase**: Developer

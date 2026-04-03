@@ -281,6 +281,12 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Fixed: wired `windowFrameMaterialLabel()` and `windowGlassTypeLabel()` into the rows2b array
   - File: `app/src/lib/energyCertificateDocument.ts`
 
+- **[2026-04-03] Energy certificate submission speed fix**
+  - Root cause: `createRenderedEnergyCertificateAsset()` ran on the submit() hot path — 1–3s JPEG encode on 2.17M pixel canvas blocked the UI
+  - Fix: pre-render on ReviewSection mount (background useEffect), store Promise in ref; submit() awaits the cached Promise → instant if user spent ≥1s reading review
+  - Fallback: if user taps submit before render finishes, awaits the in-flight Promise (no regression)
+  - File: `app/src/sections/ReviewSection.tsx`
+
 ### 📋 To Do
 - None
 
