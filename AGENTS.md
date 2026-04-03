@@ -281,6 +281,15 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Fixed: wired `windowFrameMaterialLabel()` and `windowGlassTypeLabel()` into the rows2b array
   - File: `app/src/lib/energyCertificateDocument.ts`
 
+- **[2026-04-03] Optional "Firmar más tarde" (remote / deferred signature)**
+  - Signature section was a hard gate — no way to proceed without a signature
+  - Added `signatureDeferred?: boolean` to `RepresentationData` type
+  - `hasRepresentationDone()` in App.tsx now returns `true` for deferred users (prevents routing loop)
+  - "Firmar más tarde" tertiary button in RepresentationSection: sets flag, calls onContinue()
+  - `handleContinue()` clears `signatureDeferred: undefined` when customer actually signs
+  - ReviewSection shows context-aware warning ("Firma pendiente..." vs "Sin ellas, tu asesor no podrá...")
+  - Files: `app/src/types/index.ts`, `app/src/App.tsx`, `app/src/sections/RepresentationSection.tsx`, `app/src/sections/ReviewSection.tsx`
+
 - **[2026-04-03] Energy certificate submission speed fix**
   - Root cause: `createRenderedEnergyCertificateAsset()` ran on the submit() hot path — 1–3s JPEG encode on 2.17M pixel canvas blocked the UI
   - Fix: pre-render on ReviewSection mount (background useEffect), store Promise in ref; submit() awaits the cached Promise → instant if user spent ≥1s reading review

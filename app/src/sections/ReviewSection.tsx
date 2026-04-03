@@ -363,7 +363,11 @@ export function ReviewSection({
         {!followUpMode && !hasBlockingDocumentProcessing && !signaturesOk && (
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>Faltan las firmas de los documentos de representación. Sin ellas, tu asesor <strong>no podrá tramitar el expediente</strong> ni solicitar las subvenciones correspondientes.</span>
+            {formData.representation?.signatureDeferred ? (
+              <span>Firma pendiente — recuerda volver a este enlace para firmar los documentos antes de que tu asesor pueda tramitar el expediente.</span>
+            ) : (
+              <span>Faltan las firmas de los documentos de representación. Sin ellas, tu asesor <strong>no podrá tramitar el expediente</strong> ni solicitar las subvenciones correspondientes.</span>
+            )}
           </div>
         )}
 

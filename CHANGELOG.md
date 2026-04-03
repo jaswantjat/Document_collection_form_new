@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-04-03.5 — Session: Optional "Firmar más tarde" (remote / deferred signature)
+
+**Phase**: Developer
+
+**Problem:**
+The signature section was a hard gate — the Continue button was disabled until the customer drew a signature. For remote-signing scenarios (assessor fills the form in office, customer signs later from home), there was no way to proceed without a signature, and the app would route the customer back to the signature screen every time they reloaded.
+
+**Solution (progressive disclosure pattern):**
+Added a "Firmar más tarde" secondary action that lets customers defer signing and continue to the review screen. Four changes:
+
+1. **`app/src/types/index.ts`**: Added `signatureDeferred?: boolean` to `RepresentationData`
+2. **`app/src/App.tsx`**: `hasRepresentationDone()` now returns `true` when `signatureDeferred: true`, so the router skips the signature section on reload (deferred users land on review, not stuck in signature loop)
+3. **`app/src/sections/RepresentationSection.tsx`**:
+   - Added `handleDeferSignature()` — sets `signatureDeferred: true` and calls `onContinue()`
+   - Added "Firmar más tarde" tertiary button (clock icon, muted grey, below the primary Continue) — visually secondary so signing-in-person path stays prominent
+   - `handleContinue()` explicitly clears `signatureDeferred: undefined` when the customer actually signs, so the flag is cleaned up
+4. **`app/src/sections/ReviewSection.tsx`**: Warning message is context-aware — shows "Firma pendiente — recuerda volver..." for deferred users, the stronger "Sin ellas, tu asesor no podrá tramitar..." for users who simply skipped the section
+
+**Files changed:**
+- `app/src/types/index.ts`
+- `app/src/App.tsx`
+- `app/src/sections/RepresentationSection.tsx`
+- `app/src/sections/ReviewSection.tsx`
+
+**Test status:** TypeScript compiles cleanly (0 errors).
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.4 — Session: Energy certificate submission speed fix
 
 **Phase**: Developer

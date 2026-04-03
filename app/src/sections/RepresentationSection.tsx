@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
-import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2, ZoomIn, X } from 'lucide-react';
+import { ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Loader2, ZoomIn, X, Clock } from 'lucide-react';
 import { SignaturePad } from '@/components/SignaturePad';
 import type { FormData, RenderedDocumentAsset, RepresentationData, LocationRegion } from '@/types';
 import {
@@ -284,7 +284,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
         renderedDocuments[renderedDocumentKeyForKind(doc.kind)] = asset;
       }
 
-      onChange({ ...nextRepresentation, renderedDocuments });
+      onChange({ ...nextRepresentation, renderedDocuments, signatureDeferred: undefined });
       onContinue();
     } catch (err) {
       console.error('Failed to apply signatures:', err);
@@ -293,6 +293,13 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       applyingRef.current = false;
       setApplying(false);
     }
+  };
+
+  const handleDeferSignature = () => {
+    // Customer will sign remotely — mark as deferred so routing skips this section
+    // on reload, but the review screen will still show a missing-signature warning.
+    onChange({ ...data, signatureDeferred: true });
+    onContinue();
   };
 
   if (docs.length === 0) {
@@ -428,7 +435,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
           )}
         </div>
 
-        <div className="px-4 pb-4 safe-area-bottom max-w-sm mx-auto">
+        <div className="px-4 pb-4 safe-area-bottom max-w-sm mx-auto space-y-2">
           <div className="flex gap-3">
             <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
               <ArrowLeft className="w-4 h-4" />
@@ -451,6 +458,14 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               )}
             </button>
           </div>
+          <button
+            type="button"
+            onClick={handleDeferSignature}
+            className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 py-1.5 transition-colors"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Firmar más tarde
+          </button>
         </div>
       </div>
 

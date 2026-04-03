@@ -135,6 +135,7 @@ export interface RepresentationData {
   generalitatSignature: string | null;
   poderRepresentacioSignature: string | null;
   ivaCertificateEsSignature: string | null;
+  signatureDeferred?: boolean;
   renderedDocuments?: Partial<Record<RenderedDocumentKey, RenderedDocumentAsset>>;
 }
 
