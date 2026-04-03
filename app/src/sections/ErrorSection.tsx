@@ -55,7 +55,7 @@ export function ErrorSection({ error }: Props) {
             Reintentar
           </button>
           <a
-            href="tel:+34900000000"
+            href="tel:+34933868369"
             className="flex items-center gap-2 py-3 px-5 bg-white border border-gray-200 text-gray-700 font-medium rounded-xl text-sm hover:bg-gray-50 transition-colors"
           >
             <Phone className="w-4 h-4" />
