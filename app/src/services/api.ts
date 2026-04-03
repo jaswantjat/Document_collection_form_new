@@ -1,6 +1,94 @@
-import type { ProjectData } from '@/types';
+import type { ProjectData, FormData as AppFormData, UploadedPhoto, StoredDocumentFile } from '@/types';
 
 const API_BASE = '/api';
+
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+  const arr = dataUrl.split(',');
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  if (!mimeMatch) return null;
+  const mime = mimeMatch[1];
+  try {
+    const bstr = atob(arr[1]);
+    const u8arr = new Uint8Array(bstr.length);
+    for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
+    return new Blob([u8arr], { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+function appendPhoto(fd: globalThis.FormData, fieldName: string, photo: UploadedPhoto | null | undefined): boolean {
+  if (!photo?.preview) return false;
+  const blob = dataUrlToBlob(photo.preview);
+  if (!blob) return false;
+  const ext = photo.preview.includes('image/png') ? '.png' : '.jpg';
+  fd.append(fieldName, blob, `${fieldName}${ext}`);
+  return true;
+}
+
+function appendDataUrl(fd: globalThis.FormData, fieldName: string, dataUrl: string | null | undefined): boolean {
+  if (!dataUrl) return false;
+  const blob = dataUrlToBlob(dataUrl);
+  if (!blob) return false;
+  const ext = dataUrl.startsWith('data:image/png') ? '.png' : dataUrl.startsWith('data:application/pdf') ? '.pdf' : '.jpg';
+  fd.append(fieldName, blob, `${fieldName}${ext}`);
+  return true;
+}
+
+function appendStoredPdfs(fd: globalThis.FormData, fieldPrefix: string, pdfs: StoredDocumentFile[] | null | undefined): void {
+  if (!Array.isArray(pdfs)) return;
+  pdfs.forEach((pdf, i) => {
+    if (!pdf?.dataUrl) return;
+    const blob = dataUrlToBlob(pdf.dataUrl);
+    if (!blob) return;
+    const ext = pdf.mimeType === 'application/pdf' ? '.pdf' : '.jpg';
+    fd.append(`${fieldPrefix}_${i}`, blob, pdf.filename || `${fieldPrefix}_${i}${ext}`);
+  });
+}
+
+export async function preUploadAssets(
+  code: string,
+  formData: AppFormData,
+  token?: string | null
+): Promise<{ success: boolean; savedKeys?: string[] }> {
+  const fd = new globalThis.FormData();
+
+  appendPhoto(fd, 'dniFront', formData.dni?.front?.photo);
+  appendPhoto(fd, 'dniBack', formData.dni?.back?.photo);
+
+  const ibiPages = formData.ibi?.pages?.length
+    ? formData.ibi.pages
+    : formData.ibi?.photo
+      ? [formData.ibi.photo]
+      : [];
+  ibiPages.forEach((page, i) => {
+    if (page) appendPhoto(fd, `ibi_${i}`, page as UploadedPhoto);
+  });
+
+  (formData.electricityBill?.pages ?? []).forEach((page, i) => {
+    if (page?.photo) appendPhoto(fd, `electricity_${i}`, page.photo);
+  });
+
+  if (formData.energyCertificate?.renderedDocument?.imageDataUrl) {
+    appendDataUrl(fd, 'energyCert', formData.energyCertificate.renderedDocument.imageDataUrl);
+  }
+
+  appendStoredPdfs(fd, 'dniOriginal', formData.dni?.originalPdfs);
+  appendStoredPdfs(fd, 'ibiOriginal', formData.ibi?.originalPdfs);
+  appendStoredPdfs(fd, 'electricityOriginal', formData.electricityBill?.originalPdfs);
+
+  const hasAnyFile = (fd as any).entries ? [...(fd as any).entries()].length > 0 : true;
+  if (!hasAnyFile) return { success: true, savedKeys: [] };
+
+  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/upload-assets`, {
+    method: 'POST',
+    headers: token ? { 'x-project-token': token } : {},
+    body: fd,
+    signal: AbortSignal.timeout(30000),
+  });
+  return res.json();
+}
 
 function projectHeaders(token?: string | null): HeadersInit {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

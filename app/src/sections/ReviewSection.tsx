@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
 import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
-import { submitForm } from '@/services/api';
+import { submitForm, preUploadAssets } from '@/services/api';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
@@ -53,6 +53,9 @@ export function ReviewSection({
   // The user spends at least a second reading the review screen — we use that
   // time to run the expensive canvas + JPEG encode in the background.
   const energyCertPreRender = useRef<Promise<RenderedDocumentAsset> | null>(null);
+  // Pre-upload binary assets as multipart/form-data so the final submit JSON is lean.
+  const preUploadPromise = useRef<Promise<boolean> | null>(null);
+  const preUploadDone = useRef(false);
   const signaturesOk = hasRequiredSignatures(formData);
 
   const { dni, ibi, electricityBill } = formData;
@@ -112,9 +115,6 @@ export function ReviewSection({
     setSubmitError('');
     try {
       // Stamp metadata (generatedAt + templateVersion) without rendering any canvas.
-      // stripRenderedImages() immediately discards imageDataUrl anyway — the server
-      // only stores { generatedAt, templateVersion }.  Full-res rendering is done
-      // on demand by the admin dashboard (renderSignedDocumentOverlay).
       const renderedRepresentation = stampRenderedDocumentMetadata(formData);
       let renderedFormData = renderedRepresentation;
 
@@ -134,7 +134,18 @@ export function ReviewSection({
         };
       }
 
-      const submitPayload = stripRenderedImages(renderedFormData);
+      // If pre-upload has already completed, strip ALL binary from the submit payload.
+      // The server already has the files from the pre-upload — sending them again is waste.
+      // If pre-upload is still in progress, give it up to 3s; fall back to full payload on timeout.
+      const preUploadSuccess = preUploadDone.current || await Promise.race([
+        preUploadPromise.current ?? Promise.resolve(false),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)),
+      ]);
+
+      const submitPayload = preUploadSuccess
+        ? stripAllBinaryData(renderedFormData)
+        : stripRenderedImages(renderedFormData);
+
       const res = await submitForm(project.code, submitPayload, source, projectToken);
       if (res.success) onSuccess();
       else setSubmitError(res.message || 'Error al enviar. Inténtalo de nuevo.');
@@ -161,6 +172,49 @@ export function ReviewSection({
     energyCertPreRender.current = createRenderedEnergyCertificateAsset({ project, formData });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pre-upload all binary assets (photos + PDFs) as binary multipart files in the
+  // background while the user reads the review screen.  When pre-upload succeeds,
+  // the final submit JSON payload drops from ~2-5 MB to ~80 KB because the server
+  // already has the files.  If the pre-upload fails or times out we fall back to
+  // including the binary inline in the submit (the existing behavior).
+  useEffect(() => {
+    const getReadyFormData = () => {
+      // Chain on the EC pre-render so the energy cert image is included.
+      if (energyCertPreRender.current) {
+        return energyCertPreRender.current.then(renderedDoc => ({
+          ...formData,
+          energyCertificate: {
+            ...formData.energyCertificate,
+            renderedDocument: renderedDoc,
+          },
+        }));
+      }
+      return Promise.resolve(formData);
+    };
+
+    preUploadPromise.current = getReadyFormData()
+      .then(fd => preUploadAssets(project.code, fd, projectToken ?? null))
+      .then(() => {
+        preUploadDone.current = true;
+        return true;
+      })
+      .catch(() => false);
+  // Runs once on mount — captures initial formData and project values.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Strips ALL binary fields. Used after a successful pre-upload so the server
+  // already has the files and doesn't need them re-sent in the submit payload.
+  function stripAllBinaryData(fd: FormData): FormData {
+    return JSON.parse(JSON.stringify(fd, (key: string, value: unknown) => {
+      if (key === 'preview') return undefined;          // UploadedPhoto JPEG base64
+      if (key === 'dataUrl') return undefined;          // StoredDocumentFile PDF base64
+      if (key === 'imageDataUrl') return undefined;     // RenderedDocumentAsset JPEG base64
+      if (value instanceof File) return undefined;
+      return value;
+    })) as FormData;
+  }
 
   function stripRenderedImages(fd: FormData): FormData {
     const docs = fd.representation?.renderedDocuments;

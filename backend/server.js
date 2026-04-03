@@ -43,6 +43,8 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(uploadDir, { recursive: true });
+const assetUploadDir = path.join(DATA_DIR, 'uploads', 'assets');
+fs.mkdirSync(assetUploadDir, { recursive: true });
 
 // OpenRouter API config — key loaded from environment
 const initialOpenRouterApiKey = getOpenRouterApiKey();
@@ -413,6 +415,39 @@ const upload = multer({
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error('Solo se aceptan JPG, PNG y PDF.'));
   }
+});
+
+const ASSET_FIELDS = [
+  { name: 'dniFront', maxCount: 1 },
+  { name: 'dniBack', maxCount: 1 },
+  ...Array.from({ length: 5 }, (_, i) => ({ name: `ibi_${i}`, maxCount: 1 })),
+  ...Array.from({ length: 5 }, (_, i) => ({ name: `electricity_${i}`, maxCount: 1 })),
+  { name: 'energyCert', maxCount: 1 },
+  ...Array.from({ length: 5 }, (_, i) => ({ name: `dniOriginal_${i}`, maxCount: 1 })),
+  ...Array.from({ length: 5 }, (_, i) => ({ name: `ibiOriginal_${i}`, maxCount: 1 })),
+  ...Array.from({ length: 5 }, (_, i) => ({ name: `electricityOriginal_${i}`, maxCount: 1 })),
+];
+
+const assetStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(assetUploadDir, req.project?.code || 'unknown');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || (file.mimetype === 'application/pdf' ? '.pdf' : '.jpg');
+    cb(null, `${file.fieldname}${ext}`);
+  },
+});
+
+const assetUpload = multer({
+  storage: assetStorage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf', 'application/octet-stream'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Solo se aceptan JPG, PNG y PDF.'));
+  },
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -872,6 +907,35 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
 });
 
+// Pre-upload binary assets (photos + PDFs) so the final submit payload can skip them.
+// Called from the review screen on mount — the user reads the screen while uploads happen.
+app.post('/api/project/:code/upload-assets', requireProjectToken, (req, res, next) => {
+  assetUpload.fields(ASSET_FIELDS)(req, res, (err) => {
+    if (err) {
+      console.error('[upload-assets] multer error:', err);
+      return res.status(400).json({ success: false, message: err.message || 'Error al subir archivos.' });
+    }
+    next();
+  });
+}, (req, res) => {
+  const project = req.project;
+  const files = req.files || {};
+  const assetFiles = { ...(project.assetFiles || {}) };
+  const projectAssetsPath = `/uploads/assets/${project.code}`;
+
+  for (const [fieldName, fileArray] of Object.entries(files)) {
+    if (Array.isArray(fileArray) && fileArray.length > 0) {
+      assetFiles[fieldName] = `${projectAssetsPath}/${fileArray[0].filename}`;
+    }
+  }
+
+  project.assetFiles = assetFiles;
+  project.lastActivity = new Date().toISOString();
+  saveDB();
+
+  res.json({ success: true, savedKeys: Object.keys(assetFiles) });
+});
+
 // Generic file upload endpoint is admin-only; customer flows use structured save APIs.
 app.post('/api/upload', requireDashboardAuth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió archivo.' });
@@ -1111,15 +1175,51 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, async (req, res
     });
   };
 
+  // Read a pre-uploaded binary asset from disk and add to the ZIP.
+  // Returns true if the file was found; caller can fall back to base64 otherwise.
+  const addFileFromPath = (label, assetKey, folder) => {
+    const assetPath = project.assetFiles?.[assetKey];
+    if (!assetPath) return false;
+    const fullPath = path.join(DATA_DIR, assetPath.replace(/^\//, ''));
+    if (!fs.existsSync(fullPath)) return false;
+    const ext = path.extname(fullPath).slice(1) || 'jpg';
+    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    zip.addFile(`${folder}/${safeName}.${ext}`, fs.readFileSync(fullPath));
+    return true;
+  };
+
+  // Try pre-uploaded file first; fall back to inline base64.
+  const addDocumentFile = (label, dataUrl, assetKey, folder) => {
+    if (!addFileFromPath(label, assetKey, folder)) {
+      addBase64File(label, dataUrl, folder);
+    }
+  };
+
+  // Try pre-uploaded file first for stored PDFs; fall back to inline base64 array.
+  const addStoredFilesWithFallback = (label, files, assetKeyPrefix, folder) => {
+    const assetFiles = project.assetFiles || {};
+    const assetKeys = Object.keys(assetFiles)
+      .filter(k => k.startsWith(`${assetKeyPrefix}_`))
+      .sort();
+    if (assetKeys.length > 0) {
+      assetKeys.forEach((key, idx) => {
+        addFileFromPath(assetKeys.length === 1 ? label : `${label}_${idx + 1}`, key, folder);
+      });
+    } else {
+      addStoredFiles(label, files, folder);
+    }
+  };
+
   if (fd) {
     const ibiPages = getIbiPages(fd);
-    addBase64File('DNI_frontal', fd.dni?.front?.photo?.preview, '1_documentos');
-    addBase64File('DNI_trasera', fd.dni?.back?.photo?.preview, '1_documentos');
-    addStoredFiles('DNI_original_pdf', fd.dni?.originalPdfs, '1_documentos');
+    addDocumentFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'dniFront', '1_documentos');
+    addDocumentFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'dniBack', '1_documentos');
+    addStoredFilesWithFallback('DNI_original_pdf', fd.dni?.originalPdfs, 'dniOriginal', '1_documentos');
     ibiPages.forEach((page, i) => {
-      addBase64File(ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`, page?.preview, '1_documentos');
+      const label = ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`;
+      addDocumentFile(label, page?.preview, `ibi_${i}`, '1_documentos');
     });
-    addStoredFiles('IBI_original_pdf', fd.ibi?.originalPdfs, '1_documentos');
+    addStoredFilesWithFallback('IBI_original_pdf', fd.ibi?.originalPdfs, 'ibiOriginal', '1_documentos');
 
     const getElecPages = (formData) => {
       const eb = formData.electricityBill;
@@ -1128,12 +1228,21 @@ app.get('/api/project/:code/download-zip', requireDashboardAuth, async (req, res
       return [];
     };
     getElecPages(fd).forEach((page, i) => {
-      addBase64File(`Factura_luz_${i + 1}`, page?.photo?.preview, '1_documentos');
+      addDocumentFile(`Factura_luz_${i + 1}`, page?.photo?.preview, `electricity_${i}`, '1_documentos');
     });
-    addStoredFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, '1_documentos');
+    addStoredFilesWithFallback('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'electricityOriginal', '1_documentos');
 
     const energyCertificate = fd.energyCertificate;
-    if (energyCertificate?.renderedDocument?.imageDataUrl) {
+    const energyCertAssetPath = project.assetFiles?.energyCert;
+    if (energyCertAssetPath) {
+      const fullPath = path.join(DATA_DIR, energyCertAssetPath.replace(/^\//, ''));
+      if (fs.existsSync(fullPath)) {
+        const dataUrl = `data:image/jpeg;base64,${fs.readFileSync(fullPath).toString('base64')}`;
+        await addRenderedPdfFile('Certificado_energetico', dataUrl, '2_certificados');
+      } else if (energyCertificate?.renderedDocument?.imageDataUrl) {
+        await addRenderedPdfFile('Certificado_energetico', energyCertificate.renderedDocument.imageDataUrl, '2_certificados');
+      }
+    } else if (energyCertificate?.renderedDocument?.imageDataUrl) {
       await addRenderedPdfFile('Certificado_energetico', energyCertificate.renderedDocument.imageDataUrl, '2_certificados');
     }
   }
@@ -1175,25 +1284,60 @@ app.get('/api/project/:code/download-manifest', requireDashboardAuth, (req, res)
     });
   };
 
+  // Read a pre-uploaded asset from disk and push a data URL entry into the manifest.
+  const addManifestFileFromPath = (label, assetKey, category) => {
+    const assetPath = project.assetFiles?.[assetKey];
+    if (!assetPath) return false;
+    const fullPath = path.join(DATA_DIR, assetPath.replace(/^\//, ''));
+    if (!fs.existsSync(fullPath)) return false;
+    const ext = path.extname(fullPath).slice(1) || 'jpg';
+    const mime = ext === 'pdf' ? 'application/pdf' : `image/${ext}`;
+    const buf = fs.readFileSync(fullPath);
+    files.push({ label, category, dataUrl: `data:${mime};base64,${buf.toString('base64')}`, mimeType: mime });
+    return true;
+  };
+
+  // Try pre-uploaded file first; fall back to inline data URL.
+  const addManifestDocumentFile = (label, dataUrl, assetKey, category) => {
+    if (!addManifestFileFromPath(label, assetKey, category)) {
+      addDataUrlFile(label, dataUrl, category);
+    }
+  };
+
+  const addStoredManifestFilesWithFallback = (label, storedFiles, assetKeyPrefix, category) => {
+    const assetFiles = project.assetFiles || {};
+    const assetKeys = Object.keys(assetFiles)
+      .filter(k => k.startsWith(`${assetKeyPrefix}_`))
+      .sort();
+    if (assetKeys.length > 0) {
+      assetKeys.forEach((key, idx) => {
+        addManifestFileFromPath(assetKeys.length === 1 ? label : `${label}_${idx + 1}`, key, category);
+      });
+    } else {
+      addStoredManifestFiles(label, storedFiles, category);
+    }
+  };
+
   if (fd) {
     const ibiPages = getIbiPages(fd);
-    addDataUrlFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'document');
-    addDataUrlFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'document');
-    addStoredManifestFiles('DNI_original_pdf', fd.dni?.originalPdfs, 'document-original-pdf');
+    addManifestDocumentFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'dniFront', 'document');
+    addManifestDocumentFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'dniBack', 'document');
+    addStoredManifestFilesWithFallback('DNI_original_pdf', fd.dni?.originalPdfs, 'dniOriginal', 'document-original-pdf');
     ibiPages.forEach((page, index) => {
-      addDataUrlFile(ibiPages.length === 1 ? 'IBI' : `IBI_${index + 1}`, page?.preview, 'document');
+      const label = ibiPages.length === 1 ? 'IBI' : `IBI_${index + 1}`;
+      addManifestDocumentFile(label, page?.preview, `ibi_${index}`, 'document');
     });
-    addStoredManifestFiles('IBI_original_pdf', fd.ibi?.originalPdfs, 'document-original-pdf');
+    addStoredManifestFilesWithFallback('IBI_original_pdf', fd.ibi?.originalPdfs, 'ibiOriginal', 'document-original-pdf');
     getElectricityPages(fd).forEach((page, index) => {
-      addDataUrlFile(`Factura_luz_${index + 1}`, page?.photo?.preview, 'document');
+      addManifestDocumentFile(`Factura_luz_${index + 1}`, page?.photo?.preview, `electricity_${index}`, 'document');
     });
-    addStoredManifestFiles('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'document-original-pdf');
+    addStoredManifestFilesWithFallback('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'electricityOriginal', 'document-original-pdf');
     addDataUrlFile('Firma_iva_cat', fd.representation?.ivaCertificateSignature, 'signed-form-signature');
     addDataUrlFile('Firma_generalitat', fd.representation?.generalitatSignature, 'signed-form-signature');
     addDataUrlFile('Firma_representacio_cat', fd.representation?.representacioSignature, 'signed-form-signature');
     addDataUrlFile('Firma_iva_es', fd.representation?.ivaCertificateEsSignature, 'signed-form-signature');
     addDataUrlFile('Firma_poder_es', fd.representation?.poderRepresentacioSignature, 'signed-form-signature');
-    addDataUrlFile('Certificado_energetico', fd.energyCertificate?.renderedDocument?.imageDataUrl, 'generated-document');
+    addManifestDocumentFile('Certificado_energetico', fd.energyCertificate?.renderedDocument?.imageDataUrl, 'energyCert', 'generated-document');
     addDataUrlFile('Firma_cliente', fd.signatures?.customerSignature, 'final-signature');
     addDataUrlFile('Firma_comercial', fd.signatures?.repSignature, 'final-signature');
   }
