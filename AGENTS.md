@@ -274,6 +274,13 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 ### 🔧 In Progress
 - None
 
+### ✅ Completed (continued)
+
+- **[2026-04-03] windowFrameMaterial + windowGlassType label fix**
+  - Label functions existed but raw enum values were rendered in the energy cert document (`'aluminio'` instead of `'Aluminio'`, `'simple'` instead of `'Simple'`)
+  - Fixed: wired `windowFrameMaterialLabel()` and `windowGlassTypeLabel()` into the rows2b array
+  - File: `app/src/lib/energyCertificateDocument.ts`
+
 ### 📋 To Do
 - None
 

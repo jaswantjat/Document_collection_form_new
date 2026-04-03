@@ -406,9 +406,9 @@ async function buildCertificateCanvas(
     : 'No aplica';
 
   const rows2b: Array<[string, string]> = [
-    ['Material de los marcos de la ventana', h.windowFrameMaterial || ''],
+    ['Material de los marcos de la ventana', windowFrameMaterialLabel(h.windowFrameMaterial)],
     ['Material de las puertas', h.doorMaterial],
-    ['Tipo de vidrio de las ventanas', h.windowGlassType || ''],
+    ['Tipo de vidrio de las ventanas', windowGlassTypeLabel(h.windowGlassType)],
     ['¿Las ventanas tienen persiana?', boolLabel(h.hasShutters)],
     ['Número de ventanas con persianas', h.shutterWindowCount],
     ['Equipo de la instalación térmica', thermalTypeLabel(t.thermalInstallationType)],

@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-04-03.3 — Session: windowFrameMaterial + windowGlassType label fix
+
+**Phase**: Developer
+
+**Root cause:**
+`windowFrameMaterialLabel()` and `windowGlassTypeLabel()` helper functions existed in `energyCertificateDocument.ts` (lines 104–114) but were never called. The document rendering at lines 409/411 used raw enum values (`h.windowFrameMaterial || ''` and `h.windowGlassType || ''`) — outputting `'aluminio'` and `'simple'` in lowercase instead of the human-readable labels `'Aluminio'` and `'Simple'` / `'Doble vidrio'`. Every other select-type field in the same file (airType, thermal, fuel, heating, radiator) correctly used its label helper.
+
+**Fix:**
+Replaced the two raw value accesses with calls to the existing label functions:
+- `h.windowFrameMaterial || ''` → `windowFrameMaterialLabel(h.windowFrameMaterial)`
+- `h.windowGlassType || ''` → `windowGlassTypeLabel(h.windowGlassType)`
+
+**Files changed:**
+- `app/src/lib/energyCertificateDocument.ts`
+
+**Test status:** TypeScript compiles cleanly (0 errors). No logic changed — label mapping only.
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.2 — Session: Eliminate wasted canvas render on submit
 
 **Phase**: Developer
