@@ -13,6 +13,9 @@ import { LoadingSection } from '@/sections/LoadingSection';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 import { getLocationInfo } from '@/lib/provinceMapping';
+// SuccessSection is imported statically (not lazy) — it's tiny and must render
+// instantly after submit completes, avoiding a Suspense/LoadingSection flash.
+import { SuccessSection } from '@/sections/SuccessSection';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
@@ -20,20 +23,15 @@ const ProvinceSelectionSection = lazy(() => import('@/sections/ProvinceSelection
 const RepresentationSection = lazy(() => import('@/sections/RepresentationSection').then((module) => ({ default: module.RepresentationSection })));
 const EnergyCertificateSection = lazy(() => import('@/sections/EnergyCertificateSection').then((module) => ({ default: module.EnergyCertificateSection })));
 const ReviewSection = lazy(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
-const SuccessSection = lazy(() => import('@/sections/SuccessSection').then((module) => ({ default: module.SuccessSection })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const DashboardLogin = lazy(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
 
-// Pre-warm all lazy section chunks immediately so transitions feel instant.
-// Fired as soon as FormApp mounts — chunks download in parallel while the user
-// fills the first section. No idle-callback delay, which was letting mobile
-// devices start downloading too late and causing Suspense spinners.
+// Pre-warm remaining lazy section chunks immediately so transitions feel instant.
 function preloadSections() {
   import('@/sections/ProvinceSelectionSection');
   import('@/sections/RepresentationSection');
   import('@/sections/EnergyCertificateSection');
   import('@/sections/ReviewSection');
-  import('@/sections/SuccessSection');
 }
 
 // ── Dashboard wrapper (handles login gate) ────────────────────────────────────
