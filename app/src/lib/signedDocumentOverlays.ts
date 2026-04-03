@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-03.1';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-03.2';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -56,12 +56,12 @@ const IVA_ES_FIELDS = {
 
 const PODER_ES_PAGE_SIZE = { width: 1448, height: 2048 };
 const PODER_ES_FIELDS = {
-  persona_interesada_nombre_razon_social: { x: 508, y: 296, stopX: 950 },
+  persona_interesada_nombre_razon_social: { x: 420, y: 296, stopX: 950 },
   persona_interesada_nif: { x: 1031, y: 296, stopX: 1170 },
   persona_interesada_direccion: { x: 233, y: 342, stopX: 950 },
   persona_interesada_codigo_postal: { x: 1154, y: 343, stopX: 1245 },
   persona_interesada_municipio: { x: 233, y: 393, stopX: 950 },
-  persona_juridica_representante_legal_nombre_razon_social: { x: 508, y: 522, stopX: 950 },
+  persona_juridica_representante_legal_nombre_razon_social: { x: 420, y: 522, stopX: 950 },
   persona_juridica_representante_legal_nif: { x: 1031, y: 522, stopX: 1170 },
   persona_juridica_representante_legal_direccion: { x: 233, y: 568, stopX: 950 },
   persona_juridica_representante_legal_codigo_postal: { x: 1154, y: 569, stopX: 1245 },
