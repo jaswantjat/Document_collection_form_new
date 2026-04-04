@@ -203,7 +203,9 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [fullscreenDoc, setFullscreenDoc] = useState<DocDef | null>(null);
+  const [allDocsToured, setAllDocsToured] = useState(false);
   const applyingRef = useRef(false);
+  const hasCycled = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Debounce signature updates so the preview re-renders at most once per 400ms
@@ -216,6 +218,30 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   useEffect(() => {
     preloadDocumentTemplates(docs.map((d) => d.kind));
   }, [docs]);
+
+  // When the user draws their first signature, auto-cycle through every
+  // document in the carousel so they can see their signature applied to each
+  // one. Fires only once per mount (hasCycled guard).
+  useEffect(() => {
+    if (!sharedSignature || hasCycled.current || docs.length <= 1) return;
+    hasCycled.current = true;
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    docs.forEach((_, i) => {
+      if (i === 0) return;
+      timers.push(
+        setTimeout(() => {
+          goToDoc(i);
+          if (i === docs.length - 1) {
+            timers.push(setTimeout(() => setAllDocsToured(true), 900));
+          }
+        }, i * 1300)
+      );
+    });
+
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedSignature]);
 
   const previewFormData = useMemo<FormData>(() => {
     if (!debouncedSignature) return formData;
@@ -357,21 +383,25 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                     key={i}
                     type="button"
                     onClick={() => goToDoc(i)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i === activeDocIndex ? 'bg-eltex-blue w-4' : 'bg-gray-200'
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      i === activeDocIndex
+                        ? 'bg-eltex-blue w-4'
+                        : allDocsToured
+                        ? 'bg-eltex-blue/40 w-2'
+                        : 'bg-gray-200 w-2'
                     }`}
                   />
                 ))}
               </div>
             </div>
 
-            {/* Carousel */}
+            {/* Carousel — height capped so the signature pad stays on-screen */}
             <div className="relative">
               <div
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
                 className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', maxHeight: '220px', overflowY: 'hidden' } as React.CSSProperties}
               >
                 {docs.map((doc) => (
                   <div

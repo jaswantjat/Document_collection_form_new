@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-04-04.2 — Session: Signature flow UX — compact carousel + auto-cycle tour
+
+**Phase**: Developer
+
+**Problem:** On mobile (375×667) the document carousel renders at its natural A4 aspect ratio: 335px wide → 474px tall. Combined with the page header, counter row, and hint text this pushed the signature pad ~100px below the fold. Users had to scroll to discover and reach the signature pad — unnecessary friction in a high-stakes legal flow.
+
+**First-principles analysis:**
+- The document thumbnail's only job: signal "this is a legal document with your data." The customer can read the full doc via the existing fullscreen modal ("Toca para leer"). A full A4 render is wasted height.
+- The signature pad must be visible without scrolling. The customer's cognitive flow is: see docs → sign → continue.
+- One signature covers all documents — the user should see this relationship visually.
+
+**Changes:**
+1. **Carousel height capped at 220px** (`maxHeight: '220px', overflowY: 'hidden'`). Shows the top of each A4 doc (name, header, key fields visible), "Toca para leer" overlay still covers it. Everything now fits in one screen without scrolling.
+2. **Auto-cycle on first signature**: When the user draws their first signature, the carousel automatically sweeps through all remaining documents (1.3s each). This makes visible that the single signature stamps all docs — reduces cognitive friction ("wait, am I signing all 3?").
+3. **Dot indicators "fill" after tour**: Once the auto-cycle completes, all inactive dots turn `eltex-blue/40` (muted blue), confirming "all documents covered." Active dot remains full blue.
+
+**Files changed:**
+- `app/src/sections/RepresentationSection.tsx`
+  - Added `allDocsToured` state, `hasCycled` ref
+  - Added auto-cycle `useEffect` triggered by first `sharedSignature` value
+  - Carousel scroll container: added `maxHeight: '220px', overflowY: 'hidden'`
+  - Dot indicators: `allDocsToured` turns inactive dots `bg-eltex-blue/40`
+
+**Test status:** TypeScript: 0 errors. Visual/interaction change.
+
+---
+
 ## 2026-04-04.1 — Session: Representació overlay — name gap + date alignment
 
 **Phase**: Developer
