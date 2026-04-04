@@ -305,6 +305,7 @@ function FormApp() {
         setLoadError('NETWORK_ERROR');
       })
       .finally(() => {
+        clearTimeout(timeoutId);
         if (!controller.signal.aborted) {
           setLoading(false);
         }

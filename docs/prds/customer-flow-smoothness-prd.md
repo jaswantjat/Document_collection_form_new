@@ -1,6 +1,7 @@
 # PRD: Customer Flow Smoothness (Pareto 20%)
 
 **Created:** 2026-04-03  
+**Completed:** 2026-04-03  
 **Owner:** Eltex Engineering  
 **Goal:** Fix the 20% of issues causing 80% of customer friction in the document collection flow.
 
@@ -14,70 +15,68 @@ After a full first-principles audit of the customer flow using Design + UI/UX re
 
 ## Issues & Status
 
-| # | Issue | Priority | Status |
-|---|-------|----------|--------|
-| 1 | No global progress indicator across 6-step flow | HIGH | ⏳ TODO |
-| 2 | Back button takes customers to phone/assessor screen | HIGH | ⏳ TODO |
-| 3 | SuccessSection crashes if `customerName` is missing | CRITICAL | ⏳ TODO |
-| 4 | IBI shows "not done" on review even when uploaded via pages | HIGH | ⏳ TODO |
-| 5 | Loading screen spins forever with no timeout or recovery | HIGH | ⏳ TODO |
+| # | Issue | Priority | Status | Test |
+|---|-------|----------|--------|------|
+| 1 | No global progress indicator across 6-step flow | HIGH | ✅ DONE | ✅ PASS |
+| 2 | Back button takes customers to phone/assessor screen | HIGH | ✅ DONE | ✅ PASS |
+| 3 | SuccessSection crashes if `customerName` is missing | CRITICAL | ✅ DONE | ✅ PASS |
+| 4 | IBI shows "not done" on review even when uploaded via pages | HIGH | ✅ DONE | ✅ PASS |
+| 5 | Loading screen spins forever with no timeout or recovery | HIGH | ✅ DONE | ✅ PASS |
 
 ---
 
-## Issue Details
+## What Was Built
 
-### Issue 1 — No global progress indicator
-**File:** New component + all section files  
-**Problem:** 6-step flow (Property Docs → Province → Representation → Energy Cert → Review → Success) has zero overall progress visibility. Customers feel lost on mobile.  
-**Fix:** Add a step progress bar at the top of each section (excluding phone and success).  
-**Done when:** Customer can see "Step X of Y" or equivalent at every stage of the flow.
+### Issue 1 — FlowProgressBar (NEW component)
+**File:** `app/src/components/FlowProgressBar.tsx`  
+A fixed top bar showing 5 steps (Documentos → Ubicación → Autorización → Certificado → Revisión) with a progress indicator and "X / 5" counter. Uses `backdrop-blur` + `bg-white/95` for clean layering over content. Hidden on phone and success screens.
 
----
-
-### Issue 2 — Back button takes customers to phone screen
-**File:** `app/src/App.tsx`  
-**Problem:** Customers arrive via `?code=XXX` URL. The back button in `property-docs` calls `onBack={() => goTo('phone')}` which shows the internal assessor phone-lookup screen.  
-**Fix:** When the user arrived via URL (not phone flow), hide or disable the back button on the first screen.  
-**Done when:** Customers who arrive via link never land on the phone screen.
+Integrated in `app/src/App.tsx`:
+- `showProgressBar` condition requires: activeProject exists, not loading/error, not phone/success
+- `<main className={showProgressBar ? 'pt-11' : ''}>` pushes content below the fixed bar
 
 ---
 
-### Issue 3 — SuccessSection crashes on missing customerName
-**File:** `app/src/sections/SuccessSection.tsx`  
-**Problem:** `project.customerName.split(' ')[0]` throws if `customerName` is empty or undefined.  
-**Fix:** Add null guard — fall back to a generic greeting like "todo listo".  
-**Done when:** SuccessSection renders correctly even when customerName is absent.
+### Issue 2 — Back button conditional on source
+**Files:** `app/src/App.tsx`, `app/src/sections/PropertyDocsSection.tsx`  
+
+- `onBack` prop made optional (`onBack?: () => void`) in PropertyDocsSection
+- Back button wrapped in `{onBack && (...)}` — only renders when prop is provided
+- In App.tsx: `onBack={source === 'assessor' ? () => goTo('phone') : undefined}`
+- Customers arriving via URL link (source='customer') never see the back button on step 1
+- Assessors using phone flow (source='assessor') see it normally
 
 ---
 
-### Issue 4 — IBI "done" check inconsistency in ReviewSection
-**File:** `app/src/sections/ReviewSection.tsx`  
-**Problem:** ReviewSection checks `!!ibi.photo` for IBI done state, but multi-page IBI is stored in `ibi.pages`. Customers who uploaded IBI correctly see a false "not done" warning.  
-**Fix:** Change check to `!!ibi.photo || (ibi.pages?.length ?? 0) > 0` matching the routing logic.  
-**Done when:** Uploaded IBI (via pages) is correctly shown as done on the review screen.
+### Issue 3 — SuccessSection null guard
+**File:** `app/src/sections/SuccessSection.tsx`
+
+- `const firstName = project.customerName?.split(' ')[0] || null;`
+- Heading: `{firstName ? \`¡Todo listo, ${firstName}!\` : '¡Todo listo!'}`
+- Handles: undefined, empty string, normal name — no crashes
 
 ---
 
-### Issue 5 — Loading screen spins forever
-**File:** `app/src/sections/LoadingSection.tsx` + `app/src/App.tsx`  
-**Problem:** If the server is slow or the connection drops on initial load, the spinner runs indefinitely with no recovery path.  
-**Fix:** Add a 12-second timeout in the fetch logic. If exceeded, show an error with a retry button instead of spinning.  
-**Done when:** A network failure on load shows a user-actionable recovery screen within 15 seconds.
+### Issue 4 — IBI done check fixed in ReviewSection
+**File:** `app/src/sections/ReviewSection.tsx`
+
+- Before: `done: !!ibi.photo`
+- After: `done: !!ibi.photo || (ibi.pages?.length ?? 0) > 0`
+- Now matches the routing logic in `hasPropertyDocsDone()` in App.tsx
 
 ---
 
-## Test Plan
+### Issue 5 — Loading timeout (12 seconds)
+**File:** `app/src/App.tsx`
 
-Each fix tested by a dedicated subagent after implementation:
-
-- **T1:** Progress bar renders on each step, hides on phone/success
-- **T2:** Back button not visible/functional when customer arrives via URL code
-- **T3:** SuccessSection renders without crash when customerName = "" or undefined
-- **T4:** Review section shows IBI as done when `ibi.pages` has entries
-- **T5:** Loading timeout triggers correctly after server delay
+- `setTimeout` of 12,000ms fires `setLoadError('NETWORK_ERROR')` + `setLoadError` if fetch hasn't completed
+- `clearTimeout(timeoutId)` in `.finally()` block cancels it when fetch completes (success or failure)
+- Cleanup `return () => { controller.abort(); clearTimeout(timeoutId); }` as double-safety
+- Bug caught by test subagent: initial implementation missed the `.finally()` clear — fixed immediately
+- 'NETWORK_ERROR' → "Sin conexión" with retry + call Eltex buttons in ErrorSection
 
 ---
 
 ## Out of Scope (intentional decisions)
-- Auto-submit after energy cert: this is intentional frictionless design — NOT a bug
-- Emoji icons, file length, token in URL, assessor validation: deferred
+- Auto-submit after energy cert: intentional frictionless design — NOT a bug
+- Emoji icons, file length, token in URL, assessor validation: deferred low-impact items
