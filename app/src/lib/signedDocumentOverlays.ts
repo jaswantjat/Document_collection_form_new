@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-03.2';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-04.1';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -15,7 +15,7 @@ type Box = readonly [number, number, number, number];
 
 const REPRESENTACIO_PAGE_SIZE = { width: 1241, height: 1754 };
 const REPRESENTACIO_FIELDS = {
-  personaNom: [370, 252, 812, 284],
+  personaNom: [395, 252, 812, 284],
   personaNif: [902, 252, 1095, 284],
   personaAdreca: [190, 291, 812, 323],
   personaCodiPostal: [979, 291, 1095, 323],
@@ -26,7 +26,7 @@ const REPRESENTACIO_FIELDS = {
   empresaCodiPostal: [979, 484, 1095, 516],
   empresaMunicipi: [202, 527, 812, 559],
   lloc: [130, 1459, 560, 1496],
-  data: [725, 1459, 1100, 1496],
+  data: [760, 1459, 1100, 1496],
   signaturaPersonaInteressada: [76, 1552, 575, 1685],
 } as const;
 
@@ -524,7 +524,7 @@ async function renderSignedDocumentOverlayAtScale(
         drawBoxText(ctx, representation.companyMunicipality, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.empresaMunicipi, 1.7);
       }
       drawBoxText(ctx, snapshot.municipality, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.lloc, 1.7);
-      drawBoxText(ctx, date.full, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.data, 1.7, 'center');
+      drawBoxText(ctx, date.full, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.data, 1.7);
       await drawSignature(ctx, representation.representacioSignature, REPRESENTACIO_PAGE_SIZE, REPRESENTACIO_FIELDS.signaturaPersonaInteressada);
     }, scale);
   }

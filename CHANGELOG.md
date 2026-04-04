@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-04-04.1 — Session: Representació overlay — name gap + date alignment
+
+**Phase**: Developer
+
+**Problems:**
+
+1. **Name overlapping label** — `personaNom` x-start was 370. The template's "Nom i cognoms / Raó social:" label ends at ≈ x=364, leaving only 6px clearance. With a bold name (e.g. "MARTA OLIVERES TORTOSA"), the text visually merges into the label.
+   - Fix: `personaNom[0]` 370 → 395 (~31px gap at full resolution).
+
+2. **Date misaligned with Barcelona** — `lloc` ("BARCELONA") is left-aligned at x=130, which sits snug ~22px after "Lloc:" ends (≈x=108). The `data` field used `'center'` alignment within [725–1100], centering the date at x≈912 — creating a 55px gap between "Data:" (ends ≈x=745) and the start of the date text. That asymmetry makes the two values look misaligned relative to their labels.
+   - Fix: changed `data` x-start 725 → 760 and switched from `'center'` to `'left'` (default) alignment. The date now sits ≈15px after "Data:" colon, matching the snug placement of "BARCELONA" after "Lloc:".
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+  - `SIGNED_DOCUMENT_TEMPLATE_VERSION` bumped to `'2026-04-04.1'` (forces re-render of stored docs)
+  - `personaNom[0]`: 370 → 395
+  - `data[0]`: 725 → 760
+  - `drawBoxText(..., REPRESENTACIO_FIELDS.data, 1.7, 'center')` → `drawBoxText(..., REPRESENTACIO_FIELDS.data, 1.7)`
+
+**Test status:** TypeScript: 0 errors. Coordinate-only change.
+
+**What's next:** —
+
+---
+
 ## 2026-04-04 — Session: EC wizard step persistence on reload
 
 **Phase**: Developer
