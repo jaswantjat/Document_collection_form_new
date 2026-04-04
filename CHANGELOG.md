@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 2026-04-04 — Session: EC wizard step persistence on reload
+
+**Phase**: Developer
+
+**Root cause (two layers):**
+
+1. `getInitialSection()` correctly routes users back to `energy-certificate` when `status === 'in-progress'` — that part was already working.
+2. The 4-step wizard's `stepIndex` was `useState(0)` — ephemeral, never surviving a reload. Users landed at step 0 (Vivienda) even though their field answers for steps 1–3 were fully restored.
+
+**Fix — component layer (already in place from previous session):**
+- `EnergyCertificateSection` initialises state from the persisted value: `useState(data.currentStepIndex ?? 0)`
+- `navigateToStep(newIndex, currentData)` replaces all raw `setStepIndex` calls — it calls both `setStepIndex` and `onChange({ ...currentData, currentStepIndex: newIndex })`, writing the step index into `formData.energyCertificate.currentStepIndex` on every navigation. This flows through the 300 ms localStorage backup and the 2 s debounced server save.
+
+**Fix — merge layer (this session):**
+There was a remaining gap in the "Case 2" merge path in `App.tsx` (triggered when the localStorage backup and server timestamps are within 500 ms of each other). The energyCertificate merge block spread `...serverFd?.energyCertificate` but never explicitly pulled the backup's `currentStepIndex`. Since the 300 ms backup fires up to 1.7 s before the 2 s server save, there was a window where the backup had the newer step index but it was silently dropped.
+
+Added `currentStepIndex` to the explicit merge overrides — parallel to how `renderedDocument` is already handled:
+```js
+currentStepIndex: backupFd.energyCertificate?.currentStepIndex
+  ?? serverFd?.energyCertificate?.currentStepIndex,
+```
+
+**Files changed:**
+- `app/src/App.tsx` (1-line addition to Case 2 energyCertificate merge)
+
+**Test status:** TypeScript: 0 errors. No logic changed in the wizard itself.
+
+**What's next:** —
+
+---
+
 ## 2026-04-03.7 — Session: Phone number validation hardening
 
 **Phase**: Developer

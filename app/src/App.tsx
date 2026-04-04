@@ -279,6 +279,8 @@ function FormApp() {
                     renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
                       ? backupFd.energyCertificate.renderedDocument
                       : serverFd?.energyCertificate?.renderedDocument ?? null,
+                    currentStepIndex: backupFd.energyCertificate?.currentStepIndex
+                      ?? serverFd?.energyCertificate?.currentStepIndex,
                   },
                 }),
               };

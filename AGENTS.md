@@ -339,6 +339,12 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - Updated docs: `docs/PRODUCTION-READINESS.md`, `docs/TEST-TRACKER.md`
 - Grand total: **56/56 tests passing** (33 E2E + 23 unit)
 
+### 2026-04-04 — Session: EC wizard step persistence
+- Identified that previous session had already wired `navigateToStep` and `useState(data.currentStepIndex ?? 0)` in the component
+- Found remaining gap: Case 2 merge in `App.tsx` (backup and server within 500 ms) was using `...serverFd?.energyCertificate` as base but never explicitly preferring the backup's `currentStepIndex`, dropping it in the debounce window
+- Fix: added `currentStepIndex: backupFd.energyCertificate?.currentStepIndex ?? serverFd?.energyCertificate?.currentStepIndex` to the merge block (parallel to `renderedDocument`)
+- TypeScript: 0 errors. Files: `app/src/App.tsx`
+
 ### 2026-04-02 — Session: E2E Flow Tests Completion
 - Wrote E2E-FLOW-03 (EC resume path) and E2E-FLOW-04 (follow-up path routing)
 - Added 4 new backend test endpoints for state management
