@@ -2,7 +2,7 @@ import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/typ
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
-export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-04.1';
+export const SIGNED_DOCUMENT_TEMPLATE_VERSION = '2026-04-04.2';
 
 export type SignedDocumentKind =
   | 'cataluna-iva'
@@ -26,7 +26,7 @@ const REPRESENTACIO_FIELDS = {
   empresaCodiPostal: [979, 484, 1095, 516],
   empresaMunicipi: [202, 527, 812, 559],
   lloc: [130, 1459, 560, 1496],
-  data: [760, 1459, 1100, 1496],
+  data: [760, 1464, 1100, 1501],
   signaturaPersonaInteressada: [76, 1552, 575, 1685],
 } as const;
 

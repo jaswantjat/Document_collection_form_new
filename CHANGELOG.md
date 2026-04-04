@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2026-04-04.3 — Session: Representació — date vertical offset fix
+
+**Phase**: Developer
+
+**Problem:** After the previous horizontal fix (left-align, x=760), the date "4 de abril de 2026" still appeared visually higher than "BARCELONA" on the Lloc/Data row.
+
+**Root cause (optical rendering):** With `textBaseline='top'`, both fills start at y=1459. "BARCELONA" is ALL CAPS — every letter fills the full cap-height so visual weight presses downward. "4 de abril de 2026" is mixed-case — x-height letters (e, a, r, i) are only ~50% of cap height, so the visual mass concentrates near the top of the em-square. This makes the date "float" ~5px visually above BARCELONA even though they share the same y coordinate.
+
+**Fix:** Moved `data` y1 from 1459 → 1464, y2 from 1496 → 1501 (5px down). This brings the visual center of the mixed-case date string into alignment with the all-caps BARCELONA.
+
+**Files changed:**
+- `app/src/lib/signedDocumentOverlays.ts`
+  - `REPRESENTACIO_FIELDS.data`: `[760, 1459, 1100, 1496]` → `[760, 1464, 1100, 1501]`
+  - `SIGNED_DOCUMENT_TEMPLATE_VERSION` bumped to `'2026-04-04.2'`
+
+**Test status:** TypeScript: 0 errors.
+
+---
+
 ## 2026-04-04.2 — Session: Signature flow UX — compact carousel + auto-cycle tour
 
 **Phase**: Developer
