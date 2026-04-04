@@ -196,6 +196,7 @@ export interface EnergyCertificateData {
   renderedDocument: RenderedDocumentAsset | null;
   completedAt: string | null;
   skippedAt: string | null;
+  currentStepIndex?: number;
 }
 
 export interface ContractData {

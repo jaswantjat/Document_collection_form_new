@@ -256,7 +256,7 @@ export function EnergyCertificateSection({
   onBack,
   onContinue,
 }: Props) {
-  const [stepIndex, setStepIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(data.currentStepIndex ?? 0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [renderingPreview, setRenderingPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(data.renderedDocument?.imageDataUrl || null);
@@ -270,6 +270,12 @@ export function EnergyCertificateSection({
       }
     });
   }, []);
+
+  // Persist the current sub-step so a page reload resumes at the right wizard step.
+  const navigateToStep = useCallback((newIndex: number, currentData: EnergyCertificateData) => {
+    setStepIndex(newIndex);
+    onChange({ ...currentData, currentStepIndex: newIndex });
+  }, [onChange]);
 
   const currentStep = STEPS[stepIndex];
   const previewSource = useMemo(
@@ -360,7 +366,7 @@ export function EnergyCertificateSection({
       return;
     }
     setErrors((prev) => keepOnlyRenderError(prev));
-    setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
+    navigateToStep(Math.min(stepIndex + 1, STEPS.length - 1), data);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -369,7 +375,7 @@ export function EnergyCertificateSection({
       onBack();
       return;
     }
-    setStepIndex((prev) => Math.max(prev - 1, 0));
+    navigateToStep(Math.max(stepIndex - 1, 0), data);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -394,7 +400,7 @@ export function EnergyCertificateSection({
         (key) => Object.keys(validateStep(key, data)).length > 0
       );
       if (firstFailingIndex >= 0) {
-        setStepIndex(firstFailingIndex);
+        navigateToStep(firstFailingIndex, data);
         setErrors(validateStep(DATA_STEPS[firstFailingIndex], data));
         scrollToFirstError();
       }
