@@ -208,6 +208,8 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const hasCycled = useRef(false);
   const hasMountCycled = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
+  const carouselWrapperRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Debounce signature updates so the preview re-renders at most once per 400ms
   // instead of on every signature stroke, keeping the UI responsive while signing.
@@ -219,6 +221,23 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   useEffect(() => {
     preloadDocumentTemplates(docs.map((d) => d.kind));
   }, [docs]);
+
+  // On mount: scroll the outer scrollable area so the carousel sits at the top
+  // of the viewport — the section title slides out of view and the signature
+  // pad (fixed bottom panel) is immediately visible below the document.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const area = scrollAreaRef.current;
+      const carousel = carouselWrapperRef.current;
+      if (!area || !carousel) return;
+      const relativeTop =
+        carousel.getBoundingClientRect().top -
+        area.getBoundingClientRect().top +
+        area.scrollTop;
+      area.scrollTo({ top: relativeTop, behavior: 'smooth' });
+    }, 150);
+    return () => clearTimeout(id);
+  }, []);
 
   // On mount: tour all documents so the customer can see what they are about
   // to sign (tax certificate → generalitat → representation). Fires once.
@@ -380,7 +399,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       <div className="h-dvh bg-white flex flex-col overflow-hidden">
 
         {/* ── Scrollable top area: title + document carousel ── */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div ref={scrollAreaRef} className="flex-1 overflow-y-auto overscroll-contain">
           <div className="px-5 pt-5 pb-4 max-w-sm mx-auto space-y-4">
             <div className="pt-2 pb-1">
               <h1 className="text-2xl font-bold text-gray-900">Documentos para firmar</h1>
@@ -412,8 +431,8 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               </div>
             </div>
 
-            {/* Carousel — height capped so the signature pad stays on-screen */}
-            <div className="relative">
+            {/* Carousel */}
+            <div ref={carouselWrapperRef} className="relative">
               <div
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
