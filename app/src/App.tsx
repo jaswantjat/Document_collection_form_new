@@ -509,7 +509,7 @@ function FormApp() {
             location={formData.location ?? formData.representation.location ?? null}
             onChange={setRepresentation}
             onBack={() => goTo('province-selection')}
-            onContinue={() => goTo('energy-certificate')}
+            onContinue={() => goTo(hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')}
           />
         );
 
