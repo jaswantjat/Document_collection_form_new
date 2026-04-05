@@ -24,6 +24,7 @@ export interface DashboardSignedPdfItem {
   label: string;
   filename: string;
   present: boolean;
+  status: 'complete' | 'deferred' | 'pending';
 }
 
 export interface DashboardAssetItem {
@@ -268,12 +269,17 @@ export function getDashboardElectricityPages(project: any): DashboardDocumentIte
 }
 
 export function getDashboardSignedPdfItems(project: any): DashboardSignedPdfItem[] {
-  return getSignedDocumentDefinitions(project).map((item) => ({
-    key: item.key,
-    label: item.label,
-    filename: item.filename,
-    present: Boolean(item.present),
-  }));
+  const signatureDeferred = Boolean(project?.formData?.representation?.signatureDeferred);
+  return getSignedDocumentDefinitions(project).map((item) => {
+    const present = Boolean(item.present);
+    return {
+      key: item.key,
+      label: item.label,
+      filename: item.filename,
+      present,
+      status: present ? 'complete' : signatureDeferred ? 'deferred' : 'pending',
+    };
+  });
 }
 
 export function getDashboardEnergyCertificateSummary(project: any): DashboardEnergyCertificateSummary {

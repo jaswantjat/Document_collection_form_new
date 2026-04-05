@@ -857,18 +857,28 @@ function SignedPdfsTableCell({
 
   return (
     <div className="space-y-2 min-w-[170px]">
-      {items.map((item) => (
-        <div key={item.key} className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
-          <p className="text-[11px] font-semibold text-gray-700 leading-tight">{item.label}</p>
-          {item.present ? (
-            <div className="mt-2">
-              <SignedPdfButtons projectCode={projectCode} item={item} loadProjectDetail={loadProjectDetail} compact />
-            </div>
-          ) : (
-            <p className="mt-2 text-[11px] text-gray-400">Pendiente</p>
-          )}
-        </div>
-      ))}
+      {items.map((item) => {
+        const status = item.status ?? (item.present ? 'complete' : 'pending');
+        const borderClass =
+          status === 'complete' ? 'border-emerald-200 bg-emerald-50/60'
+          : status === 'deferred' ? 'border-amber-200 bg-amber-50/60'
+          : 'border-gray-200 bg-gray-50';
+        return (
+          <div key={item.key} className={`rounded-lg border px-2.5 py-2 ${borderClass}`}>
+            <p className={`text-[11px] font-semibold leading-tight ${status === 'complete' ? 'text-emerald-800' : status === 'deferred' ? 'text-amber-800' : 'text-gray-700'}`}>{item.label}</p>
+            {item.present ? (
+              <div className="mt-2">
+                <SignedPdfButtons projectCode={projectCode} item={item} loadProjectDetail={loadProjectDetail} compact />
+              </div>
+            ) : (
+              <p className={`mt-1 text-[11px] font-medium flex items-center gap-1 ${status === 'deferred' ? 'text-amber-600' : 'text-gray-400'}`}>
+                {status === 'deferred' && <AlertTriangle className="w-2.5 h-2.5 shrink-0" />}
+                {status === 'deferred' ? 'Firma diferida' : 'Pendiente'}
+              </p>
+            )}
+          </div>
+        );
+      })}
       {hasEc && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-2.5 py-2">
           <p className="text-[11px] font-semibold text-emerald-800 leading-tight">Certificado energético</p>
@@ -1958,40 +1968,53 @@ export function SignedDocumentsSection({
     <div className="space-y-3">
       <SectionHeading icon={FileText} label="PDFs firmados" />
       <div className="grid lg:grid-cols-2 gap-4">
-        {items.map((item) => (
-          <div
-            key={item.key}
-            className={`rounded-xl border p-4 space-y-3 ${
-              item.present
-                ? 'border-emerald-200 bg-emerald-50/70'
-                : 'border-gray-200 bg-gray-50'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {item.present
-                    ? 'Generado desde la imagen firmada actual'
-                    : 'Aún no firmado'}
-                </p>
+        {items.map((item) => {
+          const status = item.status ?? (item.present ? 'complete' : 'pending');
+          const cardClass =
+            status === 'complete' ? 'border-emerald-200 bg-emerald-50/70'
+            : status === 'deferred' ? 'border-amber-200 bg-amber-50/60'
+            : 'border-gray-200 bg-gray-50';
+          const badgeClass =
+            status === 'complete' ? 'bg-emerald-100 text-emerald-700'
+            : status === 'deferred' ? 'bg-amber-100 text-amber-700'
+            : 'bg-gray-100 text-gray-500';
+          const badgeIcon =
+            status === 'complete' ? <CheckCircle className="w-3 h-3" />
+            : status === 'deferred' ? <AlertTriangle className="w-3 h-3" />
+            : <Clock className="w-3 h-3" />;
+          const badgeLabel =
+            status === 'complete' ? 'Listo'
+            : status === 'deferred' ? 'Firma diferida'
+            : 'Pendiente';
+          const subtitle =
+            status === 'complete' ? 'Generado desde la imagen firmada actual'
+            : status === 'deferred' ? 'El cliente eligió firmar más tarde'
+            : 'Aún no firmado';
+
+          return (
+            <div key={item.key} className={`rounded-xl border p-4 space-y-3 ${cardClass}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">{item.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+                </div>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${badgeClass}`}>
+                  {badgeIcon}
+                  {badgeLabel}
+                </span>
               </div>
-              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                item.present
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-gray-100 text-gray-500'
-              }`}>
-                {item.present ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                {item.present ? 'Listo' : 'Pendiente'}
-              </span>
+              {item.present ? (
+                <SignedPdfButtons projectCode={project.code} item={item} loadProjectDetail={async () => project} />
+              ) : (
+                <p className="text-xs text-gray-400">
+                  {status === 'deferred'
+                    ? 'Disponible cuando el cliente complete la firma pendiente.'
+                    : 'Se habilitará cuando la firma correspondiente exista.'}
+                </p>
+              )}
             </div>
-            {item.present ? (
-              <SignedPdfButtons projectCode={project.code} item={item} loadProjectDetail={async () => project} />
-            ) : (
-              <p className="text-xs text-gray-400">Se habilitará cuando la firma correspondiente exista.</p>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {hasEc && (
           <div className="rounded-xl border p-4 space-y-3 border-emerald-200 bg-emerald-50/70">

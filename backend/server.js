@@ -682,16 +682,24 @@ function buildDashboardSummary(project) {
     : rawEcStatus === 'skipped' ? 'skipped'
     : 'pending';
 
+  const signatureDeferred = !!representation.signatureDeferred;
+  const signedDocStatus = (present) => present ? 'complete' : signatureDeferred ? 'deferred' : 'pending';
+
   if (location === 'cataluna') {
+    const ivaPresent = !!representation.ivaCertificateSignature;
+    const genPresent = !!representation.generalitatSignature;
+    const repPresent = !!representation.representacioSignature;
     signedDocuments.push(
-      { key: 'cataluna-iva', label: 'IVA 10% Cataluña', filename: 'iva_10_cataluna_firmado.pdf', present: !!representation.ivaCertificateSignature },
-      { key: 'cataluna-generalitat', label: 'Declaració Generalitat', filename: 'declaracio_generalitat_firmada.pdf', present: !!representation.generalitatSignature },
-      { key: 'cataluna-representacio', label: 'Autorització de representació', filename: 'autoritzacio_representacio_firmada.pdf', present: !!representation.representacioSignature }
+      { key: 'cataluna-iva', label: 'IVA 10% Cataluña', filename: 'iva_10_cataluna_firmado.pdf', present: ivaPresent, status: signedDocStatus(ivaPresent) },
+      { key: 'cataluna-generalitat', label: 'Declaració Generalitat', filename: 'declaracio_generalitat_firmada.pdf', present: genPresent, status: signedDocStatus(genPresent) },
+      { key: 'cataluna-representacio', label: 'Autorització de representació', filename: 'autoritzacio_representacio_firmada.pdf', present: repPresent, status: signedDocStatus(repPresent) }
     );
   } else if (location === 'madrid' || location === 'valencia') {
+    const ivaEsPresent = !!representation.ivaCertificateEsSignature;
+    const poderPresent = !!representation.poderRepresentacioSignature;
     signedDocuments.push(
-      { key: 'spain-iva', label: 'IVA 10% España', filename: 'iva_10_espana_firmado.pdf', present: !!representation.ivaCertificateEsSignature },
-      { key: 'spain-poder', label: 'Poder de representación', filename: 'poder_representacion_firmado.pdf', present: !!representation.poderRepresentacioSignature }
+      { key: 'spain-iva', label: 'IVA 10% España', filename: 'iva_10_espana_firmado.pdf', present: ivaEsPresent, status: signedDocStatus(ivaEsPresent) },
+      { key: 'spain-poder', label: 'Poder de representación', filename: 'poder_representacion_firmado.pdf', present: poderPresent, status: signedDocStatus(poderPresent) }
     );
   }
 

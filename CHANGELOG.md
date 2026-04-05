@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-04-05.6 — Session: Dashboard signature deferred state
+
+**Phase**: Developer
+
+**Feature**: The admin dashboard now distinguishes three signature states per signed document:
+- **Complete** (green): customer has signed — PDF download/view enabled.
+- **Firma diferida** (amber): customer explicitly clicked "Firmar más tarde" — amber card with warning icon and informative message.
+- **Pendiente** (gray): customer has not yet reached the signature step.
+
+Previously both "deferred" and "pending" showed identically as gray "Pendiente", giving assessors no signal that a customer had actively chosen to defer.
+
+**Implementation:**
+1. **`app/src/lib/dashboardProject.ts`**: Added `status: 'complete' | 'deferred' | 'pending'` field to `DashboardSignedPdfItem` interface. Updated `getDashboardSignedPdfItems` to read `formData.representation.signatureDeferred` and set `status` accordingly.
+2. **`backend/server.js` — `buildDashboardSummary`**: Added `signatureDeferred` derivation and `status` field on all signed document items in the Cataluña and Madrid/Valencia branches.
+3. **`app/src/pages/Dashboard.tsx`**: Updated `SignedDocumentsSection` (detail panel) and `SignedPdfsTableCell` (list table) to render three distinct visual states: emerald (complete), amber (deferred), gray (pending).
+
+**TypeScript**: 0 errors. Both workflows running cleanly.
+
+**Files changed:**
+- `app/src/lib/dashboardProject.ts`
+- `backend/server.js`
+- `app/src/pages/Dashboard.tsx`
+
+---
+
 ## 2026-04-05.5 — Session: Dashboard "No se encontraron archivos" bug fix
 
 **Phase**: Developer
