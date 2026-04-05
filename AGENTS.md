@@ -95,7 +95,7 @@ AGENTS.md                   → This file (living memory)
 | `NODE_ENV` | set by Railway | `production` enables strict mode |
 | `SEED_SAMPLE_DATA` | optional | Set to `false` to skip seeding test projects |
 | `ELTEX_DOCFLOW_WEBHOOK_URL` | Railway Variables | DocFlow webhook URL — when set, fires a `doc_update` POST after every successful `/submit` |
-| `ELTEX_DOCFLOW_WEBHOOK_SECRET` | Railway Variables | Optional shared secret sent as `X-Eltex-Webhook-Secret` header on every DocFlow POST — allows n8n to validate payloads are from Eltex |
+| `ELTEX_DOCFLOW_WEBHOOK_SECRET` | optional override | Overrides the built-in default (`eltex-docflow-2026-v1`) sent as `X-Eltex-Webhook-Secret` on every DocFlow POST. Default works without any Railway config. |
 
 ---
 

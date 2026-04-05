@@ -38,6 +38,7 @@ function getOpenRouterApiKey() {
 loadEnvFiles();
 
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT !== undefined;
+const DOCFLOW_WEBHOOK_SECRET = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET || 'eltex-docflow-2026-v1';
 const DATA_DIR = process.env.DATA_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/data' : __dirname);
 const uploadDir = path.join(DATA_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -952,10 +953,7 @@ async function fireDocFlowNewOrder(project) {
     docs_required: computeRequiredDocs(project.productType),
   };
 
-  const headers = { 'Content-Type': 'application/json' };
-  if (process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET) {
-    headers['X-Eltex-Webhook-Secret'] = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET;
-  }
+  const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET };
 
   try {
     await fetch(webhookUrl, {
@@ -977,14 +975,9 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return;
 
-  const headers = { 'Content-Type': 'application/json' };
-  if (process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET) {
-    headers['X-Eltex-Webhook-Secret'] = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET;
-  }
-
   fetch(webhookUrl, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET },
     body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
   }).catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
 }

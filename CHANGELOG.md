@@ -32,11 +32,11 @@
 - Scenario 6: ELT20250001 real project → `['dni_front', 'dni_back', 'ibi', 'electricity_bill', 'energy_certificate']` ✓
 - Live submit test: backend log shows `[DocFlow] ELT20250001 docs detected: dni_front, dni_back, ibi, electricity_bill` ✓
 
-**New env var:**
+**Webhook secret — built-in default, no Railway config needed:**
+```js
+const DOCFLOW_WEBHOOK_SECRET = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET || 'eltex-docflow-2026-v1';
 ```
-ELTEX_DOCFLOW_WEBHOOK_SECRET = <shared-secret>   # set in Railway Variables
-```
-n8n should validate `X-Eltex-Webhook-Secret` header to reject non-Eltex payloads.
+Both `new_order` and `doc_update` always send `X-Eltex-Webhook-Secret: eltex-docflow-2026-v1`. Override via env var if needed. n8n should validate this header to reject non-Eltex payloads.
 
 **Files changed:**
 - `backend/server.js`
