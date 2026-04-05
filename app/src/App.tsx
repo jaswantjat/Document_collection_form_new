@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useEffectEvent } from 'react';
+import { lazy, Suspense, useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
@@ -430,6 +430,34 @@ function FormApp() {
     setCurrentSection(section);
     if (urlCode) saveSectionToStorage(urlCode, section);
   };
+
+  // Keep a ref to formData so the popstate handler always has the current value
+  // without needing to be re-registered every time formData changes.
+  const formDataRef = useRef(formData);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
+  // When a returning customer is in the document upload screen (follow-up mode),
+  // intercept the phone's hardware/browser back button so they land back on the
+  // "Sube lo que falte" review screen instead of the phone-number entry screen.
+  useEffect(() => {
+    if (activeSection !== 'property-docs' || !followUpDocumentFlow) return;
+
+    // Push a sentinel entry so there is always something to pop back to.
+    window.history.pushState({ eltexBack: true }, '');
+
+    const handlePopState = () => {
+      // Re-push so repeated back presses keep being intercepted.
+      window.history.pushState({ eltexBack: true }, '');
+      const dest = hasEnergyCertificateDecision(formDataRef.current) ? 'review' : 'energy-certificate';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setCurrentSection(dest);
+      if (urlCode) saveSectionToStorage(urlCode, dest);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, followUpDocumentFlow]);
 
   const handlePhoneConfirmed = (_phone: string, foundProject: ProjectData) => {
     const normalizedProject = normalizeLoadedProject(foundProject);
