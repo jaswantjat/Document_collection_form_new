@@ -1409,7 +1409,7 @@ export function PropertyDocsSection({
   // On mount: scroll to the specific doc card requested by the review screen.
   useEffect(() => {
     if (!scrollToDoc) return;
-    const refMap: Record<string, RefObject<HTMLDivElement>> = {
+    const refMap: Record<string, RefObject<HTMLDivElement | null>> = {
       dni: dniRef,
       ibi: ibiRef,
       electricity: electricityRef,
