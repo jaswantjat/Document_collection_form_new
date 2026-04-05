@@ -288,6 +288,17 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 
 ### ✅ Completed (continued)
 
+- **[2026-04-05] Dashboard "No se encontraron archivos" bug fix**
+  - Root cause: auto-save strips `preview` from formData → db.json has no images; `preUploadAssets` stores files on disk in `project.assetFiles`; but `serializeProject` did not include `assetFiles` so the frontend never saw the disk paths
+  - Fix 1: Added `assetFiles` to `serializeProject` output (backend)
+  - Fix 2: `buildDashboardSummary` now checks `project.assetFiles` as fallback for `present` flags on DNI/electricity
+  - Fix 3: `getDocumentAssetsFromProject` and `getElectricityAssetsFromProject` now fall back to `project.assetFiles` paths when `dataUrl` is null
+  - Fix 4: Proxied `/uploads` in Vite dev config so asset file URLs resolve correctly in dev
+  - TypeScript: 0 errors
+  - Files: `backend/server.js`, `app/src/pages/Dashboard.tsx`, `app/vite.config.ts`
+
+### ✅ Completed (continued)
+
 - **[2026-04-05] Network Performance Optimization (PERF-01, 02, 03)**
   - PERF-01: Added `compression` middleware to Express — gzip compresses all API responses (5–7× payload reduction)
   - PERF-02: Changed `compressImageForAI` defaults to WebP 70% at 1200px (was JPEG 82% at 1600px) — ~40% smaller per image sent to AI
@@ -445,4 +456,9 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - **When**: Adding `useDebounce` import to `RepresentationSection.tsx`
 - **What happened**: Vite HMR error — module not found
 - **Fix**: Create the file first, then add the import
-- **Rule**: Create the module before importing it.
+
+### ❌ `serializeProject` omitted `assetFiles` — dashboard could not see uploaded files
+- **When**: Dashboard showed "No se encontraron archivos descargables" on every document action
+- **What happened**: Auto-save strips `preview` from formData (keeps payloads small). Photos are uploaded separately via `preUploadAssets` → stored as binary files at `/uploads/assets/:code/` with paths in `project.assetFiles`. But `serializeProject` (used by `/api/dashboard/project/:code`) never included `assetFiles`, so the frontend only searched stripped formData and found nothing.
+- **Fix**: Added `assetFiles` to `serializeProject`; updated `buildDashboardSummary` present-flags; updated `getDocumentAssetsFromProject`/`getElectricityAssetsFromProject` to fall back to assetFiles paths; proxied `/uploads` in Vite dev
+- **Rule**: If you add a new storage mechanism for binary assets, ensure `serializeProject` exposes it AND the dashboard resolution functions handle it

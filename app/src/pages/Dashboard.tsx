@@ -447,31 +447,43 @@ function assetFromPreview(key: string, label: string, preview: string | null | u
 
 function getDocumentAssetsFromProject(project: any, key: string): DashboardAssetItem[] {
   if (key === 'ibi') {
-    return getIbiPages(project?.formData?.ibi)
+    const fromPreview = getIbiPages(project?.formData?.ibi)
       .map((page: any, index: number) => assetFromPreview(
         `ibi-${index}`,
         `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
         page?.preview,
       ))
       .filter(Boolean) as DashboardAssetItem[];
+    if (fromPreview.length > 0) return fromPreview;
+
+    const assetFiles = project?.assetFiles || {};
+    const ibiKeys = Object.keys(assetFiles).filter((k: string) => k.startsWith('ibi_')).sort();
+    return ibiKeys.map((k: string, index: number) => ({
+      key: `ibi-${index}`,
+      label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
+      dataUrl: assetFiles[k] as string,
+      mimeType: 'image/jpeg',
+    }));
   }
 
   const summary = getDashboardProjectSummary(project);
   const item = summary.documents.find((document) => document.key === key);
-  if (!item?.dataUrl) return [];
+  if (item?.dataUrl) {
+    return [{ key: item.key, label: item.label, dataUrl: item.dataUrl, mimeType: item.mimeType }];
+  }
 
-  return [{
-    key: item.key,
-    label: item.label,
-    dataUrl: item.dataUrl,
-    mimeType: item.mimeType,
-  }];
+  const assetPath = project?.assetFiles?.[key];
+  if (assetPath) {
+    const label = key === 'dniFront' ? 'DNI frontal' : key === 'dniBack' ? 'DNI trasera' : key;
+    return [{ key, label, dataUrl: assetPath as string, mimeType: 'image/jpeg' }];
+  }
+
+  return [];
 }
 
 function getElectricityAssetsFromProject(project: any): DashboardAssetItem[] {
   const summary = getDashboardProjectSummary(project);
-
-  return summary.electricityPages
+  const fromSummary = summary.electricityPages
     .filter((item) => item.present && item.dataUrl)
     .map((item) => ({
       key: item.key,
@@ -479,6 +491,16 @@ function getElectricityAssetsFromProject(project: any): DashboardAssetItem[] {
       dataUrl: item.dataUrl as string,
       mimeType: item.mimeType,
     }));
+  if (fromSummary.length > 0) return fromSummary;
+
+  const assetFiles = project?.assetFiles || {};
+  const elecKeys = Object.keys(assetFiles).filter((k: string) => k.startsWith('electricity_')).sort();
+  return elecKeys.map((k: string, index: number) => ({
+    key: k,
+    label: `Factura luz — pág. ${index + 1}`,
+    dataUrl: assetFiles[k] as string,
+    mimeType: 'image/jpeg',
+  }));
 }
 
 function DeferredAssetButtons({

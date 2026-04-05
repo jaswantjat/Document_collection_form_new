@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-04-05.5 — Session: Dashboard "No se encontraron archivos" bug fix
+
+**Phase**: Developer
+
+**Root cause:**
+The dashboard was unable to display or download uploaded documents. The error "No se encontraron archivos descargables para este documento." appeared on every document action (view/download) in the admin dashboard.
+
+**First-principles analysis:**
+1. `useFormState.ts` strips all `preview` fields before auto-saving to the server (JSON replacer, line 334: `if (_key === 'preview') return undefined`). This keeps payloads small but means `db.json` has no image data in `formData.*.photo.preview`.
+2. Photos ARE separately uploaded as binary files via `preUploadAssets` → `/api/project/:code/upload-assets`. Paths stored in `project.assetFiles` (e.g. `{ "dniFront": "/uploads/assets/ELT123/dniFront.jpg" }`).
+3. `serializeProject` (used by `/api/dashboard/project/:code`) did NOT include `assetFiles` in its output — the frontend had no knowledge of the disk paths.
+4. `getDocumentAssetsFromProject` and `getElectricityAssetsFromProject` only read `formData.*.photo.preview` → always null → `resolveAssets` returned `[]` → alert fired.
+5. The dashboard list `present` flags for DNI front, DNI back, and electricity pages were also `false` (checked only preview) even when files were on disk.
+
+**Fix (4 targeted changes):**
+1. **`app/vite.config.ts`**: Added `/uploads` to Vite dev proxy so asset file URLs work in development.
+2. **`backend/server.js` — `serializeProject`**: Added `assetFiles: project.assetFiles || {}` to serialized output.
+3. **`backend/server.js` — `buildDashboardSummary`**: Fixed `present` flags — DNI front, DNI back, and electricity pages now check `project.assetFiles` as fallback alongside stripped preview.
+4. **`app/src/pages/Dashboard.tsx` — `getDocumentAssetsFromProject` and `getElectricityAssetsFromProject`**: Added fallback logic — when `dataUrl` is null (stripped preview), uses `project.assetFiles` path. Existing utility functions (`openDataUrlInNewTab`, `downloadDataUrlAsset`) already handle regular URL paths.
+
+**TypeScript**: 0 errors. Both workflows running cleanly.
+
+**Files changed:**
+- `app/vite.config.ts`
+- `backend/server.js`
+- `app/src/pages/Dashboard.tsx`
+
+---
+
 ## 2026-04-05.4 — Session: Network Performance Optimization (PERF-01, 02, 03)
 
 **Phase**: Developer
