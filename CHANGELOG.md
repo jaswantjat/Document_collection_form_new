@@ -1,6 +1,25 @@
 # CHANGELOG
 
-## 2026-04-05.10 — Session: DocFlow doc detection hardening + webhook secret
+## 2026-04-05.11 — Session: IBI & Electricity Detection Hardening
+
+**Phase**: Developer
+
+**Fixes in `backend/server.js`:**
+
+- **IBI RC post-processing**: 
+  - Added repeating-character check: if the Referencia Catastral (stripped) contains 4+ identical consecutive characters, it is nulled and a warning is added.
+  - Added "all-null" safety check: if RC, titular, and direccion are all missing but AI said the document was correct, it is overridden to `isCorrectDocument: false` (rejects blanks/templates that AI missed).
+  - Applied to both single `/api/extract` and batch `/api/extract-batch` routes.
+- **Electricity prompt hardening**:
+  - Explicitly lists gas, water, and phone/internet bills as wrong documents.
+  - Added blank/placeholder/template detection rules.
+  - Added screen-photo guidance ("Photos taken of a screen or monitor are acceptable...").
+  - Cleaned up prompt structure for better instruction following.
+
+**Files changed:**
+- `backend/server.js`
+- `CHANGELOG.md`
+- `AGENTS.md`
 
 **Phase**: Developer
 

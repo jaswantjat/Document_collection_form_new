@@ -1,6 +1,8 @@
 # AGENTS.md
 > This file is the AI agent's persistent memory. Read fully every session. Update before ending.
-> Last updated: 2026-04-05
+> Last updated: 2026-04-05.11
+- IBI detection: added repeating-char check for RC (4+ chars) and "all-null" safety override to reject blanks AI missed.
+- Electricity prompt: explicitly reject gas/water/phone bills; added blank template detection; added screen-photo guidance.
 
 ---
 

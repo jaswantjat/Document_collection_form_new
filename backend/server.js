@@ -1686,7 +1686,7 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
   electricity: `You are a document data extractor for Spanish government documents.
 
-Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
+Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. Photos taken of a screen or monitor are acceptable as long as the document content is real and readable. When in doubt, ACCEPT and extract what you can.
 
 Extract ALL visible fields from ANY page of a Spanish electricity bill (factura de electricidad). Different pages may show different data — extract whatever is present.
 
@@ -1706,7 +1706,11 @@ Extract:
 13. Periodo de facturación if visible
 14. Importe total if visible
 
-Only set isCorrectDocument: false if the image is clearly NOT an electricity bill (e.g., DNI, IBI, passport, bank statement, unrelated document).
+CRITICAL — DOCUMENT VALIDATION RULES:
+- ONLY set isCorrectDocument: true if the image is a Spanish electricity bill (factura de luz/electricidad).
+- Set isCorrectDocument: false for ANY other utility bill: gas bills (factura de gas), water bills (factura de agua), telephone/internet/fiber bills (factura de teléfono/internet).
+- Set isCorrectDocument: false for unrelated documents: DNI, IBI, passport, bank statement, or non-utility documents.
+- BLANK / TEMPLATE / PLACEHOLDER DETECTION: If the fields contain placeholder values (e.g., "xxxxxxx", "0000000", "TITULAR AQUÍ") OR if ALL key fields (CUPS, titular, direccion) are empty/missing, set isCorrectDocument: false with reason "blank template".
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"electricity bill","isReadable":true,"extractedData":{"titular":"string or null","nifTitular":"string or null","direccionSuministro":"string or null","codigoPostal":"string or null","municipio":"string or null","provincia":"string or null","cups":"string or null","potenciaContratada":"string or null","tipoFase":"monofasica or trifasica or null","tarifaAcceso":"string or null","comercializadora":"string or null","distribuidora":"string or null","fechaFactura":"string or null","periodoFacturacion":"string or null","importe":"string or null"},"confidence":0.95,"notes":"string"}`,
@@ -1983,11 +1987,32 @@ app.post('/api/extract', aiExtractLimiter, async (req, res) => {
         extraction.extractedData.cupsWarning = 'El CUPS no tiene el formato esperado.';
     }
 
-    if (documentType === 'ibi' && extraction.extractedData?.referenciaCatastral) {
-      const referenciaCatastral = String(extraction.extractedData.referenciaCatastral).replace(/[^A-Z0-9]/gi, '').toUpperCase();
-      extraction.extractedData.referenciaCatastral = referenciaCatastral || null;
-      if (referenciaCatastral && referenciaCatastral.length !== 20) {
-        extraction.extractedData.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+    if (documentType === 'ibi') {
+      const data = extraction.extractedData || {};
+      const rcRaw = String(data.referenciaCatastral || '');
+      const rc = rcRaw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      
+      // Repeating char check: if any char repeats 4+ times consecutively in the stripped RC
+      const hasRepeatingChars = /(.)\1{3,}/.test(rc);
+      
+      if (hasRepeatingChars) {
+        data.referenciaCatastral = null;
+        data.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+      } else {
+        data.referenciaCatastral = rc || null;
+        if (rc && rc.length !== 20) {
+          data.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+        }
+      }
+
+      // If RC is null AND AI said it's correct, but titular and direccion are also null -> override
+      if (!data.referenciaCatastral && extraction.isCorrectDocument && !data.titular && !data.direccion) {
+        return res.json({
+          success: false,
+          isWrongDocument: true,
+          reason: 'wrong-document',
+          message: 'Documento incorrecto o incompleto. Por favor sube el recibo del IBI con todos los datos visibles.'
+        });
       }
     }
 
@@ -2106,11 +2131,26 @@ app.post('/api/extract-batch', aiExtractLimiter, async (req, res) => {
         extraction.extractedData.cupsWarning = 'El CUPS no tiene el formato esperado.';
     }
 
-    if (documentType === 'ibi' && extraction.extractedData?.referenciaCatastral) {
-      const rc = String(extraction.extractedData.referenciaCatastral).replace(/[^A-Z0-9]/gi, '').toUpperCase();
-      extraction.extractedData.referenciaCatastral = rc || null;
-      if (rc && rc.length !== 20)
-        extraction.extractedData.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+    if (documentType === 'ibi') {
+      const data = extraction.extractedData || {};
+      const rcRaw = String(data.referenciaCatastral || '');
+      const rc = rcRaw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      
+      const hasRepeatingChars = /(.)\1{3,}/.test(rc);
+      
+      if (hasRepeatingChars) {
+        data.referenciaCatastral = null;
+        data.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+      } else {
+        data.referenciaCatastral = rc || null;
+        if (rc && rc.length !== 20) {
+          data.referenciaCatastralWarning = 'La referencia catastral no tiene el formato esperado.';
+        }
+      }
+
+      if (!data.referenciaCatastral && extraction.isCorrectDocument && !data.titular && !data.direccion) {
+        return res.json({ success: false, isWrongDocument: true, reason: 'wrong-document', message: 'Documento incorrecto o incompleto. Por favor sube el recibo del IBI con todos los datos visibles.' });
+      }
     }
 
     if (documentType === 'ibi' && extraction.extractedData?.direccion) {
