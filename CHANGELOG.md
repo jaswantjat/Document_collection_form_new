@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 2026-04-05.9 — Session: DocFlow webhook sequence fix (new_order before doc_update)
+
+**Phase**: Developer
+
+**Root cause**: n8n's DocFlow flow requires a Baserow row to exist before `doc_update` can update it. The row is created by `new_order`. Previously the backend only ever fired `doc_update` — so n8n looked for the row, found nothing, and stopped. No row was ever created.
+
+**First-principles fix (two layers):**
+
+1. **On project creation** (`POST /api/project/create`): fire `new_order` fire-and-forget after `saveDB()`. On success, set `project.docflowNewOrderSent = true` and save — so the submit route knows the row already exists.
+
+2. **On submit** (`POST /api/project/:code/submit`): after `res.json()` (non-blocking), check `!project.docflowNewOrderSent`. If the flag is absent (project created before this fix, or creation webhook failed), **await** `fireDocFlowNewOrder` before firing `fireDocFlowDocUpdate`. Awaiting guarantees the Baserow row exists before the update arrives. This silently fixes all ~50 existing projects in the DB without any migration.
+
+**New helpers in `backend/server.js`:**
+- `computeRequiredDocs(productType)` — returns `["dni_front", "dni_back", "ibi", "electricity_bill", "energy_certificate"]`
+- `fireDocFlowNewOrder(project)` — async, awaitable, fires `new_order` payload, returns boolean success
+- `fireDocFlowDocUpdate(orderCode, docsUploaded)` — fire-and-forget `doc_update` (renamed from `fireDocFlowWebhook`)
+
+**`new_order` payload:**
+```json
+{
+  "type": "new_order",
+  "order_id": "ELT20260054",
+  "customer_name": "...",
+  "phone": "+34...",
+  "contract_date": "2026-04-05",
+  "docs_required": ["dni_front", "dni_back", "ibi", "electricity_bill", "energy_certificate"]
+}
+```
+
+**Verified:**
+- New project creation: `[DocFlow] new_order sent for ELT20260054` ✓ in backend logs
+- `docflowNewOrderSent: true` persisted to db.json for new project ✓
+- Existing projects (`ELT20250001`, `ELT20250002`, etc.): `docflowNewOrderSent: MISSING` → will correctly await `new_order` on next submit before firing `doc_update` ✓
+
+**Files changed:**
+- `backend/server.js`
+
+---
+
 ## 2026-04-05.8 — Session: Delete project from dashboard
 
 **Phase**: Developer

@@ -855,6 +855,13 @@ app.post('/api/project/create', (req, res) => {
   database.projects[code] = project;
   saveDB();
 
+  // Fire new_order to DocFlow (fire-and-forget). Track whether it succeeded
+  // so the submit route can skip re-sending new_order for this project.
+  fireDocFlowNewOrder(project).then((sent) => {
+    project.docflowNewOrderSent = sent;
+    saveDB();
+  });
+
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
 });
 
@@ -906,7 +913,45 @@ function extractCompletedDocKeys(formData, assetFiles) {
   return keys;
 }
 
-function fireDocFlowWebhook(orderCode, docsUploaded) {
+// Returns the baseline documents expected for a new project at creation time.
+// Location-specific signed docs are unknown at creation and are not included.
+function computeRequiredDocs(productType) {
+  const docs = ['dni_front', 'dni_back', 'ibi', 'electricity_bill', 'energy_certificate'];
+  return docs;
+}
+
+// Fires new_order webhook to DocFlow. Returns true on success, false on failure.
+// Awaitable — callers that need to guarantee the row exists before doc_update should await this.
+async function fireDocFlowNewOrder(project) {
+  const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
+  if (!webhookUrl) return true;
+
+  const payload = {
+    type: 'new_order',
+    order_id: project.code,
+    customer_name: project.customerName || '',
+    phone: project.phone || '',
+    contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
+    docs_required: computeRequiredDocs(project.productType),
+  };
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
+    });
+    console.log(`[DocFlow] new_order sent for ${project.code}`);
+    return true;
+  } catch (err) {
+    console.error(`[DocFlow] new_order failed for ${project.code}:`, err.message);
+    return false;
+  }
+}
+
+// Fires doc_update webhook fire-and-forget — does not block the caller.
+function fireDocFlowDocUpdate(orderCode, docsUploaded) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return;
 
@@ -914,7 +959,7 @@ function fireDocFlowWebhook(orderCode, docsUploaded) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
-  }).catch((err) => console.error('[DocFlow] webhook failed:', err.message));
+  }).catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
 }
 
 // Auto-save progress (requires access token)
@@ -942,7 +987,7 @@ app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
 });
 
 // Final submit (requires access token)
-app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
+app.post('/api/project/:code/submit', requireProjectToken, async (req, res) => {
   const project = req.project;
   const { formData, source } = req.body;
   if (!formData || typeof formData !== 'object') {
@@ -970,12 +1015,21 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   project.cataloniaPDFs = pdfStatus;
 
   saveDB();
-
-  // Notify DocFlow webhook (fire-and-forget — does not block the customer's response)
-  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles);
-  fireDocFlowWebhook(project.code, docsUploaded);
-
   res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
+
+  // DocFlow webhook sequence (after response is sent — does not block the customer).
+  // Rule: new_order must exist in Baserow before doc_update can update it.
+  // If new_order was never confirmed sent (project created before this fix, or creation webhook
+  // failed), we await it here so the row is guaranteed to exist before doc_update fires.
+  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles);
+  if (!project.docflowNewOrderSent) {
+    const sent = await fireDocFlowNewOrder(project);
+    if (sent) {
+      project.docflowNewOrderSent = true;
+      saveDB();
+    }
+  }
+  fireDocFlowDocUpdate(project.code, docsUploaded);
 });
 
 // Pre-upload binary assets (photos + PDFs) so the final submit payload can skip them.
