@@ -105,14 +105,21 @@ function getInitialSection(
 
   // Try to restore the last saved section before recomputing from scratch.
   const saved = readSavedSection(urlCode);
-  if (saved && !followUpDocumentFlow) {
+  if (saved) {
     // If the user was on representation but it's now done, advance past it.
     if (saved === 'representation' && hasRepresentationDone(fd, location)) {
       return hasEnergyDecision ? 'review' : 'energy-certificate';
     }
-    // All other saved sections are valid to restore.
-    if (saved !== 'representation' || (!!location && location !== 'other')) {
+    // Advanced sections (energy-certificate, review) must always be restored even when
+    // followUpDocumentFlow is true — the user was legitimately past property-docs.
+    if (saved === 'energy-certificate' || saved === 'review') {
       return saved;
+    }
+    // For earlier sections only restore if not in a follow-up flow that needs property docs.
+    if (!followUpDocumentFlow) {
+      if (saved !== 'representation' || (!!location && location !== 'other')) {
+        return saved;
+      }
     }
   }
 
