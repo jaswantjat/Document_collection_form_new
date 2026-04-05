@@ -1664,11 +1664,13 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
   ibi: `You are a document data extractor for Spanish government documents.
 
-Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
+Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. Photos taken of a screen or monitor are acceptable as long as the document content is real and readable.
+
+CRITICAL — BLANK / TEMPLATE / PLACEHOLDER DETECTION: If the document is clearly a blank form, demo template, or example — meaning the data fields are empty OR filled with obvious placeholder values such as repeating characters (e.g. "xxxxxxx", "0000000", "AAAAAAA"), dummy reference codes, or sample text — set isCorrectDocument: false. Do NOT try to extract data from blank or template documents. The user must upload their actual completed IBI receipt with their real property data (real owner name, real address, real Referencia Catastral). A form from a government web portal that is displayed but has no real data filled in is NOT acceptable.
 
 Extract from a Spanish IBI receipt, property-tax debit notice, or Escritura:
-1. Referencia Catastral — exactly 20 alphanumeric characters, must be complete and clear
-2. Titular (property owner full name)
+1. Referencia Catastral — exactly 20 alphanumeric characters. Must be a genuine cadastral reference, NOT placeholder text with repeating characters (e.g. "xxxxxxxDFxxxxxxxxx" is a placeholder — return null). If the value contains 4 or more consecutive identical characters, it is likely a placeholder — return null.
+2. Titular (property owner full name) — must be a real person or company name, not a label or placeholder
 3. NIF del titular if visible
 4. Full property address (dirección del inmueble) only. Do NOT include RC/reference, tax year, amount, payment text, or summary labels in this field.
 5. Código postal if visible
@@ -1677,6 +1679,7 @@ Extract from a Spanish IBI receipt, property-tax debit notice, or Escritura:
 8. Total amount if visible
 
 If this is clearly NOT an IBI/property-tax/escritura document, set isCorrectDocument: false.
+If ALL key fields (referenciaCatastral, titular, direccion) are null, empty, or placeholder values, set isCorrectDocument: false — this is a blank or incomplete form, not a real document.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
 {"isCorrectDocument":true,"documentTypeDetected":"IBI receipt","isReadable":true,"extractedData":{"referenciaCatastral":"string or null","titular":"string or null","titularNif":"string or null","direccion":"string or null","codigoPostal":"string or null","municipio":"string or null","provincia":"string or null","ejercicio":"string or null","importe":"string or null"},"confidence":0.95,"notes":"string"}`,
