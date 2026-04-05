@@ -339,6 +339,14 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Fallback: if user taps submit before render finishes, awaits the in-flight Promise (no regression)
   - File: `app/src/sections/ReviewSection.tsx`
 
+### ✅ Completed (continued)
+
+- **[2026-04-05] DocFlow webhook race condition + locale field fix**
+  - Bug 1: `fireDocFlowNewOrder` was called fire-and-forget at project creation. On first submit the row might not exist yet in Baserow, causing `doc_update` to fail. Fix: removed webhook call from `/api/project/create`; `new_order` now only fires from the submit route, which already awaits it before firing `doc_update`.
+  - Bug 2: `new_order` payload sent `customer_language: "es-ES"` but system expects `locale: "es"`. Fix: renamed field to `locale` and strip region code via `.split('-')[0]`.
+  - Verified by fresh sub-agent: both PASS.
+  - File: `backend/server.js`
+
 ### 📋 To Do
 - None
 

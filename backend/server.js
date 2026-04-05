@@ -856,13 +856,6 @@ app.post('/api/project/create', (req, res) => {
   database.projects[code] = project;
   saveDB();
 
-  // Fire new_order to DocFlow (fire-and-forget). Track whether it succeeded
-  // so the submit route can skip re-sending new_order for this project.
-  fireDocFlowNewOrder(project).then((sent) => {
-    project.docflowNewOrderSent = sent;
-    saveDB();
-  });
-
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
 });
 
@@ -948,7 +941,7 @@ async function fireDocFlowNewOrder(project) {
     first_name: snapshot.firstName || null,
     last_name: snapshot.lastName || null,
     phone: project.phone || '',
-    customer_language: project.customerLanguage || project.formData?.browserLanguage || null,
+    locale: (project.customerLanguage || project.formData?.browserLanguage || '').split('-')[0] || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
     docs_required: computeRequiredDocs(project.productType),
   };
