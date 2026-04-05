@@ -202,10 +202,7 @@ export function ReviewSection({
         };
       }
 
-      const preUploadSuccess = preUploadDone.current || await Promise.race([
-        preUploadPromise.current ?? Promise.resolve(false),
-        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)),
-      ]);
+      const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
 
       const submitPayload = preUploadSuccess
         ? stripAllBinaryData(renderedFormData)
