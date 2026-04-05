@@ -926,11 +926,15 @@ async function fireDocFlowNewOrder(project) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return true;
 
+  const snapshot = getProjectSnapshot(project.formData);
   const payload = {
     type: 'new_order',
     order_id: project.code,
     customer_name: project.customerName || '',
+    first_name: snapshot.firstName || null,
+    last_name: snapshot.lastName || null,
     phone: project.phone || '',
+    customer_language: project.customerLanguage || project.formData?.browserLanguage || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
     docs_required: computeRequiredDocs(project.productType),
   };

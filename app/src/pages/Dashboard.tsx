@@ -1414,13 +1414,11 @@ function ProjectDetailModal({
                 <InfoCard icon={Phone} label="Teléfono" value={project.phone || '—'} />
               </div>
 
-              {(summary.firstName || summary.lastName || summary.customerLanguage) && (
-                <div className="grid md:grid-cols-3 gap-3">
-                  <InfoCard icon={User} label="Nombre" value={summary.firstName || '—'} />
-                  <InfoCard icon={Users} label="Apellidos" value={summary.lastName || '—'} />
-                  <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
-                </div>
-              )}
+              <div className="grid md:grid-cols-3 gap-3">
+                <InfoCard icon={User} label="Nombre" value={summary.firstName || '—'} />
+                <InfoCard icon={Users} label="Apellidos" value={summary.lastName || '—'} />
+                <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
+              </div>
 
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
