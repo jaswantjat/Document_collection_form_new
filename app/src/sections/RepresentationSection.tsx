@@ -44,36 +44,47 @@ function getDocsForLocation(location: LocationRegion | null): DocDef[] {
 
 function DocumentFullscreenModal({
   formData,
-  kind,
-  title,
+  docs,
+  initialIndex,
   onClose,
 }: {
   formData: FormData;
-  kind: SignedDocumentKind;
-  title: string;
+  docs: DocDef[];
+  initialIndex: number;
   onClose: () => void;
 }) {
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const imageCache = useRef<Record<string, string | null>>({});
+  const [, forceUpdate] = useState(0);
+  const [loadingKinds, setLoadingKinds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+  const currentDoc = docs[currentIndex];
 
-    renderSignedDocumentModalPreview({ formData }, kind)
+  const loadDoc = useCallback((index: number) => {
+    const doc = docs[index];
+    if (!doc) return;
+    if (doc.kind in imageCache.current) return;
+    imageCache.current[doc.kind] = undefined as unknown as string;
+    setLoadingKinds(prev => new Set(prev).add(doc.kind));
+    renderSignedDocumentModalPreview({ formData }, doc.kind)
       .then((image) => {
-        if (!cancelled) {
-          setImageDataUrl(image);
-          setLoading(false);
-        }
+        imageCache.current[doc.kind] = image;
+        setLoadingKinds(prev => { const s = new Set(prev); s.delete(doc.kind); return s; });
+        forceUpdate(n => n + 1);
       })
       .catch((err) => {
-        console.error(`Failed to render ${kind} modal preview:`, err);
-        if (!cancelled) setLoading(false);
+        console.error(`Failed to render ${doc.kind} modal preview:`, err);
+        imageCache.current[doc.kind] = null as unknown as string;
+        setLoadingKinds(prev => { const s = new Set(prev); s.delete(doc.kind); return s; });
+        forceUpdate(n => n + 1);
       });
+  }, [formData, docs]);
 
-    return () => { cancelled = true; };
-  }, [formData, kind]);
+  useEffect(() => {
+    loadDoc(currentIndex);
+    if (currentIndex + 1 < docs.length) loadDoc(currentIndex + 1);
+    if (currentIndex - 1 >= 0) loadDoc(currentIndex - 1);
+  }, [currentIndex, loadDoc, docs.length]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -81,14 +92,51 @@ function DocumentFullscreenModal({
     return () => { document.body.style.overflow = prev; };
   }, []);
 
+  const goTo = (index: number) => {
+    if (index < 0 || index >= docs.length) return;
+    setCurrentIndex(index);
+  };
+
+  const imageDataUrl = imageCache.current[currentDoc?.kind ?? ''];
+  const loading = currentDoc ? loadingKinds.has(currentDoc.kind) || !(currentDoc.kind in imageCache.current) : false;
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < docs.length - 1;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <span className="text-white text-sm font-semibold truncate pr-4">{title}</span>
+        {docs.length > 1 ? (
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => goTo(currentIndex - 1)}
+              disabled={!hasPrev}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+              aria-label="Documento anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0 flex-1 text-center">
+              <span className="text-white text-sm font-semibold truncate block">{currentDoc?.title}</span>
+              <span className="text-white/40 text-xs">{currentIndex + 1} / {docs.length}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => goTo(currentIndex + 1)}
+              disabled={!hasNext}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+              aria-label="Documento siguiente"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <span className="text-white text-sm font-semibold truncate pr-4">{currentDoc?.title}</span>
+        )}
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+          className="shrink-0 ml-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
           aria-label="Cerrar"
         >
           <X className="w-4 h-4" />
@@ -104,7 +152,7 @@ function DocumentFullscreenModal({
         ) : imageDataUrl ? (
           <img
             src={imageDataUrl}
-            alt={title}
+            alt={currentDoc?.title}
             className="block mx-auto"
             style={{ width: 'max(100%, 700px)' }}
           />
@@ -115,8 +163,30 @@ function DocumentFullscreenModal({
         )}
       </div>
 
-      <div className="shrink-0 px-4 py-3 border-t border-white/10">
-        <p className="text-white/40 text-xs text-center">Desplázate para leer el documento completo</p>
+      <div className="shrink-0 px-4 py-3 border-t border-white/10 flex items-center justify-between gap-4">
+        {docs.length > 1 && (
+          <button
+            type="button"
+            onClick={() => goTo(currentIndex - 1)}
+            disabled={!hasPrev}
+            className="shrink-0 flex items-center gap-1 text-white/50 text-xs hover:text-white/80 disabled:opacity-0 disabled:pointer-events-none transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            {docs[currentIndex - 1]?.title}
+          </button>
+        )}
+        <p className="flex-1 text-white/40 text-xs text-center">Desplázate para leer el documento completo</p>
+        {docs.length > 1 && (
+          <button
+            type="button"
+            onClick={() => goTo(currentIndex + 1)}
+            disabled={!hasNext}
+            className="shrink-0 flex items-center gap-1 text-white/50 text-xs hover:text-white/80 disabled:opacity-0 disabled:pointer-events-none transition-colors"
+          >
+            {docs[currentIndex + 1]?.title}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -202,7 +272,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [sharedSignature, setSharedSignature] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const [fullscreenDoc, setFullscreenDoc] = useState<DocDef | null>(null);
+  const [fullscreenDocIndex, setFullscreenDocIndex] = useState<number | null>(null);
   const [allDocsToured, setAllDocsToured] = useState(false);
   const applyingRef = useRef(false);
   const hasCycled = useRef(false);
@@ -387,12 +457,12 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
 
   return (
     <>
-      {fullscreenDoc && (
+      {fullscreenDocIndex !== null && (
         <DocumentFullscreenModal
           formData={previewFormData}
-          kind={fullscreenDoc.kind}
-          title={fullscreenDoc.title}
-          onClose={() => setFullscreenDoc(null)}
+          docs={docs}
+          initialIndex={fullscreenDocIndex}
+          onClose={() => setFullscreenDocIndex(null)}
         />
       )}
 
@@ -448,7 +518,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                       formData={previewFormData}
                       kind={doc.kind}
                       alt={doc.title}
-                      onExpand={() => setFullscreenDoc(doc)}
+                      onExpand={() => setFullscreenDocIndex(docs.indexOf(doc))}
                     />
                   </div>
                 ))}
