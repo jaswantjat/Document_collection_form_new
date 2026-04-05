@@ -1108,6 +1108,29 @@ app.get('/api/dashboard/project/:code', requireDashboardAuth, (req, res) => {
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
 });
 
+// ── Delete a project (admin only) ─────────────────────────────────────────────
+app.delete('/api/dashboard/project/:code', requireDashboardAuth, async (req, res) => {
+  const { code } = req.params;
+  const project = database.projects[code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  // Remove uploaded asset files from disk
+  const projectAssetsDir = path.join(assetUploadDir, code);
+  try {
+    await fs.promises.rm(projectAssetsDir, { recursive: true, force: true });
+  } catch (err) {
+    console.warn(`[delete] Could not remove asset directory for ${code}:`, err.message);
+  }
+
+  delete database.projects[code];
+  saveDB();
+
+  console.log(`[delete] Project ${code} deleted by admin`);
+  res.json({ success: true });
+});
+
 // ── Dashboard CSV export ────────────────────────────────────────────────────────
 app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
   const projects = Object.values(database.projects);

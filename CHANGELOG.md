@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 2026-04-05.8 — Session: Delete project from dashboard
+
+**Phase**: Developer
+
+**Feature**: Admin assessors can now permanently delete any project from the dashboard.
+
+**First-principles impact of deletion:**
+- `database.projects[code]` removed and persisted to db.json
+- `uploads/assets/:code/` directory deleted recursively from disk (all uploaded files purged)
+- Customer form URL returns `PROJECT_NOT_FOUND` automatically — no extra handling needed
+- CSV export / ZIP download naturally exclude the deleted project
+- Dashboard row removed immediately from frontend state (no page reload)
+- Detail cache entry evicted — no stale reference remains
+
+**Backend (`backend/server.js`):**
+- New `DELETE /api/dashboard/project/:code` route — requires `x-dashboard-token` auth
+- Removes asset directory with `fs.promises.rm(dir, { recursive: true, force: true })`
+- Deletes from `database.projects`, calls `saveDB()`
+
+**API service (`app/src/services/api.ts`):**
+- Added `deleteProject(code, dashboardToken)` — fires `DELETE /api/dashboard/project/:code`
+
+**Frontend (`app/src/pages/Dashboard.tsx`):**
+- Imported `Trash2` icon; imported `deleteProject` from api
+- `ProjectTableRow` gets `onDelete` prop + `deleteState` + `confirmTimeoutRef`
+- 3-state delete UX: idle → "Eliminar expediente" (red outline); confirm → "Confirmar / Cancelar" pair (auto-reverts to idle after 4 s); deleting → spinner
+- `DashboardPage.handleDeleteProject`: evicts cache entry, removes project from state — row unmounts immediately, taking any open modals with it
+
+**Verified:**
+- TypeScript: 0 errors
+- DELETE endpoint tested: project existed → `{"success":true}` → subsequent GET returns `PROJECT_NOT_FOUND` ✓
+
+**Files changed:**
+- `backend/server.js`
+- `app/src/services/api.ts`
+- `app/src/pages/Dashboard.tsx`
+
+---
+
 ## 2026-04-05.7 — Session: DocFlow webhook integration (`doc_update`)
 
 **Phase**: Developer

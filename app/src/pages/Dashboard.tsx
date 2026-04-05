@@ -23,12 +23,13 @@ import {
   Thermometer,
   User,
   Users,
+  Trash2,
   X,
   Upload,
   Zap,
   Scissors,
 } from 'lucide-react';
-import { dashboardLogout, fetchDashboard, fetchDashboardProject, generateImagePDF, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
+import { dashboardLogout, deleteProject, fetchDashboard, fetchDashboardProject, generateImagePDF, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
 import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
@@ -1445,17 +1446,21 @@ function ProjectTableRow({
   token,
   loadProjectDetail,
   onRefresh,
+  onDelete,
 }: {
   project: any;
   summary: DashboardProjectSummary;
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
   onRefresh: () => void;
+  onDelete: (code: string) => void;
 }) {
   const [downloading, setDownloading] = useState(false);
   const [openingForm, setOpeningForm] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
+  const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const documents = summary?.documents ?? [];
   const byKey = new Map(documents.map((item) => [item.key, item]));
   const allDocs = [...documents, ...(summary?.electricityPages ?? [])];
@@ -1482,6 +1487,35 @@ function ProjectTableRow({
       alert('No se pudo abrir el formulario del expediente.');
     } finally {
       setOpeningForm(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    if (deleteState === 'idle') {
+      setDeleteState('confirm');
+      confirmTimeoutRef.current = setTimeout(() => setDeleteState('idle'), 4000);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
+    setDeleteState('idle');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
+    setDeleteState('deleting');
+    try {
+      const res = await deleteProject(project.code, token);
+      if (res.success) {
+        onDelete(project.code);
+      } else {
+        setDeleteState('idle');
+        alert(res.message || 'No se pudo eliminar el expediente.');
+      }
+    } catch {
+      setDeleteState('idle');
+      alert('Error de conexión al intentar eliminar el expediente.');
     }
   };
 
@@ -1607,6 +1641,41 @@ function ProjectTableRow({
             <Download className="w-3 h-3" />
             {downloading ? 'Descargando...' : 'Descargar ZIP'}
           </button>
+          {deleteState === 'idle' && (
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1.5"
+            >
+              <Trash2 className="w-3 h-3" />
+              Eliminar expediente
+            </button>
+          )}
+          {deleteState === 'confirm' && (
+            <div className="col-span-2 flex gap-1">
+              <button
+                type="button"
+                onClick={() => { void handleDeleteConfirm(); }}
+                className="flex-1 px-2 py-2 rounded-lg text-xs font-bold border border-red-400 bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-1"
+              >
+                <Trash2 className="w-3 h-3" />
+                Confirmar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCancel}
+                className="flex-1 px-2 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+          {deleteState === 'deleting' && (
+            <div className="col-span-2 px-3 py-2 rounded-lg text-xs text-red-500 flex items-center justify-center gap-1.5 border border-red-100 bg-red-50">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Eliminando...
+            </div>
+          )}
         </div>
       </td>
     </tr>
@@ -2269,6 +2338,11 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     throw new Error(response.message || response.error || 'PROJECT_LOAD_FAILED');
   }, [handleLogout, token]);
 
+  const handleDeleteProject = useCallback((code: string) => {
+    detailCacheRef.current.delete(code);
+    setProjects((prev) => prev.filter((p) => p.code !== code));
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -2442,6 +2516,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                           token={token}
                           loadProjectDetail={loadProjectDetail}
                           onRefresh={load}
+                          onDelete={handleDeleteProject}
                         />
                       ))}
                     </tbody>

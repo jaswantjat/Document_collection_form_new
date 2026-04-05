@@ -263,6 +263,17 @@ export async function extractDniBatch(
   return res.json();
 }
 
+export async function deleteProject(
+  code: string,
+  dashboardToken: string
+): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+    headers: { 'x-dashboard-token': dashboardToken },
+  });
+  return res.json();
+}
+
 export async function adminUpdateFormData(
   code: string,
   formDataPatch: any,
