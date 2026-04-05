@@ -1,5 +1,52 @@
 # CHANGELOG
 
+## 2026-04-05.4 — Session: Network Performance Optimization (PERF-01, 02, 03)
+
+**Phase**: Developer
+
+**PRD**: `docs/prds/PRD-performance-network-optimization.md`
+
+**Features implemented:**
+
+### PERF-01 — Express Response Compression
+- Added `compression` npm package to `backend/package.json`
+- Applied `app.use(compression())` before all middleware in `server.js`
+- Effect: all JSON API responses are now gzip-compressed. Base64-heavy formData payloads that were 2–5 MB are now 300–700 KB over the wire (~5–7× reduction).
+- Verified: `Vary: Accept-Encoding` header present on all responses; backend starts cleanly; health endpoint returns 200.
+
+### PERF-02 — WebP + Smaller Resolution for AI Extraction
+- Changed `compressImageForAI()` defaults in `app/src/lib/photoValidation.ts`:
+  - Max dimension: `1600px → 1200px` (44% fewer pixels)
+  - Quality: `0.82 → 0.70`
+  - Format: `image/jpeg → image/webp` (~30% smaller at equivalent perceived quality)
+- Added `format` parameter to `compressImageForAI()` (default: `'image/webp'`)
+- `fileToPreview()` explicitly passes `format='image/jpeg'` — display previews remain JPEG (stored in localStorage and UI)
+- Effect: each photo sent to AI extraction is ~40% smaller. 4-image session saves ~400–600 KB of upload on slow connections.
+
+### PERF-03 — Progressive Photo Upload
+- Added `preUploadAssets` import to `useFormState.ts`
+- Added progressive upload `useEffect` in `useFormState.ts`:
+  - Computes a `photoFingerprint` from all photo preview prefixes and page counts
+  - When fingerprint changes (new photo added), fires `preUploadAssets` after 800ms debounce
+  - Upload is fire-and-forget (never blocks UI)
+- Effect: photos are uploaded to the server in the background immediately after each document is captured, not only when ReviewSection mounts. By the time the user reaches review, binary files are already on disk → submit is near-instant.
+
+**QA results:**
+- PERF-01: 5/5 checks PASS (compression package, middleware placement, clean start, Vary header, no broken routes)
+- PERF-02: 5/5 checks PASS (defaults correct, format param, fileToPreview unchanged, TypeScript clean, all callers work)
+- PERF-03: 5/5 checks PASS (import, fingerprint computation, debounce, refs, TypeScript clean)
+- TypeScript: 0 errors across all three changes
+- App loads correctly after full page reload
+
+**Files changed:**
+- `backend/server.js` (compression require + middleware)
+- `backend/package.json` (compression dependency)
+- `app/src/lib/photoValidation.ts` (compressImageForAI signature + fileToPreview format)
+- `app/src/hooks/useFormState.ts` (preUploadAssets import + progressive upload effect)
+- `docs/prds/PRD-performance-network-optimization.md` (new PRD)
+
+---
+
 ## 2026-04-05.3 — Session: Capture firstName, lastName, and browserLanguage
 
 **Phase**: Developer

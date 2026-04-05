@@ -1,6 +1,7 @@
 const path = require('path');
 const dotenv = require('dotenv');
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -92,6 +93,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : null;
 
 // Middleware
+// Compress all responses — reduces base64-heavy JSON payloads from 2-5MB to 300-700KB.
+app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,

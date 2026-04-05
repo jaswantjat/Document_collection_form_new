@@ -213,10 +213,11 @@ export function fileToBase64(file: File): Promise<string> {
 export async function fileToPreview(file: File): Promise<string> {
   const dataUrl = await fileToBase64(file);
   if (!file.type.startsWith('image/')) return dataUrl;
-  // Compress preview to max 1200px, 80% quality.
+  // Compress preview to max 1200px, 80% JPEG quality.
   // Full-resolution base64 (2-5 MB) overflows localStorage and bloats server payloads.
   // 1200px at 80% yields ~50-150 KB — still sharp enough for display and storage.
-  return compressImageForAI(dataUrl, 1200, 0.80);
+  // Kept as JPEG (not WebP) intentionally: stored in localStorage and shown in UI.
+  return compressImageForAI(dataUrl, 1200, 0.80, 'image/jpeg');
 }
 
 /**
@@ -315,9 +316,22 @@ export async function splitDocumentImageIfNeeded(file: File, originalName?: stri
   });
 }
 
-// Compress and resize an image to max 1600px (longest side), JPEG quality 0.82
-// This dramatically reduces payload size for large phone photos before sending to AI
-export function compressImageForAI(dataUrl: string, maxPx = 1600, quality = 0.82): Promise<string> {
+/**
+ * Compress and resize an image before sending to AI extraction.
+ *
+ * Defaults: WebP at 70% quality, 1200px max dimension.
+ * - WebP at 70% ≈ JPEG at 82% in perceived quality, ~30–35% smaller file.
+ * - 1200px is well above OCR requirements for Spanish identity documents (~350 DPI).
+ * - Across a full form session (4 images), saves ~400–600KB of upload on slow connections.
+ *
+ * Pass format='image/jpeg' explicitly when the output must be JPEG (e.g. display/preview).
+ */
+export function compressImageForAI(
+  dataUrl: string,
+  maxPx = 1200,
+  quality = 0.70,
+  format = 'image/webp',
+): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -332,7 +346,7 @@ export function compressImageForAI(dataUrl: string, maxPx = 1600, quality = 0.82
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(dataUrl); return; }
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      resolve(canvas.toDataURL(format, quality));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;

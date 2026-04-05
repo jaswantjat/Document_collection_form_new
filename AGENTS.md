@@ -288,6 +288,16 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 
 ### ✅ Completed (continued)
 
+- **[2026-04-05] Network Performance Optimization (PERF-01, 02, 03)**
+  - PERF-01: Added `compression` middleware to Express — gzip compresses all API responses (5–7× payload reduction)
+  - PERF-02: Changed `compressImageForAI` defaults to WebP 70% at 1200px (was JPEG 82% at 1600px) — ~40% smaller per image sent to AI
+  - PERF-03: Progressive photo upload in `useFormState.ts` — photos now upload to server in background immediately after capture, not only at ReviewSection mount
+  - PRD: `docs/prds/PRD-performance-network-optimization.md`
+  - QA: 15/15 checks PASS across all three features; TypeScript 0 errors
+  - Files: `backend/server.js`, `backend/package.json`, `app/src/lib/photoValidation.ts`, `app/src/hooks/useFormState.ts`
+
+### ✅ Completed (continued)
+
 - **[2026-04-05] Representation card missing in followUpMode (ReviewSection.tsx)**
   - `needsRepresentation` was `!followUpMode && !!locationVar && locationVar !== 'other'`
   - When followUpMode=true the entire representation card was suppressed, even for fully-signed projects

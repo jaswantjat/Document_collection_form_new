@@ -6,7 +6,7 @@ import type {
   StoredDocumentFile, EnergyCertificateData, ContractData,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
-import { saveProgress } from '@/services/api';
+import { saveProgress, preUploadAssets } from '@/services/api';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
@@ -360,6 +360,34 @@ export const useFormState = (
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [formData, projectCode, projectToken]);
+
+  // Progressive photo upload — fires upload-assets in the background whenever a new
+  // photo is captured. By the time the user reaches ReviewSection, binary files are
+  // already on the server so the final submit payload is lean and near-instant.
+  // Uses a 800ms debounce so front+back captured from a single PDF upload together.
+  const progressiveUploadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const photoFingerprint = [
+    formData.dni?.front?.photo?.preview?.slice(0, 40) ?? '',
+    formData.dni?.back?.photo?.preview?.slice(0, 40) ?? '',
+    formData.ibi?.photo?.preview?.slice(0, 40) ?? '',
+    (formData.ibi?.pages?.length ?? 0),
+    (formData.electricityBill?.pages?.length ?? 0),
+    formData.contract?.photo?.preview?.slice(0, 40) ?? '',
+  ].join('|');
+  const lastPhotoFingerprint = useRef('');
+  useEffect(() => {
+    if (!projectCode) return;
+    if (photoFingerprint === lastPhotoFingerprint.current) return;
+    lastPhotoFingerprint.current = photoFingerprint;
+    if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
+    progressiveUploadTimer.current = setTimeout(() => {
+      preUploadAssets(projectCode, formData, projectToken ?? null).catch(() => {});
+    }, 800);
+    return () => {
+      if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoFingerprint, projectCode, projectToken]);
 
   const setDocumentProcessingState = useCallback((slotKey: DocumentSlotKey, nextState: DocumentProcessingState) => {
     setDocumentProcessing((prev) => ({ ...prev, [slotKey]: nextState }));
