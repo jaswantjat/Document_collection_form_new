@@ -107,9 +107,8 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function buildProjectUrl(code: string, token?: string | null, source?: 'customer' | 'assessor') {
+function buildProjectUrl(code: string, source?: 'customer' | 'assessor') {
   const params = new URLSearchParams({ code });
-  if (token) params.set('token', token);
   if (source === 'assessor') params.set('source', 'assessor');
   return `/?${params.toString()}`;
 }
@@ -1468,12 +1467,9 @@ function ProjectTableRow({
     setOpeningForm(true);
 
     try {
-      const detail = await loadProjectDetail(project.code);
-      if (!detail?.accessToken) {
-        throw new Error('PROJECT_TOKEN_MISSING');
-      }
+      await loadProjectDetail(project.code);
 
-      const formUrl = buildProjectUrl(project.code, detail.accessToken, 'assessor');
+      const formUrl = buildProjectUrl(project.code, 'assessor');
       if (popup) {
         popup.location.href = formUrl;
       } else {

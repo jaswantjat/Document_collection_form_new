@@ -141,8 +141,7 @@ function getInitialSection(
     }
   }
 
-  if (followUpDocumentFlow && !hasPropertyDocsDone(fd)) return 'property-docs';
-  if (followUpDocumentFlow) return hasEnergyDecision ? 'review' : 'energy-certificate';
+  if (followUpDocumentFlow) return 'review';
   if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
   if (location === 'other') return hasEnergyDecision ? 'review' : 'energy-certificate';
   if (location) return 'representation';

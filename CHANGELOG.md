@@ -1,6 +1,19 @@
-# CHANGELOG
+## 2026-04-05.12 — Session: Dashboard Link & Follow-up Routing Fix (T001)
 
-## 2026-04-05.11 — Session: IBI & Electricity Detection Hardening
+**Phase**: Developer
+
+**Fixes:**
+
+- **Dashboard.tsx**: Removed `token` parameter from `buildProjectUrl` and its usage. The dashboard-generated "Abrir formulario" link now produces `/?code=CODE&source=assessor` (no token, as the backend no longer requires it).
+- **App.tsx**: Updated `getInitialSection` to ensure all follow-up projects (those with representation data) land on the `review` section by default. This allows customers to see their progress summary and selectively upload missing documents rather than being forced into the property-docs sequence.
+- **Dashboard.tsx**: Removed redundant `detail.accessToken` check when opening the customer form, as tokens are no longer used for authentication in the customer flow.
+
+**Files changed:**
+- `app/src/pages/Dashboard.tsx`
+- `app/src/App.tsx`
+- `CHANGELOG.md`
+- `AGENTS.md`
+
 
 **Phase**: Developer
 

@@ -1,6 +1,8 @@
 # AGENTS.md
 > This file is the AI agent's persistent memory. Read fully every session. Update before ending.
-> Last updated: 2026-04-05.11
+> Last updated: 2026-04-05.12
+- Dashboard formulario link: removed token param (no longer needed by backend).
+- Follow-up routing: now lands on 'review' instead of 'property-docs' to show summary first.
 - IBI detection: added repeating-char check for RC (4+ chars) and "all-null" safety override to reject blanks AI missed.
 - Electricity prompt: explicitly reject gas/water/phone bills; added blank template detection; added screen-photo guidance.
 
