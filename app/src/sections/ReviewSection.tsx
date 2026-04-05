@@ -31,6 +31,19 @@ function hasRequiredSignatures(formData: FormData): boolean {
   return !!(rep?.ivaCertificateEsSignature && rep?.poderRepresentacioSignature);
 }
 
+type ChecklistStatus = 'pending' | 'attention' | 'done';
+
+interface ChecklistItem {
+  id: string;
+  description: string;
+  hint: string;
+  label: string;
+  icon: typeof Camera;
+  status: ChecklistStatus;
+  section: string;
+  actionLabel: string;
+}
+
 export function ReviewSection({
   project,
   formData,
@@ -49,64 +62,124 @@ export function ReviewSection({
   const submitInProgress = useRef(false);
   const autoSubmitFired = useRef(false);
   const autoSubmitProp = useRef(autoSubmit);
-  // Pre-render the energy certificate canvas on mount so submit() is instant.
-  // The user spends at least a second reading the review screen — we use that
-  // time to run the expensive canvas + JPEG encode in the background.
   const energyCertPreRender = useRef<Promise<RenderedDocumentAsset> | null>(null);
-  // Pre-upload binary assets as multipart/form-data so the final submit JSON is lean.
   const preUploadPromise = useRef<Promise<boolean> | null>(null);
   const preUploadDone = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
   const signaturesOk = hasRequiredSignatures(formData);
+  const locationVar = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
+  const needsRepresentation = !followUpMode && !!locationVar && locationVar !== 'other';
+  const repDocsCount = locationVar === 'cataluna' ? 3 : 2;
 
   const { dni, ibi, electricityBill } = formData;
   const ebPages = electricityBill.pages ?? [];
   const ebUploaded = ebPages.filter(p => !!p.photo).length;
   const dniDone = isIdentityDocumentComplete(dni);
+  const ibiBool = !!ibi.photo || (ibi.pages?.length ?? 0) > 0;
+  const electricityBool = ebUploaded > 0;
 
-  const allItems = [
-    {
-      id: 'dni',
-      label: 'DNI / NIE',
-      doneLabel: getIdentityDocumentDoneLabel(dni),
-      description: 'Documento de identidad del titular',
-      hint: 'DNI por ambas caras o NIE válido',
-      icon: Camera,
-      done: dniDone,
-      section: 'property-docs',
-    },
-    {
-      id: 'ibi',
-      label: 'IBI o escritura',
-      doneLabel: 'IBI o escritura',
-      description: 'Recibo del IBI o escritura de la propiedad',
-      hint: 'Puede ser una foto o un PDF',
-      icon: FileText,
-      done: !!ibi.photo || (ibi.pages?.length ?? 0) > 0,
-      section: 'property-docs',
-    },
-    {
-      id: 'electricity',
-      label: 'Factura de luz',
-      doneLabel: `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`,
-      description: 'Última factura de la luz',
-      hint: 'Foto o PDF — si tiene varias páginas, súbelas todas',
-      icon: Zap,
-      done: ebUploaded > 0,
-      section: 'property-docs',
-    },
-  ];
-  const pendingItems = allItems.filter(i => !i.done);
-  const doneItems = allItems.filter(i => i.done);
-  const allDone = pendingItems.length === 0;
-  const progress = doneItems.length;
-  const total = allItems.length;
-  // Guard: re-validate fields even if status is 'completed' — defence-in-depth
-  // to handle any edge case where a stale/invalid 'completed' is in memory.
   const rawEnergyStatus = formData.energyCertificate.status;
   const energyStatus =
     rawEnergyStatus === 'completed' && !isEnergyCertificateReadyToComplete(formData.energyCertificate)
       ? ('in-progress' as const)
       : rawEnergyStatus;
+
+  const dniDoneLabel = getIdentityDocumentDoneLabel(dni);
+
+  const docItems = [
+    {
+      id: 'dni',
+      description: 'Documento de identidad del titular',
+      hint: dniDone ? 'Toca para revisar o actualizar' : 'DNI por ambas caras o NIE válido',
+      label: dniDoneLabel ?? 'DNI / NIE',
+      icon: Camera,
+      status: (dniDone ? 'done' : 'pending') as ChecklistStatus,
+      section: 'property-docs',
+      actionLabel: 'Subir',
+    },
+    {
+      id: 'ibi',
+      description: 'Recibo del IBI o escritura de la propiedad',
+      hint: ibiBool ? 'Documento de propiedad subido' : 'Puede ser una foto o un PDF',
+      label: 'IBI o escritura',
+      icon: FileText,
+      status: (ibiBool ? 'done' : 'pending') as ChecklistStatus,
+      section: 'property-docs',
+      actionLabel: 'Subir',
+    },
+    {
+      id: 'electricity',
+      description: 'Última factura de la luz',
+      hint: electricityBool
+        ? `${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''} subida${ebUploaded !== 1 ? 's' : ''}`
+        : 'Foto o PDF — si tiene varias páginas, súbelas todas',
+      label: electricityBool
+        ? `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`
+        : 'Factura de luz',
+      icon: Zap,
+      status: (electricityBool ? 'done' : 'pending') as ChecklistStatus,
+      section: 'property-docs',
+      actionLabel: 'Subir',
+    },
+  ];
+
+  const repItem: ChecklistItem | null = needsRepresentation ? {
+    id: 'representation',
+    description: signaturesOk
+      ? `Representación — ${repDocsCount} documento${repDocsCount !== 1 ? 's' : ''} firmado${repDocsCount !== 1 ? 's' : ''}`
+      : formData.representation?.signatureDeferred
+        ? 'Representación — firma aplazada'
+        : 'Representación — firma pendiente',
+    hint: signaturesOk
+      ? 'Toca para revisar los documentos de autorización'
+      : formData.representation?.signatureDeferred
+        ? 'El cliente debe volver a este enlace para firmar'
+        : 'Sin estas firmas no se puede tramitar el expediente',
+    label: `Representación — ${repDocsCount} doc${repDocsCount !== 1 ? 's' : ''} firmado${repDocsCount !== 1 ? 's' : ''}`,
+    icon: FileText,
+    status: signaturesOk ? 'done' : formData.representation?.signatureDeferred ? 'attention' : 'pending',
+    section: 'representation',
+    actionLabel: 'Firmar',
+  } : null;
+
+  const energyItem: ChecklistItem = {
+    id: 'energy',
+    description: energyStatus === 'completed'
+      ? 'Certificado energético — confirmado'
+      : energyStatus === 'skipped'
+        ? 'Certificado energético — saltado por cliente'
+        : 'Certificado energético — pendiente',
+    hint: energyStatus === 'completed'
+      ? 'Toca para revisar o actualizar el certificado firmado'
+      : energyStatus === 'skipped'
+        ? 'Puedes completarlo más tarde desde este mismo enlace'
+        : 'Completa el formulario del certificado energético',
+    label: energyStatus === 'completed'
+      ? 'Certificado energético — confirmado'
+      : energyStatus === 'skipped'
+        ? 'Certificado energético — saltado'
+        : 'Certificado energético',
+    icon: FileText,
+    status: energyStatus === 'completed' ? 'done' : energyStatus === 'skipped' ? 'attention' : 'pending',
+    section: 'energy-certificate',
+    actionLabel: 'Completar',
+  };
+
+  const allChecklistItems: ChecklistItem[] = [
+    ...docItems,
+    ...(repItem ? [repItem] : []),
+    energyItem,
+  ];
+
+  const pendingItems = allChecklistItems.filter(i => i.status === 'pending');
+  const attentionItems = allChecklistItems.filter(i => i.status === 'attention');
+  const doneItems = allChecklistItems.filter(i => i.status === 'done');
+
+  const docsAllDone = dniDone && ibiBool && electricityBool;
+  const doneCount = doneItems.length;
+  const totalCount = allChecklistItems.length;
+  const progressPct = Math.round((doneCount / totalCount) * 100);
 
   const submit = async () => {
     if (submitInProgress.current) return;
@@ -114,13 +187,10 @@ export function ReviewSection({
     setSubmitting(true);
     setSubmitError('');
     try {
-      // Stamp metadata (generatedAt + templateVersion) without rendering any canvas.
       const renderedRepresentation = stampRenderedDocumentMetadata(formData);
       let renderedFormData = renderedRepresentation;
 
       if (renderedRepresentation.energyCertificate.status === 'completed') {
-        // Re-use the pre-rendered result that was kicked off on mount.
-        // Falls back to rendering on-demand if somehow the ref is null.
         const renderedDocument = await (
           energyCertPreRender.current ??
           createRenderedEnergyCertificateAsset({ project, formData: renderedRepresentation })
@@ -134,9 +204,6 @@ export function ReviewSection({
         };
       }
 
-      // If pre-upload has already completed, strip ALL binary from the submit payload.
-      // The server already has the files from the pre-upload — sending them again is waste.
-      // If pre-upload is still in progress, give it up to 3s; fall back to full payload on timeout.
       const preUploadSuccess = preUploadDone.current || await Promise.race([
         preUploadPromise.current ?? Promise.resolve(false),
         new Promise<boolean>(resolve => setTimeout(() => resolve(false), 3000)),
@@ -161,26 +228,17 @@ export function ReviewSection({
     if (!autoSubmitProp.current || autoSubmitFired.current) return;
     autoSubmitFired.current = true;
     submit();
-  // Runs once on mount — autoSubmitProp.current captures the initial value
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fire-and-forget: start rendering the energy cert canvas immediately on mount
-  // so the expensive toDataURL() is done before the user taps submit.
   useEffect(() => {
     if (formData.energyCertificate.status !== 'completed') return;
     energyCertPreRender.current = createRenderedEnergyCertificateAsset({ project, formData });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pre-upload all binary assets (photos + PDFs) as binary multipart files in the
-  // background while the user reads the review screen.  When pre-upload succeeds,
-  // the final submit JSON payload drops from ~2-5 MB to ~80 KB because the server
-  // already has the files.  If the pre-upload fails or times out we fall back to
-  // including the binary inline in the submit (the existing behavior).
   useEffect(() => {
     const getReadyFormData = () => {
-      // Chain on the EC pre-render so the energy cert image is included.
       if (energyCertPreRender.current) {
         return energyCertPreRender.current.then(renderedDoc => ({
           ...formData,
@@ -200,17 +258,24 @@ export function ReviewSection({
         return true;
       })
       .catch(() => false);
-  // Runs once on mount — captures initial formData and project values.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Strips ALL binary fields. Used after a successful pre-upload so the server
-  // already has the files and doesn't need them re-sent in the submit payload.
+  // On mount: scroll past the header so the checklist is the first thing visible.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!listRef.current) return;
+      const top = listRef.current.getBoundingClientRect().top + window.scrollY - 8;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }, 150);
+    return () => clearTimeout(id);
+  }, []);
+
   function stripAllBinaryData(fd: FormData): FormData {
     return JSON.parse(JSON.stringify(fd, (key: string, value: unknown) => {
-      if (key === 'preview') return undefined;          // UploadedPhoto JPEG base64
-      if (key === 'dataUrl') return undefined;          // StoredDocumentFile PDF base64
-      if (key === 'imageDataUrl') return undefined;     // RenderedDocumentAsset JPEG base64
+      if (key === 'preview') return undefined;
+      if (key === 'dataUrl') return undefined;
+      if (key === 'imageDataUrl') return undefined;
       if (value instanceof File) return undefined;
       return value;
     })) as FormData;
@@ -262,46 +327,43 @@ export function ReviewSection({
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Header */}
-      <div className="bg-white px-5 pt-6 pb-5 border-b border-gray-100">
+      {/* Compact header — scrolls away on mount so the checklist leads */}
+      <div className="bg-white px-5 pt-5 pb-4 border-b border-gray-100">
         <div className="max-w-sm mx-auto">
-          <img src="/eltex-logo.png" alt="Eltex" className="h-7 object-contain mb-4" />
-          <h1 className="text-xl font-bold text-gray-900">
+          <div className="flex items-center justify-between mb-3">
+            <img src="/eltex-logo.png" alt="Eltex" className="h-6 object-contain" />
+            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+              {doneCount} de {totalCount} completados
+            </span>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">
             {followUpMode
-              ? (allDone ? 'Confirma tu documentación' : 'Sube lo que falte y confirma')
-              : (allDone ? '¡Todo listo para enviar!' : 'Completa tu expediente')}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
+              ? (docsAllDone ? 'Confirma tu documentación' : 'Sube lo que falte y confirma')
+              : (docsAllDone ? '¡Todo listo para enviar!' : 'Completa tu expediente')}
+          </h2>
+          <p className="text-sm text-gray-400 mt-1">
             {followUpMode
-              ? (allDone
-                ? 'Las firmas ya están registradas. Solo revisa y confirma el envío.'
-                : `Añade los documentos que te falten y confirma cuando quieras.`)
-              : (allDone
-                ? 'Hemos recibido todos tus documentos. Revisa y envía cuando quieras.'
-                : `Faltan ${pendingItems.length} documento${pendingItems.length !== 1 ? 's' : ''} — toca cada uno para subirlo`)}
+              ? 'Revisa el estado de cada documento y confirma.'
+              : 'Revisa cada punto antes de enviar.'}
           </p>
-
-          {/* Progress bar */}
-          <div className="mt-4 space-y-1.5">
-            <div className="flex justify-between text-xs text-gray-400">
-              <span>{progress} de {total} documentos</span>
-              <span>{Math.round((progress / total) * 100)}%</span>
-            </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-eltex-blue rounded-full transition-all duration-500"
-                style={{ width: `${(progress / total) * 100}%` }}
-              />
-            </div>
+          <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-eltex-blue rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="max-w-sm mx-auto px-5 py-5 space-y-4">
+      {/* Checklist — this is where the scroll snaps to on mount */}
+      <div ref={listRef} className="max-w-sm mx-auto px-5 pt-4 pb-8 space-y-5">
 
-        {/* Pending items — big action cards */}
+        {/* ── Pending items: action cards ── */}
         {pendingItems.length > 0 && (
           <div className="space-y-3">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
+              Por completar · {pendingItems.length}
+            </p>
             {pendingItems.map(item => {
               const Icon = item.icon;
               return (
@@ -321,7 +383,7 @@ export function ReviewSection({
                       <p className="text-xs text-gray-400 mt-0.5">{item.hint}</p>
                     </div>
                     <div className="shrink-0 flex items-center gap-1 bg-eltex-blue text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
-                      Subir <ArrowRight className="w-3 h-3" />
+                      {item.actionLabel} <ArrowRight className="w-3 h-3" />
                     </div>
                   </div>
                 </button>
@@ -330,10 +392,13 @@ export function ReviewSection({
           </div>
         )}
 
-        {/* Completed items — compact */}
-        {doneItems.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            {doneItems.map((item, idx) => {
+        {/* ── Attention items: deferred / skipped ── */}
+        {attentionItems.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
+              En espera · {attentionItems.length}
+            </p>
+            {attentionItems.map(item => {
               const Icon = item.icon;
               return (
                 <button
@@ -341,108 +406,53 @@ export function ReviewSection({
                   type="button"
                   onClick={() => onEdit(item.section)}
                   disabled={hasBlockingDocumentProcessing}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${idx > 0 ? 'border-t border-gray-100' : ''}`}
+                  className="w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left hover:bg-amber-100 active:scale-[0.99] transition-all disabled:opacity-50"
                 >
-                  <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-600">{item.doneLabel}</p>
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-900">{item.description}</p>
+                      <p className="text-xs text-amber-700 mt-0.5">{item.hint}</p>
+                    </div>
+                    <Icon className="w-4 h-4 text-amber-400 shrink-0" />
                   </div>
-                  <Icon className="w-4 h-4 text-gray-300 shrink-0" />
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* Representation signature card — shown only for locations that require it */}
-        {!followUpMode && !!location && location !== 'other' && (
-          <button
-            type="button"
-            onClick={() => onEdit('representation')}
-            disabled={hasBlockingDocumentProcessing}
-            className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-              signaturesOk
-                ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
-                : 'border-eltex-blue bg-blue-50 hover:bg-blue-100'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {signaturesOk ? (
-                <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-              ) : (
-                <AlertTriangle className="w-5 h-5 text-eltex-blue shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${signaturesOk ? 'text-emerald-800' : 'text-eltex-blue'}`}>
-                  {signaturesOk
-                    ? `Representación — ${location === 'cataluna' ? '3' : '2'} documentos firmados`
-                    : 'Representación — firma pendiente'}
-                </p>
-                <p className={`text-xs mt-0.5 ${signaturesOk ? 'text-emerald-600' : 'text-blue-500'}`}>
-                  {signaturesOk
-                    ? 'Revisar los documentos de autorización firmados'
-                    : formData.representation?.signatureDeferred
-                      ? 'Firma aplazada — el cliente debe volver a este enlace para firmar'
-                      : 'Sin estas firmas no se puede tramitar el expediente'}
-                </p>
-              </div>
-              <FileText className={`w-4 h-4 shrink-0 ${signaturesOk ? 'text-emerald-500' : 'text-eltex-blue'}`} />
+        {/* ── Done items: compact green rows ── */}
+        {doneItems.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
+              Completado · {doneItems.length}
+            </p>
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-100">
+              {doneItems.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onEdit(item.section)}
+                    disabled={hasBlockingDocumentProcessing}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  >
+                    <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700">{item.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{item.hint}</p>
+                    </div>
+                    <Icon className="w-4 h-4 text-gray-300 shrink-0" />
+                  </button>
+                );
+              })}
             </div>
-          </button>
+          </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => onEdit('energy-certificate')}
-          className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-            energyStatus === 'completed'
-              ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
-              : energyStatus === 'skipped'
-                ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
-                : 'border-gray-200 bg-white hover:bg-gray-50'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {energyStatus === 'completed' ? (
-              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-            ) : energyStatus === 'skipped' ? (
-              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-            ) : (
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${
-                energyStatus === 'completed' ? 'text-emerald-800'
-                : energyStatus === 'skipped' ? 'text-amber-800'
-                : 'text-gray-700'
-              }`}>
-                {energyStatus === 'completed'
-                  ? 'Certificado energético — confirmado'
-                  : energyStatus === 'skipped'
-                    ? 'Certificado energético — saltado por cliente'
-                    : 'Certificado energético — pendiente'}
-              </p>
-              <p className={`text-xs mt-0.5 ${
-                energyStatus === 'completed' ? 'text-emerald-600'
-                : energyStatus === 'skipped' ? 'text-amber-700'
-                : 'text-gray-400'
-              }`}>
-                {energyStatus === 'completed'
-                  ? 'Revisar o actualizar el certificado energético firmado'
-                  : energyStatus === 'skipped'
-                    ? 'Puedes completarlo más tarde desde este mismo enlace'
-                    : 'Completa el certificado energético de la vivienda'}
-              </p>
-            </div>
-            <FileText className={`w-4 h-4 shrink-0 ${
-              energyStatus === 'completed' ? 'text-emerald-500'
-              : energyStatus === 'skipped' ? 'text-amber-500'
-              : 'text-gray-300'
-            }`} />
-          </div>
-        </button>
-
-        {/* Processing */}
+        {/* ── Processing ── */}
         {hasBlockingDocumentProcessing && (
           <div className="flex items-center justify-center gap-3 py-4 bg-blue-50 rounded-2xl border border-blue-100">
             <Loader2 className="w-5 h-5 text-eltex-blue animate-spin" />
@@ -450,7 +460,7 @@ export function ReviewSection({
           </div>
         )}
 
-        {/* Error */}
+        {/* ── Error ── */}
         {submitError && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl text-sm text-red-600">
@@ -466,9 +476,9 @@ export function ReviewSection({
           </div>
         )}
 
-        {/* Bottom nav */}
+        {/* ── Submit / nav ── */}
         {!submitError && (
-          <div className="pt-2 space-y-3">
+          <div className="pt-1 space-y-3">
             {followUpMode ? (
               <button
                 type="button"
@@ -476,9 +486,9 @@ export function ReviewSection({
                 disabled={hasBlockingDocumentProcessing}
                 className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition-colors disabled:opacity-40 shadow-sm"
               >
-                <Send className="w-5 h-5" /> {allDone ? 'Confirmar documentación' : 'Confirmar por ahora'}
+                <Send className="w-5 h-5" /> {docsAllDone ? 'Confirmar documentación' : 'Confirmar por ahora'}
               </button>
-            ) : allDone ? (
+            ) : docsAllDone ? (
               <button
                 type="button"
                 onClick={submit}
