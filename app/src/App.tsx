@@ -451,7 +451,7 @@ function FormApp() {
     const normalizedProject = normalizeLoadedProject(foundProject);
     setProject(normalizedProject);
     navigate(buildProjectUrl(foundProject.code), { replace: true });
-    goTo('property-docs');
+    goTo(getInitialSection(normalizedProject, foundProject.code));
   };
 
   const renderSection = () => {
@@ -490,7 +490,7 @@ function FormApp() {
             onDocumentProcessingChange={setDocumentProcessingState}
             onContractChange={setContract}
             scrollToDoc={propertyDocsTarget}
-            onBack={source === 'assessor' ? () => goTo('phone') : undefined}
+            onBack={followUpDocumentFlow ? () => goTo('review') : undefined}
             onContinue={() => {
               if (!validatePropertyDocs()) return;
               if (followUpDocumentFlow) {
@@ -539,7 +539,7 @@ function FormApp() {
             onChange={setEnergyCertificate}
             onBack={() => {
               if (followUpDocumentFlow) {
-                goTo('property-docs');
+                goTo('review');
                 return;
               }
               const energyLoc = formData.location ?? formData.representation?.location ?? null;
@@ -565,7 +565,7 @@ function FormApp() {
               goTo(sectionName as Section);
             }}
             onSuccess={() => goTo('success')}
-            onBack={() => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
+            onBack={followUpDocumentFlow ? undefined : () => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
             autoSubmit={autoSubmitReview}
           />
         );
