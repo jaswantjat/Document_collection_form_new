@@ -64,6 +64,17 @@ function locationLabel(location: string | null | undefined) {
   return '—';
 }
 
+function languageLabel(lang: string | null | undefined) {
+  if (!lang) return '—';
+  try {
+    const base = lang.split('-')[0];
+    const display = new Intl.DisplayNames(['es'], { type: 'language' }).of(base);
+    return display ? `${display} (${lang})` : lang;
+  } catch {
+    return lang;
+  }
+}
+
 function extensionFromMimeType(mimeType: string | null | undefined, dataUrl?: string | null) {
   if (mimeType === 'application/pdf') return 'pdf';
   if (mimeType === 'image/png') return 'png';
@@ -1369,6 +1380,14 @@ function ProjectDetailModal({
                 <InfoCard icon={CheckCircle} label="Envíos" value={String(project.submissionCount || 0)} />
                 <InfoCard icon={Phone} label="Teléfono" value={project.phone || '—'} />
               </div>
+
+              {(summary.firstName || summary.lastName || summary.customerLanguage) && (
+                <div className="grid md:grid-cols-3 gap-3">
+                  <InfoCard icon={User} label="Nombre" value={summary.firstName || '—'} />
+                  <InfoCard icon={Users} label="Apellidos" value={summary.lastName || '—'} />
+                  <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
+                </div>
+              )}
 
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />

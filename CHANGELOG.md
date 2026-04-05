@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## 2026-04-05.3 — Session: Capture firstName, lastName, and browserLanguage
+
+**Phase**: Developer
+
+**Feature:**
+Added three new data fields that are captured automatically at zero extra API cost:
+
+1. **`firstName` / `lastName`** — extracted by the existing DNI/NIE/passport AI prompt. Both the single-doc endpoint (dniFront) and the multi-doc identity endpoints now include `firstName` and `lastName` in their JSON schema. The AI reads the printed name and splits it into nombre (firstName) and apellidos (lastName).
+
+2. **`browserLanguage`** — captured from `navigator.language` in the frontend form at startup and sent to the backend on every save/submit. Stored as `project.customerLanguage` on the project record.
+
+**Backend changes (`backend/server.js`):**
+- Extended all three DNI/NIE/passport extraction prompts to include `firstName` and `lastName` in the returned JSON schema.
+- `getProjectSnapshot`: adds `firstName` and `lastName` from `dniFront` extraction to the snapshot object.
+- `buildDashboardSummary`: exposes `firstName`, `lastName`, and `customerLanguage` in the summary returned to the dashboard.
+- Save + submit handlers: persist `formData.browserLanguage` as `project.customerLanguage`.
+- `serializeDashboardProject`: includes `customerLanguage` in the serialized project.
+
+**Frontend changes:**
+- `types/index.ts`: Added `browserLanguage?: string` to `FormData`; `customerLanguage?: string` to `ProjectData`.
+- `lib/dashboardProject.ts`: Added `firstName`, `lastName`, `customerLanguage` to `DashboardProjectSummary` interface and `getSnapshot` / `getDashboardProjectSummary` implementations.
+- `hooks/useFormState.ts`: Seeds `initialFormData.browserLanguage` with `navigator.language`.
+- `pages/Dashboard.tsx`: Added `languageLabel()` helper (uses `Intl.DisplayNames` to render e.g. "español (es-ES)"). Shows a new 3-column info row (Nombre / Apellidos / Idioma) in the project detail panel when any of the three values is present.
+
+**Verified:** TypeScript: 0 errors. Backend and frontend workflows running cleanly.
+
+**Files changed:**
+- `backend/server.js`
+- `app/src/types/index.ts`
+- `app/src/lib/dashboardProject.ts`
+- `app/src/hooks/useFormState.ts`
+- `app/src/pages/Dashboard.tsx`
+
+---
+
 ## 2026-04-05.2 — Session: Fix representation card hidden in followUpMode
 
 **Phase**: Developer

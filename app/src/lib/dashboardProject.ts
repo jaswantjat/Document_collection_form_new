@@ -57,6 +57,9 @@ export interface DashboardProjectSummary {
   lastUpdated: string | null;
   address: string | null;
   customerDisplayName: string;
+  firstName: string | null;
+  lastName: string | null;
+  customerLanguage: string | null;
   documents: DashboardDocumentItem[];
   electricityPages: DashboardDocumentItem[];
   signedDocuments: DashboardSignedPdfItem[];
@@ -156,6 +159,8 @@ function getSnapshot(project: any) {
       || ibi.codigoPostal
       || representation.postalCode
       || '',
+    firstName: dniFront.firstName || null,
+    lastName: dniFront.lastName || null,
   };
 }
 
@@ -527,6 +532,9 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
       ?? null,
     address: buildDisplayAddress(project),
     customerDisplayName: snapshot.fullName || project?.customerName || '—',
+    firstName: project?.summary?.firstName ?? snapshot.firstName ?? null,
+    lastName: project?.summary?.lastName ?? snapshot.lastName ?? null,
+    customerLanguage: project?.summary?.customerLanguage ?? project?.customerLanguage ?? null,
     documents,
     electricityPages,
     signedDocuments,

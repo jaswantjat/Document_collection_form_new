@@ -519,6 +519,8 @@ function getProjectSnapshot(formData) {
     representation,
     // Contract is first priority; fall back to other document sources
     fullName: contract.fullName || dniFront.fullName || eb.titular || ibi.titular || '',
+    firstName: dniFront.firstName || null,
+    lastName: dniFront.lastName || null,
     dniNumber: contract.nif || dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
     address: contract.address || eb.direccionSuministro || dniBack.address || ibi.direccion || '',
     municipality: contract.municipality || eb.municipio || dniBack.municipality || ibi.municipio || '',
@@ -704,6 +706,9 @@ function buildDashboardSummary(project) {
     address: displayAddress,
     displayAddress,
     customerDisplayName: snapshot.fullName || project?.customerName || '—',
+    firstName: snapshot.firstName || null,
+    lastName: snapshot.lastName || null,
+    customerLanguage: project?.customerLanguage || project?.formData?.browserLanguage || null,
     postalCode: snapshot.postalCode || null,
     municipality: snapshot.municipality || null,
     province: snapshot.province || null,
@@ -763,6 +768,7 @@ function serializeDashboardProject(project) {
   return {
     code: project.code,
     customerName: project.customerName,
+    customerLanguage: project.customerLanguage || null,
     phone: project.phone,
     email: project.email,
     productType: project.productType,
@@ -867,6 +873,7 @@ app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
   const contractName = formData?.contract?.extraction?.extractedData?.fullName;
   const resolvedName = contractName || dniName;
   if (resolvedName) project.customerName = resolvedName;
+  if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);
@@ -898,6 +905,7 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   const contractName = formData?.contract?.extraction?.extractedData?.fullName;
   const resolvedName = contractName || dniName;
   if (resolvedName) project.customerName = resolvedName;
+  if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);
@@ -1494,16 +1502,18 @@ Your PRIMARY goal is to find and extract an identity number from this document. 
 - Passport (any country — extract the passport number into dniNumber field)
 
 Extract:
-1. Full name (apellidos + nombre exactly as printed)
-2. Identity number (DNI/NIE number OR passport number) — put it in the dniNumber field
-3. Date of birth — YYYY-MM-DD
-4. Expiry date — YYYY-MM-DD
-5. Sex (M or F)
+1. Full name (apellidos + nombre exactly as printed) — in fullName field
+2. First name only (nombre) — in firstName field
+3. Last name(s) only (apellidos) — in lastName field
+4. Identity number (DNI/NIE number OR passport number) — put it in the dniNumber field
+5. Date of birth — YYYY-MM-DD
+6. Expiry date — YYYY-MM-DD
+7. Sex (M or F)
 
 Set isCorrectDocument: false ONLY if the image does NOT contain any recognisable identity number. Do not reject based on document type alone.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
-{"isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"string or null","expiryDate":"string or null","sex":"M or F or null","nationality":"string or null"},"confidence":0.95,"notes":"string"}`,
+{"isCorrectDocument":true,"documentTypeDetected":"DNI front","isReadable":true,"extractedData":{"fullName":"string or null","firstName":"string or null","lastName":"string or null","dniNumber":"string or null","dateOfBirth":"string or null","expiryDate":"string or null","sex":"M or F or null","nationality":"string or null"},"confidence":0.95,"notes":"string"}`,
 
   dniBack: `You are a document data extractor for Spanish government documents.
 
@@ -1594,7 +1604,7 @@ Important rules:
 - Set isCorrectDocument: false ONLY if the image does NOT contain any recognisable identity number (DNI/NIE/passport number). Do not reject based on document type alone.
 
 Respond ONLY with this exact JSON (no markdown, no extra text):
-{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
+{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","firstName":"string or null","lastName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}
 
 Respond ONLY with this exact JSON (no markdown, no extra text).`
 ,
@@ -1652,7 +1662,7 @@ Important rules:
 - A passport is always side: "front" and identityDocumentKind: "passport".
 
 Respond ONLY with this exact JSON shape (no markdown, no extra text):
-{"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
+{"results":[{"side":"front or back","identityDocumentKind":"dni-card or nie-card or nie-certificate or passport","isCorrectDocument":true,"documentTypeDetected":"string","isReadable":true,"extractedData":{"fullName":"string or null","firstName":"string or null","lastName":"string or null","dniNumber":"string or null","dateOfBirth":"YYYY-MM-DD or null","expiryDate":"YYYY-MM-DD or null","sex":"M or F or null","nationality":"string or null","address":"string or null","municipality":"string or null","province":"string or null","placeOfBirth":"string or null"},"confidence":0.95,"notes":"string"}]}
 
 Return exactly one result object per image, preserving the same order as the input images.`
 };

@@ -347,6 +347,15 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - Updated docs: `docs/PRODUCTION-READINESS.md`, `docs/TEST-TRACKER.md`
 - Grand total: **56/56 tests passing** (33 E2E + 23 unit)
 
+### 2026-04-05 — Session: Capture firstName, lastName, browserLanguage
+- Extended all three DNI/NIE/passport AI prompts to extract `firstName` (nombre) and `lastName` (apellidos) separately — no extra API call
+- `browserLanguage` captured from `navigator.language` in `initialFormData` and persisted as `project.customerLanguage` on save/submit
+- `getProjectSnapshot` and `buildDashboardSummary` expose the new fields; `serializeDashboardProject` includes `customerLanguage`
+- `DashboardProjectSummary` interface + `getSnapshot` + `getDashboardProjectSummary` all updated in `dashboardProject.ts`
+- Dashboard detail panel: new conditional 3-column info row (Nombre / Apellidos / Idioma del navegador) with `languageLabel()` helper (Intl.DisplayNames)
+- TypeScript: 0 errors; both workflows running cleanly
+- Files: `backend/server.js`, `app/src/types/index.ts`, `app/src/lib/dashboardProject.ts`, `app/src/hooks/useFormState.ts`, `app/src/pages/Dashboard.tsx`
+
 ### 2026-04-05 — Session: followUpMode representation card fix
 - Root cause: `!followUpMode &&` guard in `needsRepresentation` suppressed the representation card for fully-signed customers returning to review
 - Fix: removed the guard; card now shows for all relevant locations; `signaturesOk=true` puts it in COMPLETADO

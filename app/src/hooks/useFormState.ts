@@ -105,6 +105,7 @@ export const initialFormData: FormData = {
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
   electricityBill: { pages: [], originalPdfs: [] },
   contract: emptyContractData(),
+  browserLanguage: typeof navigator !== 'undefined' ? navigator.language : undefined,
   energyCertificate: {
     status: 'not-started',
     housing: {

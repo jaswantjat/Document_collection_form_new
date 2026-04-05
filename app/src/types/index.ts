@@ -7,6 +7,7 @@ export interface ProjectData {
   code: string;
   accessToken?: string;
   customerName: string;
+  customerLanguage?: string;
   phone: string;
   email: string;
   productType: ProductType;
@@ -213,6 +214,7 @@ export interface FormData {
   representation: RepresentationData;
   energyCertificate: EnergyCertificateData;
   signatures: SignaturesData;
+  browserLanguage?: string;
 }
 
 export interface FormItem {
