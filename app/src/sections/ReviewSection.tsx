@@ -370,7 +370,9 @@ export function ReviewSection({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onEdit(item.section)}
+                  onClick={() => onEdit(
+                    item.section === 'property-docs' ? `property-docs:${item.id}` : item.section
+                  )}
                   disabled={hasBlockingDocumentProcessing}
                   className="w-full bg-white rounded-2xl border-2 border-eltex-blue p-4 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all disabled:opacity-50"
                 >
@@ -404,7 +406,9 @@ export function ReviewSection({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onEdit(item.section)}
+                  onClick={() => onEdit(
+                    item.section === 'property-docs' ? `property-docs:${item.id}` : item.section
+                  )}
                   disabled={hasBlockingDocumentProcessing}
                   className="w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left hover:bg-amber-100 active:scale-[0.99] transition-all disabled:opacity-50"
                 >
@@ -435,7 +439,9 @@ export function ReviewSection({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => onEdit(item.section)}
+                    onClick={() => onEdit(
+                    item.section === 'property-docs' ? `property-docs:${item.id}` : item.section
+                  )}
                     disabled={hasBlockingDocumentProcessing}
                     className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
                   >

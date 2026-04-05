@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type {
@@ -38,6 +38,7 @@ interface Props {
   onRemoveElectricityPage: (index: number) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
   onContractChange: (contract: ContractData) => void;
+  scrollToDoc?: string;
   onBack?: () => void;
   onContinue: () => void;
 }
@@ -1376,11 +1377,17 @@ export function PropertyDocsSection({
   onRemoveElectricityPage,
   onDocumentProcessingChange,
   onContractChange,
+  scrollToDoc,
   onBack,
   onContinue,
 }: Props) {
   const [dniIsBusy, setDniIsBusy] = useState(false);
   const [electricityIsBusy, setElectricityIsBusy] = useState(false);
+
+  // Refs for each doc card so we can scroll to the right one when arriving from review
+  const dniRef = useRef<HTMLDivElement>(null);
+  const ibiRef = useRef<HTMLDivElement>(null);
+  const electricityRef = useRef<HTMLDivElement>(null);
 
   // Frictionless resume: detect which docs were already done on first mount
   const [resumeSnapshot] = useState(() => ({
@@ -1391,8 +1398,33 @@ export function PropertyDocsSection({
   const isResuming = resumeSnapshot.dni || resumeSnapshot.ibi || resumeSnapshot.electricity;
 
   // Track which compact rows have been expanded by the user
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    // If arriving from review with a specific doc target, pre-expand it so the
+    // card is already rendered at full height before we scroll to it.
+    if (!scrollToDoc) return {};
+    return { [scrollToDoc]: true };
+  });
   const expand = (key: string) => setExpanded(prev => ({ ...prev, [key]: true }));
+
+  // On mount: scroll to the specific doc card requested by the review screen.
+  useEffect(() => {
+    if (!scrollToDoc) return;
+    const refMap: Record<string, RefObject<HTMLDivElement>> = {
+      dni: dniRef,
+      ibi: ibiRef,
+      electricity: electricityRef,
+    };
+    const target = refMap[scrollToDoc];
+    if (!target) return;
+    const id = setTimeout(() => {
+      if (!target.current) return;
+      const top = target.current.getBoundingClientRect().top + window.scrollY - 16;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }, 250);
+    return () => clearTimeout(id);
+  // Intentionally only on mount — scrollToDoc won't change while section is active
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy;
 
@@ -1450,64 +1482,70 @@ export function PropertyDocsSection({
         />
 
         {/* DNI card or compact row */}
-        {showDniCompact ? (
-          <CompactRow
-            icon={<CreditCard className="w-3.5 h-3.5" />}
-            title="DNI / NIE"
-            subtitle={dniSubtitle}
-            onExpand={() => expand('dni')}
-          />
-        ) : (
-          <DNICard
-            front={dni.front}
-            back={dni.back}
-            originalPdfs={dni.originalPdfs}
-            onFrontPhotoChange={onDNIFrontPhotoChange}
-            onFrontExtractionChange={onDNIFrontExtractionChange}
-            onBackPhotoChange={onDNIBackPhotoChange}
-            onBackExtractionChange={onDNIBackExtractionChange}
-            onOriginalPdfsMerge={onDNIOriginalPdfsMerge}
-            onBusyChange={setDniIsBusy}
-          />
-        )}
+        <div ref={dniRef}>
+          {showDniCompact ? (
+            <CompactRow
+              icon={<CreditCard className="w-3.5 h-3.5" />}
+              title="DNI / NIE"
+              subtitle={dniSubtitle}
+              onExpand={() => expand('dni')}
+            />
+          ) : (
+            <DNICard
+              front={dni.front}
+              back={dni.back}
+              originalPdfs={dni.originalPdfs}
+              onFrontPhotoChange={onDNIFrontPhotoChange}
+              onFrontExtractionChange={onDNIFrontExtractionChange}
+              onBackPhotoChange={onDNIBackPhotoChange}
+              onBackExtractionChange={onDNIBackExtractionChange}
+              onOriginalPdfsMerge={onDNIOriginalPdfsMerge}
+              onBusyChange={setDniIsBusy}
+            />
+          )}
+        </div>
 
         {/* IBI card or compact row */}
-        {showIbiCompact ? (
-          <CompactRow
-            icon={<Camera className="w-3.5 h-3.5" />}
-            title="IBI o escritura"
-            subtitle={ibiSubtitle}
-            onExpand={() => expand('ibi')}
-          />
-        ) : (
-          <DocCard
-            title="IBI o escritura"
-            hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
-            data={ibi}
-            slotKey="ibi"
-            processing={documentProcessing.ibi}
-            onDocumentChange={onIBIDocumentChange}
-            onProcessingChange={onDocumentProcessingChange}
-          />
-        )}
+        <div ref={ibiRef}>
+          {showIbiCompact ? (
+            <CompactRow
+              icon={<Camera className="w-3.5 h-3.5" />}
+              title="IBI o escritura"
+              subtitle={ibiSubtitle}
+              onExpand={() => expand('ibi')}
+            />
+          ) : (
+            <DocCard
+              title="IBI o escritura"
+              hint="Recibo del Impuesto de Bienes Inmuebles. La Referencia Catastral debe ser legible."
+              data={ibi}
+              slotKey="ibi"
+              processing={documentProcessing.ibi}
+              onDocumentChange={onIBIDocumentChange}
+              onProcessingChange={onDocumentProcessingChange}
+            />
+          )}
+        </div>
 
         {/* Electricity card or compact row */}
-        {showElecCompact ? (
-          <CompactRow
-            icon={<Zap className="w-3.5 h-3.5" />}
-            title="Factura de luz"
-            subtitle={elecSubtitle}
-            onExpand={() => expand('electricity')}
-          />
-        ) : (
-          <ElectricityCard
-            pages={electricityBill.pages}
-            originalPdfs={electricityBill.originalPdfs}
-            onAddPages={onAddElectricityPages}
-            onRemovePage={onRemoveElectricityPage}
-            onBusyChange={setElectricityIsBusy}
-          />
-        )}
+        <div ref={electricityRef}>
+          {showElecCompact ? (
+            <CompactRow
+              icon={<Zap className="w-3.5 h-3.5" />}
+              title="Factura de luz"
+              subtitle={elecSubtitle}
+              onExpand={() => expand('electricity')}
+            />
+          ) : (
+            <ElectricityCard
+              pages={electricityBill.pages}
+              originalPdfs={electricityBill.originalPdfs}
+              onAddPages={onAddElectricityPages}
+              onRemovePage={onRemoveElectricityPage}
+              onBusyChange={setElectricityIsBusy}
+            />
+          )}
+        </div>
 
         {/* Cross-document validation warnings */}
         {validationWarnings.map((warning, i) => (

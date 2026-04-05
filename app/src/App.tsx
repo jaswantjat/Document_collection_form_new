@@ -357,6 +357,10 @@ function FormApp() {
     navigate(buildProjectUrl(urlCode, projectToken, source), { replace: true });
   }, [navigate, projectToken, source, urlCode, urlToken]);
 
+  // When navigating from the review checklist into property-docs, remember which
+  // specific doc the user tapped so PropertyDocsSection can scroll to it.
+  const [propertyDocsTarget, setPropertyDocsTarget] = useState<string | undefined>();
+
   // Current section — smart routing based on what's already completed
   const [currentSection, setCurrentSection] = useState<Section | 'phone'>(
     urlCode ? 'property-docs' : 'phone'
@@ -468,6 +472,7 @@ function FormApp() {
             onRemoveElectricityPage={removeElectricityPage}
             onDocumentProcessingChange={setDocumentProcessingState}
             onContractChange={setContract}
+            scrollToDoc={propertyDocsTarget}
             onBack={source === 'assessor' ? () => goTo('phone') : undefined}
             onContinue={() => {
               if (!validatePropertyDocs()) return;
@@ -536,7 +541,12 @@ function FormApp() {
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}
-            onEdit={(s) => { setAutoSubmitReview(false); goTo(s as Section); }}
+            onEdit={(s) => {
+              setAutoSubmitReview(false);
+              const [sectionName, docTarget] = (s as string).split(':');
+              setPropertyDocsTarget(docTarget || undefined);
+              goTo(sectionName as Section);
+            }}
             onSuccess={() => goTo('success')}
             projectToken={activeProjectToken}
             onBack={() => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
