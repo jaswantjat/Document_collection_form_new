@@ -69,7 +69,7 @@ export function ReviewSection({
 
   const signaturesOk = hasRequiredSignatures(formData);
   const locationVar = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
-  const needsRepresentation = !followUpMode && !!locationVar && locationVar !== 'other';
+  const needsRepresentation = !!locationVar && locationVar !== 'other';
   const repDocsCount = locationVar === 'cataluna' ? 3 : 2;
 
   const { dni, ibi, electricityBill } = formData;
