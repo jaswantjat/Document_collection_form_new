@@ -235,23 +235,6 @@ function templateSrcForKind(kind: SignedDocumentKind): string | null {
 }
 
 /**
- * 25%-scale WebP thumbnail — used for the live carousel preview.
- *
- * These are 11–29 KB each (vs 148–943 KB for the originals), so they arrive
- * in <0.5 s on a bad 3G connection where the originals would take 8+ seconds.
- * The canvas dimensions are identical to rendering the full image at scale=0.25,
- * so all text/signature overlays align perfectly.
- */
-function thumbnailSrcForKind(kind: SignedDocumentKind): string | null {
-  if (kind === 'cataluna-iva') return '/thumbs/certificat-iva-10-cat.webp';
-  if (kind === 'cataluna-generalitat') return '/thumbs/generalitat-declaration.webp';
-  if (kind === 'cataluna-representacio') return '/thumbs/autoritzacio-representacio.webp';
-  if (kind === 'spain-iva') return '/thumbs/certificat-iva-10-es.webp';
-  if (kind === 'spain-poder') return '/thumbs/poder-representacio.webp';
-  return null;
-}
-
-/**
  * 50%-scale WebP — used for the fullscreen read modal.
  *
  * These are 39–84 KB each (vs 148–943 KB for the originals).

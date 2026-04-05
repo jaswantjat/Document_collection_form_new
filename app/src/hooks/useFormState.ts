@@ -372,7 +372,6 @@ export const useFormState = (
     formData.ibi?.photo?.preview?.slice(0, 40) ?? '',
     (formData.ibi?.pages?.length ?? 0),
     (formData.electricityBill?.pages?.length ?? 0),
-    formData.contract?.photo?.preview?.slice(0, 40) ?? '',
   ].join('|');
   const lastPhotoFingerprint = useRef('');
   useEffect(() => {

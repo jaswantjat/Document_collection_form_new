@@ -127,7 +127,7 @@ export function ReviewSection({
   const repItem: ChecklistItem | null = needsRepresentation ? {
     id: 'representation',
     description: signaturesOk
-      ? `Representación — ${repDocsCount} documento${repDocsCount !== 1 ? 's' : ''} firmado${repDocsCount !== 1 ? 's' : ''}`
+      ? `Representación — ${repDocsCount} documento${(repDocsCount as number) !== 1 ? 's' : ''} firmado${(repDocsCount as number) !== 1 ? 's' : ''}`
       : formData.representation?.signatureDeferred
         ? 'Representación — firma aplazada'
         : 'Representación — firma pendiente',
@@ -136,7 +136,7 @@ export function ReviewSection({
       : formData.representation?.signatureDeferred
         ? 'El cliente debe volver a este enlace para firmar'
         : 'Sin estas firmas no se puede tramitar el expediente',
-    label: `Representación — ${repDocsCount} doc${repDocsCount !== 1 ? 's' : ''} firmado${repDocsCount !== 1 ? 's' : ''}`,
+    label: `Representación — ${repDocsCount} doc${(repDocsCount as number) !== 1 ? 's' : ''} firmado${(repDocsCount as number) !== 1 ? 's' : ''}`,
     icon: FileText,
     status: signaturesOk ? 'done' : formData.representation?.signatureDeferred ? 'attention' : 'pending',
     section: 'representation',

@@ -272,12 +272,14 @@ function FormApp() {
                       photo: hasPreview(backupFd.dni?.front?.photo)
                         ? backupFd.dni.front.photo
                         : serverFd?.dni?.front?.photo ?? null,
+                      extraction: serverFd?.dni?.front?.extraction ?? null,
                     },
                     back: {
                       ...serverFd?.dni?.back,
                       photo: hasPreview(backupFd.dni?.back?.photo)
                         ? backupFd.dni.back.photo
                         : serverFd?.dni?.back?.photo ?? null,
+                      extraction: serverFd?.dni?.back?.extraction ?? null,
                     },
                     originalPdfs: backupFd.dni?.originalPdfs?.some(hasDataUrl)
                       ? backupFd.dni.originalPdfs
@@ -294,6 +296,7 @@ function FormApp() {
                     originalPdfs: backupFd.ibi?.originalPdfs?.some(hasDataUrl)
                       ? backupFd.ibi.originalPdfs
                       : serverFd?.ibi?.originalPdfs ?? [],
+                    extraction: serverFd?.ibi?.extraction ?? null,
                   },
                   electricityBill: {
                     ...serverFd?.electricityBill,
@@ -309,16 +312,18 @@ function FormApp() {
                     originalPdfs: backupFd.contract?.originalPdfs?.some(hasDataUrl)
                       ? backupFd.contract.originalPdfs
                       : serverFd?.contract?.originalPdfs ?? [],
+                    extraction: serverFd?.contract?.extraction ?? null,
                   },
                   energyCertificate: {
                     ...serverFd?.energyCertificate,
+                    status: serverFd?.energyCertificate?.status ?? 'not-started',
                     renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
                       ? backupFd.energyCertificate.renderedDocument
                       : serverFd?.energyCertificate?.renderedDocument ?? null,
                     currentStepIndex: backupFd.energyCertificate?.currentStepIndex
                       ?? serverFd?.energyCertificate?.currentStepIndex,
-                  },
-                }),
+                  } as import('@/types').EnergyCertificateData,
+                } as import('@/types').FormData),
               };
             }
           }
