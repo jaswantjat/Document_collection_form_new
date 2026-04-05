@@ -49,8 +49,7 @@ function appendStoredPdfs(fd: globalThis.FormData, fieldPrefix: string, pdfs: St
 
 export async function preUploadAssets(
   code: string,
-  formData: AppFormData,
-  token?: string | null
+  formData: AppFormData
 ): Promise<{ success: boolean; savedKeys?: string[] }> {
   const fd = new globalThis.FormData();
 
@@ -83,26 +82,23 @@ export async function preUploadAssets(
 
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/upload-assets`, {
     method: 'POST',
-    headers: token ? { 'x-project-token': token } : {},
+    headers: {},
     body: fd,
     signal: AbortSignal.timeout(30000),
   });
   return res.json();
 }
 
-function projectHeaders(token?: string | null): HeadersInit {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['x-project-token'] = token;
-  return headers;
+function projectHeaders(): HeadersInit {
+  return { 'Content-Type': 'application/json' };
 }
 
 export async function fetchProject(
   code: string,
-  token?: string | null,
   options?: { signal?: AbortSignal }
 ): Promise<{ success: boolean; project?: ProjectData; error?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}`, {
-    headers: token ? { 'x-project-token': token } : {},
+    headers: {},
     signal: options?.signal,
   });
   return res.json();
@@ -166,12 +162,11 @@ export async function fetchDashboardProject(
 
 export async function saveProgress(
   code: string,
-  formData: any,
-  token?: string | null
+  formData: any
 ): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/save`, {
     method: 'POST',
-    headers: projectHeaders(token),
+    headers: projectHeaders(),
     body: JSON.stringify({ formData }),
     signal: AbortSignal.timeout(10000),
   });
@@ -181,12 +176,11 @@ export async function saveProgress(
 export async function submitForm(
   code: string,
   formData: any,
-  source: string,
-  token?: string | null
+  source: string
 ): Promise<{ success: boolean; submissionId?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/submit`, {
     method: 'POST',
-    headers: projectHeaders(token),
+    headers: projectHeaders(),
     body: JSON.stringify({ formData, source }),
     signal: AbortSignal.timeout(60000),
   });

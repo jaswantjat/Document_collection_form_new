@@ -347,6 +347,24 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - Verified by fresh sub-agent: both PASS.
   - File: `backend/server.js`
 
+### ✅ Completed (continued)
+
+- **[2026-04-05] Remove access token from form URLs (T001)**
+  - Backend: renamed `requireProjectToken` → `requireProject`; removed all token validation — middleware now only checks project exists by code. Removed `assignMissingTokens`.
+  - Frontend api.ts: `projectHeaders()` returns only Content-Type; all four API functions (`fetchProject`, `saveProgress`, `submitForm`, `preUploadAssets`) no longer send `x-project-token`.
+  - Frontend App.tsx: removed `getStoredToken`, `storeToken`, `projectToken` state, URL-rewrite effect, token params from `buildProjectUrl`; `handlePhoneConfirmed` navigates to `/?code=CODE` only.
+  - Frontend hooks: `useFormState`, `useBeforeUnloadSave`, `ReviewSection` — all `projectToken` params removed.
+  - Backend startup logs: updated dev link format from `/?code=X&token=Y` → `/?code=X`.
+  - QA verified: all checks PASS, TypeScript 0 errors.
+  - Files: `backend/server.js`, `app/src/App.tsx`, `app/src/services/api.ts`, `app/src/hooks/useFormState.ts`, `app/src/hooks/useBeforeUnloadSave.ts`, `app/src/sections/ReviewSection.tsx`
+
+- **[2026-04-05] Fix white screen on bad network — lazy chunk load failures (T002)**
+  - Root cause: React.lazy() import Promises reject on bad network. Without an ErrorBoundary, the rejected Promise propagates as an uncaught render error, unmounting the entire React tree → white screen.
+  - Fix layer 1: `lazyWithRetry` helper in App.tsx — retries dynamic import up to 3 times with 1s delay. Applied to all 4 lazy sections: ProvinceSelectionSection, RepresentationSection, EnergyCertificateSection, ReviewSection.
+  - Fix layer 2: new `ChunkErrorBoundary` class component (`app/src/components/ChunkErrorBoundary.tsx`) — catches render errors, shows "Reintentar cargar" button that calls `window.location.reload()`. Wraps the main Suspense in FormApp and DashboardApp.
+  - QA verified: all checks PASS, TypeScript 0 errors.
+  - Files: `app/src/App.tsx`, `app/src/components/ChunkErrorBoundary.tsx` (new)
+
 ### 📋 To Do
 - None
 

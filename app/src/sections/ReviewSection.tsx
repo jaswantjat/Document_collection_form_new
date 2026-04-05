@@ -16,7 +16,6 @@ interface Props {
   followUpMode?: boolean;
   onEdit: (section: string) => void;
   onSuccess: () => void;
-  projectToken?: string | null;
   onBack?: () => void;
   autoSubmit?: boolean;
 }
@@ -52,7 +51,6 @@ export function ReviewSection({
   followUpMode = false,
   onEdit,
   onSuccess,
-  projectToken,
   onBack,
   autoSubmit = false,
 }: Props) {
@@ -213,7 +211,7 @@ export function ReviewSection({
         ? stripAllBinaryData(renderedFormData)
         : stripRenderedImages(renderedFormData);
 
-      const res = await submitForm(project.code, submitPayload, source, projectToken);
+      const res = await submitForm(project.code, submitPayload, source);
       if (res.success) onSuccess();
       else setSubmitError(res.message || 'Error al enviar. Inténtalo de nuevo.');
     } catch {
@@ -252,7 +250,7 @@ export function ReviewSection({
     };
 
     preUploadPromise.current = getReadyFormData()
-      .then(fd => preUploadAssets(project.code, fd, projectToken ?? null))
+      .then(fd => preUploadAssets(project.code, fd))
       .then(() => {
         preUploadDone.current = true;
         return true;

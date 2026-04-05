@@ -369,35 +369,11 @@ function getDefaultProjects() {
 
 const database = loadDB();
 
-// ── IDOR: Assign access tokens to any project that lacks one ───────────────────
-function assignMissingTokens() {
-  let changed = false;
-  for (const project of Object.values(database.projects)) {
-    if (!project.accessToken) {
-      project.accessToken = uuidv4();
-      changed = true;
-    }
-  }
-  if (changed) {
-    saveDB();
-    console.log('🔑 Access tokens assigned to existing projects.');
-  }
-}
-assignMissingTokens();
-
-// ── IDOR: Validate project access token ────────────────────────────────────────
-function requireProjectToken(req, res, next) {
+// ── IDOR: Validate project access ───────────────────────────────────────────
+function requireProject(req, res, next) {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
-
-  // If project has an accessToken, the request must present it
-  if (project.accessToken) {
-    const requestToken = req.headers['x-project-token'];
-    if (!requestToken || requestToken !== project.accessToken) {
-      return res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'Acceso no autorizado a este proyecto.' });
-    }
-  }
 
   req.project = project;
   next();
@@ -811,7 +787,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Get project by code (protected by project access token)
-app.get('/api/project/:code', requireProjectToken, (req, res) => {
+app.get('/api/project/:code', requireProject, (req, res) => {
   res.json({ success: true, project: serializeProject(req.project) });
 });
 
@@ -976,7 +952,7 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
 }
 
 // Auto-save progress (requires access token)
-app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
+app.post('/api/project/:code/save', requireProject, (req, res) => {
   const project = req.project;
   const { formData } = req.body;
   if (!formData || typeof formData !== 'object') {
@@ -1000,7 +976,7 @@ app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
 });
 
 // Final submit (requires access token)
-app.post('/api/project/:code/submit', requireProjectToken, async (req, res) => {
+app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   const project = req.project;
   const { formData, source } = req.body;
   if (!formData || typeof formData !== 'object') {
@@ -1050,7 +1026,7 @@ app.post('/api/project/:code/submit', requireProjectToken, async (req, res) => {
 
 // Pre-upload binary assets (photos + PDFs) so the final submit payload can skip them.
 // Called from the review screen on mount — the user reads the screen while uploads happen.
-app.post('/api/project/:code/upload-assets', requireProjectToken, (req, res, next) => {
+app.post('/api/project/:code/upload-assets', requireProject, (req, res, next) => {
   assetUpload.fields(ASSET_FIELDS)(req, res, (err) => {
     if (err) {
       console.error('[upload-assets] multer error:', err);
@@ -2716,9 +2692,7 @@ app.listen(PORT, () => {
     console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec) | ELT20250005 (ec-flow)');
     console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004 | +34666000005');
     availableTestProjects.forEach((project) => {
-      if (project?.accessToken) {
-        console.log(`🔗 ${project.code}: /?code=${project.code}&token=${project.accessToken}`);
-      }
+      console.log(`🔗 ${project.code}: /?code=${project.code}`);
     });
   }
 });

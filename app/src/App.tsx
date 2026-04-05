@@ -10,6 +10,7 @@ import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 import { getLocationInfo } from '@/lib/provinceMapping';
@@ -20,12 +21,27 @@ import { FlowProgressBar } from '@/components/FlowProgressBar';
 import type { FormData, ProjectData, Section } from '@/types';
 import './App.css';
 
-const ProvinceSelectionSection = lazy(() => import('@/sections/ProvinceSelectionSection').then((module) => ({ default: module.ProvinceSelectionSection })));
-const RepresentationSection = lazy(() => import('@/sections/RepresentationSection').then((module) => ({ default: module.RepresentationSection })));
-const EnergyCertificateSection = lazy(() => import('@/sections/EnergyCertificateSection').then((module) => ({ default: module.EnergyCertificateSection })));
-const ReviewSection = lazy(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
-const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
-const DashboardLogin = lazy(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return lazy(() =>
+    factory().catch(() =>
+      new Promise<{ default: T }>(resolve => setTimeout(resolve, 1000))
+        .then(() => factory())
+        .catch(() =>
+          new Promise<{ default: T }>(resolve => setTimeout(resolve, 1000))
+            .then(() => factory())
+        )
+    )
+  );
+}
+
+const ProvinceSelectionSection = lazyWithRetry(() => import('@/sections/ProvinceSelectionSection').then((module) => ({ default: module.ProvinceSelectionSection })));
+const RepresentationSection = lazyWithRetry(() => import('@/sections/RepresentationSection').then((module) => ({ default: module.RepresentationSection })));
+const EnergyCertificateSection = lazyWithRetry(() => import('@/sections/EnergyCertificateSection').then((module) => ({ default: module.EnergyCertificateSection })));
+const ReviewSection = lazyWithRetry(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
+const Dashboard = lazyWithRetry(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const DashboardLogin = lazyWithRetry(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
 
 // Pre-warm remaining lazy section chunks immediately so transitions feel instant.
 function preloadSections() {
@@ -42,13 +58,15 @@ function DashboardApp() {
   );
 
   return (
-    <Suspense fallback={<LoadingSection />}>
-      {!token ? (
-        <DashboardLogin onLogin={setToken} />
-      ) : (
-        <Dashboard token={token} onLogout={() => setToken(null)} />
-      )}
-    </Suspense>
+    <ChunkErrorBoundary>
+      <Suspense fallback={<LoadingSection />}>
+        {!token ? (
+          <DashboardLogin onLogin={setToken} />
+        ) : (
+          <Dashboard token={token} onLogout={() => setToken(null)} />
+        )}
+      </Suspense>
+    </ChunkErrorBoundary>
   );
 }
 
@@ -132,14 +150,6 @@ function getInitialSection(
   return 'property-docs';
 }
 
-// ── Token persistence: survives page refresh after phone lookup ───────────────
-function getStoredToken(code: string): string | null {
-  try { return sessionStorage.getItem(`project_token_${code}`); } catch { return null; }
-}
-function storeToken(code: string, token: string) {
-  try { sessionStorage.setItem(`project_token_${code}`, token); } catch { /* ignore */ }
-}
-
 // ── Section persistence: restore current section on page reload ───────────────
 const VALID_SECTIONS: (Section | 'phone')[] = [
   'phone', 'property-docs', 'province-selection',
@@ -156,11 +166,8 @@ function readSavedSection(code: string): Section | null {
   } catch { return null; }
 }
 
-function buildProjectUrl(code: string, token?: string | null, source?: 'customer' | 'assessor') {
-  const params = new URLSearchParams({ code });
-  if (token) params.set('token', token);
-  if (source === 'assessor') params.set('source', 'assessor');
-  return `/?${params.toString()}`;
+function buildProjectUrl(code: string) {
+  return `/?code=${code}`;
 }
 
 function normalizeLoadedProject(project: ProjectData): ProjectData {
@@ -179,17 +186,12 @@ function FormApp() {
   const urlToken = searchParams.get('token');
   const source = searchParams.get('source') === 'assessor' ? 'assessor' : 'customer';
 
-  // Resolve token: URL param → sessionStorage fallback
-  const resolvedToken = urlToken ?? (urlCode ? getStoredToken(urlCode) : null);
-
   const [project, setProject] = useState<ProjectData | null>(null);
-  const [projectToken, setProjectToken] = useState<string | null>(resolvedToken);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
   const [autoSubmitReview, setAutoSubmitReview] = useState(false);
   const projectMatchesUrl = !urlCode || project?.code === urlCode;
   const activeProject = urlCode && projectMatchesUrl ? project : null;
-  const activeProjectToken = urlCode ? projectToken : null;
   const activeLoadError = urlCode ? loadError : null;
   const activeLoading = !!urlCode && (loading || (!projectMatchesUrl && !loadError));
   const projectFollowUpDocumentFlow = hasExistingRepresentationFlow(activeProject?.formData ?? null);
@@ -218,7 +220,6 @@ function FormApp() {
     }
 
     const controller = new AbortController();
-    const token = urlToken ?? getStoredToken(urlCode);
 
     prepareProjectLoad();
 
@@ -230,7 +231,7 @@ function FormApp() {
       }
     }, 12000);
 
-    fetchProject(urlCode, token, { signal: controller.signal })
+    fetchProject(urlCode, { signal: controller.signal })
       .then(async (res) => {
         if (controller.signal.aborted) return;
 
@@ -329,22 +330,15 @@ function FormApp() {
           }
 
           setProject(normalizedProject);
-
-          // Persist whichever token we have so refreshes keep working.
-          const activeToken = token ?? normalizedProject.accessToken ?? null;
-          setProjectToken(activeToken);
-          if (activeToken) storeToken(urlCode, activeToken);
           return;
         }
 
         setProject(null);
-        setProjectToken(null);
         setLoadError(res.error || 'PROJECT_NOT_FOUND');
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;
         setProject(null);
-        setProjectToken(null);
         setLoadError('NETWORK_ERROR');
       })
       .finally(() => {
@@ -357,10 +351,6 @@ function FormApp() {
     return () => { controller.abort(); clearTimeout(timeoutId); };
   }, [urlCode, urlToken]);
 
-  useEffect(() => {
-    if (!urlCode || !projectToken || urlToken) return;
-    navigate(buildProjectUrl(urlCode, projectToken, source), { replace: true });
-  }, [navigate, projectToken, source, urlCode, urlToken]);
 
   // When navigating from the review checklist into property-docs, remember which
   // specific doc the user tapped so PropertyDocsSection can scroll to it.
@@ -403,14 +393,13 @@ function FormApp() {
     activeProject?.code ?? null,
     activeProject?.productType ?? 'solar',
     activeProject?.formData ?? null,
-    activeProjectToken,
     { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
-  useBeforeUnloadSave(activeProject?.code ?? null, formData, activeProjectToken);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData);
 
   // Pre-warm lazy section chunks during idle time to eliminate loading spinners
   useEffect(() => { preloadSections(); }, []);
@@ -462,11 +451,7 @@ function FormApp() {
   const handlePhoneConfirmed = (_phone: string, foundProject: ProjectData) => {
     const normalizedProject = normalizeLoadedProject(foundProject);
     setProject(normalizedProject);
-    const token = normalizedProject.accessToken || null;
-    setProjectToken(token);
-    // Persist so page refresh after phone lookup doesn't hit FORBIDDEN
-    if (token) storeToken(foundProject.code, token);
-    navigate(buildProjectUrl(foundProject.code, token, 'assessor'), { replace: true });
+    navigate(buildProjectUrl(foundProject.code), { replace: true });
     goTo('property-docs');
   };
 
@@ -581,7 +566,6 @@ function FormApp() {
               goTo(sectionName as Section);
             }}
             onSuccess={() => goTo('success')}
-            projectToken={activeProjectToken}
             onBack={() => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
             autoSubmit={autoSubmitReview}
           />
@@ -607,9 +591,11 @@ function FormApp() {
       />
       {showProgressBar && <FlowProgressBar currentSection={activeSection} />}
       <main className={showProgressBar ? 'pt-11' : ''}>
-        <Suspense fallback={<LoadingSection />}>
-          {renderSection()}
-        </Suspense>
+        <ChunkErrorBoundary>
+          <Suspense fallback={<LoadingSection />}>
+            {renderSection()}
+          </Suspense>
+        </ChunkErrorBoundary>
       </main>
     </div>
   );

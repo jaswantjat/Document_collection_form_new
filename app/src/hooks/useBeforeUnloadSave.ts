@@ -5,9 +5,8 @@ const KEEPALIVE_LIMIT_BYTES = 60 * 1024; // 64KB browser limit, use 60KB to be s
 
 function buildSavePayload(
   projectCode: string,
-  formData: unknown,
-  projectToken?: string | null
-): { url: string; body: string; token?: string } | null {
+  formData: unknown
+): { url: string; body: string } | null {
   // Strip the same binary/large fields as the regular auto-save so the payload
   // stays small enough to fit within the 60 KB keepalive limit.
   const cleanData = JSON.parse(JSON.stringify(formData, (_key, value) => {
@@ -29,35 +28,27 @@ function buildSavePayload(
   return {
     url: `${API_BASE}/project/${encodeURIComponent(projectCode)}/save`,
     body,
-    token: projectToken ?? undefined,
   };
 }
 
 export function useBeforeUnloadSave(
   projectCode: string | null,
-  formData: unknown,
-  projectToken?: string | null
+  formData: unknown
 ): void {
   const formDataRef = useRef(formData);
-  const projectTokenRef = useRef(projectToken);
 
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
 
   useEffect(() => {
-    projectTokenRef.current = projectToken;
-  }, [projectToken]);
-
-  useEffect(() => {
     if (!projectCode) return;
 
     const handleBeforeUnload = () => {
-      const payload = buildSavePayload(projectCode, formDataRef.current, projectTokenRef.current);
+      const payload = buildSavePayload(projectCode, formDataRef.current);
       if (!payload) return; // Too large — localStorage backup covers this case
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (payload.token) headers['x-project-token'] = payload.token;
 
       try {
         fetch(payload.url, {

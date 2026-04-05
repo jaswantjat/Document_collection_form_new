@@ -290,7 +290,6 @@ export const useFormState = (
   projectCode: string | null,
   productType: ProductType,
   savedFormData?: FormData | null,
-  projectToken?: string | null,
   options?: { preserveRepresentationSignaturesOnDocumentChange?: boolean }
 ) => {
   const preserveRepresentationSignatures =
@@ -341,7 +340,7 @@ export const useFormState = (
       // when the user navigates sections without editing anything.
       const snapshot = JSON.stringify(cleanData);
       if (snapshot === lastSavedPayload.current) return;
-      saveProgress(projectCode, cleanData, projectToken).then(() => {
+      saveProgress(projectCode, cleanData).then(() => {
         lastSavedPayload.current = snapshot;
         if (consecutiveSaveFailures.current > 0) {
           consecutiveSaveFailures.current = 0;
@@ -359,7 +358,7 @@ export const useFormState = (
       });
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [formData, projectCode, projectToken]);
+  }, [formData, projectCode]);
 
   // Progressive photo upload — fires upload-assets in the background whenever a new
   // photo is captured. By the time the user reaches ReviewSection, binary files are
@@ -380,13 +379,13 @@ export const useFormState = (
     lastPhotoFingerprint.current = photoFingerprint;
     if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
     progressiveUploadTimer.current = setTimeout(() => {
-      preUploadAssets(projectCode, formData, projectToken ?? null).catch(() => {});
+      preUploadAssets(projectCode, formData).catch(() => {});
     }, 800);
     return () => {
       if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoFingerprint, projectCode, projectToken]);
+  }, [photoFingerprint, projectCode]);
 
   const setDocumentProcessingState = useCallback((slotKey: DocumentSlotKey, nextState: DocumentProcessingState) => {
     setDocumentProcessing((prev) => ({ ...prev, [slotKey]: nextState }));
