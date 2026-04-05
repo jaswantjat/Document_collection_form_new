@@ -878,21 +878,34 @@ function checkCataloniaPDFs(formData) {
   };
 }
 
-function extractCompletedDocKeys(formData, assetFiles) {
+// existingFormData: the project's formData from the PREVIOUS save (before this submission
+// overwrites it). Used as a fallback for DNI detection in follow-up sessions where the
+// customer submits additional docs without re-capturing their DNI photo.
+function extractCompletedDocKeys(formData, assetFiles, existingFormData = null) {
   const keys = [];
+  const af = assetFiles || {};
 
-  const hasDniFront = formData?.dni?.front?.photo || assetFiles?.dniFront;
-  const hasDniBack  = formData?.dni?.back?.photo  || assetFiles?.dniBack;
+  // DNI: check submitted photo, pre-uploaded file, AI extraction evidence, or previous session photo
+  const hasDniFront = formData?.dni?.front?.photo
+    || !!af.dniFront
+    || !!formData?.dni?.front?.extraction
+    || existingFormData?.dni?.front?.photo;
+  const hasDniBack = formData?.dni?.back?.photo
+    || !!af.dniBack
+    || !!formData?.dni?.back?.extraction
+    || existingFormData?.dni?.back?.photo;
   if (hasDniFront) keys.push('dni_front');
   if (hasDniBack)  keys.push('dni_back');
 
+  // IBI: assetFiles uses keys ibi_0 … ibi_4 (not ibiPhoto)
   const hasIbi = formData?.ibi?.photo
     || (Array.isArray(formData?.ibi?.pages) && formData.ibi.pages.length > 0)
-    || assetFiles?.ibiPhoto;
+    || Object.keys(af).some(k => k.startsWith('ibi_'));
   if (hasIbi) keys.push('ibi');
 
+  // Electricity: assetFiles uses keys electricity_0 … electricity_4 (not electricityPage0)
   const hasElectricity = (Array.isArray(formData?.electricityBill?.pages) && formData.electricityBill.pages.length > 0)
-    || assetFiles?.electricityPage0;
+    || Object.keys(af).some(k => k.startsWith('electricity_'));
   if (hasElectricity) keys.push('electricity_bill');
 
   if (formData?.energyCertificate?.status === 'completed') {
@@ -939,10 +952,15 @@ async function fireDocFlowNewOrder(project) {
     docs_required: computeRequiredDocs(project.productType),
   };
 
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET) {
+    headers['X-Eltex-Webhook-Secret'] = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET;
+  }
+
   try {
     await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5000),
     });
@@ -959,9 +977,14 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return;
 
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET) {
+    headers['X-Eltex-Webhook-Secret'] = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET;
+  }
+
   fetch(webhookUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
   }).catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
 }
@@ -1004,6 +1027,8 @@ app.post('/api/project/:code/submit', requireProjectToken, async (req, res) => {
     ipAddress: req.ip,
     formData
   };
+  // Capture existing formData BEFORE overwriting — used as DNI fallback in extractCompletedDocKeys
+  const existingFormData = project.formData || null;
   project.submissions.push(submission);
   project.formData = formData;
   project.lastActivity = new Date().toISOString();
@@ -1025,7 +1050,8 @@ app.post('/api/project/:code/submit', requireProjectToken, async (req, res) => {
   // Rule: new_order must exist in Baserow before doc_update can update it.
   // If new_order was never confirmed sent (project created before this fix, or creation webhook
   // failed), we await it here so the row is guaranteed to exist before doc_update fires.
-  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles);
+  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
+  console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
   if (!project.docflowNewOrderSent) {
     const sent = await fireDocFlowNewOrder(project);
     if (sent) {

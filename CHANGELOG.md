@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## 2026-04-05.10 — Session: DocFlow doc detection hardening + webhook secret
+
+**Phase**: Developer
+
+**Problems fixed (from n8n logs):**
+
+1. **`dni_front` / `dni_back` missing from `doc_update`** — `extractCompletedDocKeys` had three weaknesses:
+   - No fallback to the project's previously-stored formData (follow-up sessions submit new docs but the DNI was uploaded in session 1 — the submitted formData has `photo: null` for DNI, and without `existingFormData`, both signals were falsy)
+   - Wrong `assetFiles` key names: `assetFiles?.ibiPhoto` should be `Object.keys(af).some(k => k.startsWith('ibi_'))`, and `assetFiles?.electricityPage0` should use `electricity_` prefix
+   - No fallback for AI extraction data (if DNI was extracted, the photo was definitely present)
+
+2. **No webhook origin validation** — A stray WhatsApp message was mistakenly POSTed to the n8n DocFlow webhook URL. Our backend had no secret header, so n8n couldn't distinguish legitimate Eltex calls from random POSTs.
+
+**Fixes in `backend/server.js`:**
+
+- `extractCompletedDocKeys(formData, assetFiles, existingFormData = null)` — new third parameter
+  - DNI: `formData.dni.front.photo || assetFiles.dniFront || formData.dni.front.extraction || existingFormData.dni.front.photo`
+  - IBI: `Object.keys(af).some(k => k.startsWith('ibi_'))` (fixes `ibiPhoto` key bug)
+  - Electricity: `Object.keys(af).some(k => k.startsWith('electricity_'))` (fixes `electricityPage0` key bug)
+- Submit route captures `existingFormData = project.formData` BEFORE overwriting, passes to `extractCompletedDocKeys`
+- Both `fireDocFlowNewOrder` and `fireDocFlowDocUpdate` now include `X-Eltex-Webhook-Secret` header (if `ELTEX_DOCFLOW_WEBHOOK_SECRET` env var is set)
+- Added `console.log([DocFlow] ${code} docs detected: ...)` for visibility in Railway logs
+
+**QA (6 scenarios, all pass):**
+- Scenario 1: follow-up session, photo null in submit but truthy in existingFormData → `dni_front`, `dni_back` detected ✓
+- Scenario 2: assetFiles `dniFront`/`dniBack`/`ibi_0` → all detected ✓
+- Scenario 3: extraction data only (no photo, no assetFiles) → `dni_front`, `dni_back` ✓
+- Scenario 4: assetFiles `electricity_0`, `electricity_1` → `electricity_bill` ✓
+- Scenario 5: nothing present → `[]` ✓
+- Scenario 6: ELT20250001 real project → `['dni_front', 'dni_back', 'ibi', 'electricity_bill', 'energy_certificate']` ✓
+- Live submit test: backend log shows `[DocFlow] ELT20250001 docs detected: dni_front, dni_back, ibi, electricity_bill` ✓
+
+**New env var:**
+```
+ELTEX_DOCFLOW_WEBHOOK_SECRET = <shared-secret>   # set in Railway Variables
+```
+n8n should validate `X-Eltex-Webhook-Secret` header to reject non-Eltex payloads.
+
+**Files changed:**
+- `backend/server.js`
+- `AGENTS.md` (new env var)
+
+---
+
 ## 2026-04-05.9 — Session: DocFlow webhook sequence fix (new_order before doc_update)
 
 **Phase**: Developer
