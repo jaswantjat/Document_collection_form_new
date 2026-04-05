@@ -94,6 +94,7 @@ AGENTS.md                   → This file (living memory)
 | `OPENROUTER_MODEL` | optional | AI model (default: `google/gemini-3.1-flash-lite-preview`) |
 | `NODE_ENV` | set by Railway | `production` enables strict mode |
 | `SEED_SAMPLE_DATA` | optional | Set to `false` to skip seeding test projects |
+| `ELTEX_DOCFLOW_WEBHOOK_URL` | Railway Variables | DocFlow webhook URL — when set, fires a `doc_update` POST after every successful `/submit` |
 
 ---
 

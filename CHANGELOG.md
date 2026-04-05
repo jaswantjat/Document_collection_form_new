@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-04-05.7 — Session: DocFlow webhook integration (`doc_update`)
+
+**Phase**: Developer
+
+**Feature**: The form backend now fires a fire-and-forget `doc_update` webhook to the DocFlow API after every successful customer form submission. This closes the loop between the upload form and the n8n/Baserow automation that drives WhatsApp reminders and status updates.
+
+**Implementation:**
+
+1. **`backend/server.js` — `extractCompletedDocKeys(formData, assetFiles)`**: New helper that inspects submitted `formData` and `project.assetFiles` to produce an array of document keys (`dni_front`, `dni_back`, `ibi`, `electricity_bill`, `energy_certificate`, Cataluña/Spain signed-doc keys) matching the DocFlow key schema.
+
+2. **`backend/server.js` — `fireDocFlowWebhook(orderCode, docsUploaded)`**: New helper that reads `ELTEX_DOCFLOW_WEBHOOK_URL` from env and fires a `POST { type, order_id, docs_uploaded }` call. Returns immediately — the `fetch` `.catch()` logs errors without blocking the customer response. If the env var is not set, it no-ops silently.
+
+3. **`POST /api/project/:code/submit`**: After `saveDB()`, calls `extractCompletedDocKeys(formData, project.assetFiles)` and then `fireDocFlowWebhook(project.code, docsUploaded)`.
+
+**Testing:**
+- **Unit tests (5 scenarios)**: `extractCompletedDocKeys` validated for: formData-only photos, assetFiles-fallback (preview stripped), Cataluña signed docs, empty input, Madrid signed docs. All passed.
+- **E2E submit test**: `POST /api/project/ELT20250001/submit` returned `{ success: true }` — the webhook no-ops silently when URL is unset, no blocking.
+- **Live webhook fire**: Ran the `fireDocFlowWebhook` function with `ELTEX_DOCFLOW_WEBHOOK_URL=https://httpbin.org/post` — httpbin confirmed HTTP 200 and echoed back the exact payload `{ type: "doc_update", order_id: "ELT20250001", docs_uploaded: [...] }`.
+
+**Environment variable required in Railway:**
+```
+ELTEX_DOCFLOW_WEBHOOK_URL = https://<docflow-api-domain>/api/webhooks/doc-flow
+```
+
+**Files changed:**
+- `backend/server.js`
+- `AGENTS.md` (env vars table)
+
+---
+
 ## 2026-04-05.6 — Session: Dashboard signature deferred state
 
 **Phase**: Developer

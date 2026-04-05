@@ -871,6 +871,52 @@ function checkCataloniaPDFs(formData) {
   };
 }
 
+function extractCompletedDocKeys(formData, assetFiles) {
+  const keys = [];
+
+  const hasDniFront = formData?.dni?.front?.photo || assetFiles?.dniFront;
+  const hasDniBack  = formData?.dni?.back?.photo  || assetFiles?.dniBack;
+  if (hasDniFront) keys.push('dni_front');
+  if (hasDniBack)  keys.push('dni_back');
+
+  const hasIbi = formData?.ibi?.photo
+    || (Array.isArray(formData?.ibi?.pages) && formData.ibi.pages.length > 0)
+    || assetFiles?.ibiPhoto;
+  if (hasIbi) keys.push('ibi');
+
+  const hasElectricity = (Array.isArray(formData?.electricityBill?.pages) && formData.electricityBill.pages.length > 0)
+    || assetFiles?.electricityPage0;
+  if (hasElectricity) keys.push('electricity_bill');
+
+  if (formData?.energyCertificate?.status === 'completed') {
+    keys.push('energy_certificate');
+  }
+
+  const loc = formData?.representation?.location ?? formData?.location;
+
+  if (loc === 'cataluna') {
+    if (formData?.representation?.renderedDocuments?.catalunaIva)          keys.push('cataluna_iva');
+    if (formData?.representation?.renderedDocuments?.catalunaGeneralitat)   keys.push('cataluna_generalitat');
+    if (formData?.representation?.renderedDocuments?.catalunaRepresentacio) keys.push('cataluna_representacio');
+  } else if (loc) {
+    if (formData?.representation?.renderedDocuments?.spainIva)   keys.push('spain_iva');
+    if (formData?.representation?.renderedDocuments?.spainPoder) keys.push('spain_poder');
+  }
+
+  return keys;
+}
+
+function fireDocFlowWebhook(orderCode, docsUploaded) {
+  const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
+  }).catch((err) => console.error('[DocFlow] webhook failed:', err.message));
+}
+
 // Auto-save progress (requires access token)
 app.post('/api/project/:code/save', requireProjectToken, (req, res) => {
   const project = req.project;
@@ -924,6 +970,11 @@ app.post('/api/project/:code/submit', requireProjectToken, (req, res) => {
   project.cataloniaPDFs = pdfStatus;
 
   saveDB();
+
+  // Notify DocFlow webhook (fire-and-forget — does not block the customer's response)
+  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles);
+  fireDocFlowWebhook(project.code, docsUploaded);
+
   res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
 });
 
