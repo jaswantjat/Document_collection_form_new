@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-04-05.2 — Session: Fix representation card hidden in followUpMode
+
+**Phase**: Developer
+
+**Problem:**
+`needsRepresentation` in `ReviewSection.tsx` was gated by `!followUpMode`. When `followUpMode` is true (all signatures already done from a prior session), the representation checklist card was suppressed entirely — even though signatures were complete and the card would correctly land in the COMPLETADO bucket.
+
+**Fix:**
+Removed `!followUpMode &&` from the `needsRepresentation` expression (line 72). The representation card now appears whenever a relevant location is set, regardless of `followUpMode`. Since `signaturesOk` is true in followUpMode, the card correctly shows as ✅ done ("Representación — 3 docs firmados").
+
+**Verified:**
+Screenshotted Revisión page (step 5/5) for a Cataluña project in followUpMode (all 3 sigs done, EC skipped). "Representación — 3 docs firmados" appears in COMPLETADO · 4 alongside DNI, IBI, and Factura de luz.
+
+**Files changed:**
+- `app/src/sections/ReviewSection.tsx` (1-line change, line 72)
+
+**Test status:** TypeScript: 0 errors. Visual verification: confirmed.
+
+---
+
 ## 2026-04-05.1 — Session: Section persistence, signature card, carousel revert
 
 **Phase**: Developer

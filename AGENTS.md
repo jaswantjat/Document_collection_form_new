@@ -288,6 +288,14 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 
 ### ✅ Completed (continued)
 
+- **[2026-04-05] Representation card missing in followUpMode (ReviewSection.tsx)**
+  - `needsRepresentation` was `!followUpMode && !!locationVar && locationVar !== 'other'`
+  - When followUpMode=true the entire representation card was suppressed, even for fully-signed projects
+  - Fix: removed `!followUpMode &&` — card now appears whenever location is relevant; `signaturesOk=true` puts it in COMPLETADO
+  - File: `app/src/sections/ReviewSection.tsx` (line 72)
+
+### ✅ Completed (continued)
+
 - **[2026-04-03] windowFrameMaterial + windowGlassType label fix**
   - Label functions existed but raw enum values were rendered in the energy cert document (`'aluminio'` instead of `'Aluminio'`, `'simple'` instead of `'Simple'`)
   - Fixed: wired `windowFrameMaterialLabel()` and `windowGlassTypeLabel()` into the rows2b array
@@ -338,6 +346,12 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - New tests: API-01, API-02, API-03, E2E-MOBILE-01
 - Updated docs: `docs/PRODUCTION-READINESS.md`, `docs/TEST-TRACKER.md`
 - Grand total: **56/56 tests passing** (33 E2E + 23 unit)
+
+### 2026-04-05 — Session: followUpMode representation card fix
+- Root cause: `!followUpMode &&` guard in `needsRepresentation` suppressed the representation card for fully-signed customers returning to review
+- Fix: removed the guard; card now shows for all relevant locations; `signaturesOk=true` puts it in COMPLETADO
+- Verified via screenshot of Revisión 5/5 with Cataluña project (3 sigs done, EC skipped)
+- Files: `app/src/sections/ReviewSection.tsx`
 
 ### 2026-04-04 — Session: EC wizard step persistence
 - Identified that previous session had already wired `navigateToStep` and `useState(data.currentStepIndex ?? 0)` in the component
