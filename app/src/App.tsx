@@ -103,6 +103,19 @@ function getInitialSection(
   const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
   const hasEnergyDecision = hasEnergyCertificateDecision(fd);
 
+  // Try to restore the last saved section before recomputing from scratch.
+  const saved = readSavedSection(urlCode);
+  if (saved && !followUpDocumentFlow) {
+    // If the user was on representation but it's now done, advance past it.
+    if (saved === 'representation' && hasRepresentationDone(fd, location)) {
+      return hasEnergyDecision ? 'review' : 'energy-certificate';
+    }
+    // All other saved sections are valid to restore.
+    if (saved !== 'representation' || (!!location && location !== 'other')) {
+      return saved;
+    }
+  }
+
   if (followUpDocumentFlow && !hasPropertyDocsDone(fd)) return 'property-docs';
   if (followUpDocumentFlow) return hasEnergyDecision ? 'review' : 'energy-certificate';
   if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
@@ -118,6 +131,22 @@ function getStoredToken(code: string): string | null {
 }
 function storeToken(code: string, token: string) {
   try { sessionStorage.setItem(`project_token_${code}`, token); } catch { /* ignore */ }
+}
+
+// ── Section persistence: restore current section on page reload ───────────────
+const VALID_SECTIONS: (Section | 'phone')[] = [
+  'phone', 'property-docs', 'province-selection',
+  'representation', 'energy-certificate', 'review',
+];
+function saveSectionToStorage(code: string, section: Section | 'phone') {
+  if (section === 'phone' || section === 'success') return;
+  try { localStorage.setItem(`eltex_section_${code}`, section); } catch { /* ignore */ }
+}
+function readSavedSection(code: string): Section | null {
+  try {
+    const v = localStorage.getItem(`eltex_section_${code}`);
+    return VALID_SECTIONS.includes(v as Section) ? (v as Section) : null;
+  } catch { return null; }
 }
 
 function buildProjectUrl(code: string, token?: string | null, source?: 'customer' | 'assessor') {
@@ -383,6 +412,7 @@ function FormApp() {
   const goTo = (section: Section | 'phone') => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setCurrentSection(section);
+    if (urlCode) saveSectionToStorage(urlCode, section);
   };
 
   const handlePhoneConfirmed = (_phone: string, foundProject: ProjectData) => {

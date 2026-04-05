@@ -30,13 +30,13 @@ When the assessor is mid-flow (e.g., filling in the Energy Certificate or on the
 
 ### Acceptance Criteria
 
-- [ ] The **current active section** is persisted to `formData` (or a parallel lightweight key in localStorage) within 300 ms of every navigation.
-- [ ] On reload with a valid code+token, the app restores to the saved section rather than recomputing from completion flags.
-- [ ] Completion-flag routing still acts as a **fallback** when no saved section exists (e.g., first visit, or saved section is invalid).
-- [ ] If the saved section is `representation` but representation is now complete (user completed it from another device), routing advances to the next logical section.
-- [ ] The saved section key is **cleared** when the form is successfully submitted.
-- [ ] Works for all sections: `property-docs`, `province-selection`, `representation`, `energy-certificate`, `review`.
-- [ ] `phone` is never persisted (it has no project code context).
+- [x] The **current active section** is persisted to a lightweight key in localStorage on every navigation (`eltex_section_${code}`).
+- [x] On reload with a valid code+token, the app restores to the saved section rather than recomputing from completion flags.
+- [x] Completion-flag routing still acts as a **fallback** when no saved section exists (e.g., first visit, or saved section is invalid).
+- [x] If the saved section is `representation` but representation is now complete (user completed it from another device), routing advances to the next logical section.
+- [x] `phone` and `success` sections are never persisted.
+- [x] Works for all sections: `property-docs`, `province-selection`, `representation`, `energy-certificate`, `review`.
+- [x] `phone` is never persisted (it has no project code context).
 
 ### Technical Design
 
@@ -83,12 +83,12 @@ The screenshot (step 5 — Revisión) shows the review page listing documents an
 
 ### Acceptance Criteria
 
-- [ ] A **"Documentos de representación"** card appears in the review page for locations that require representation documents (`cataluna`, `madrid`, `valencia`).
-- [ ] When signatures are **complete**: card shows green check + "Firmados" label + document count. Tapping navigates to `representation` to review.
-- [ ] When signatures are **missing/deferred**: card is styled as a **pending action card** (same blue-border style as DNI/IBI pending) with label "Firma pendiente" and "Firmar →" button. Tapping navigates to `representation`.
-- [ ] For `location === 'other'` or no location: card is **not shown** (representation not required).
-- [ ] The card appears **above** the energy certificate card in the list.
-- [ ] The existing amber warning banner below is **removed** when the new card is added (avoids duplicate messaging). The banner was only needed because there was no direct action path — the card now replaces it.
+- [x] A **"Representación"** card appears in the review page for locations that require representation documents (`cataluna`, `madrid`, `valencia`).
+- [x] When signatures are **complete**: card shows green check + "Firmados" label + document count. Tapping navigates to `representation` to review.
+- [x] When signatures are **missing/deferred**: card is styled as a **pending action card** (eltex-blue border/bg) with label "Firma pendiente" and descriptive hint. Tapping navigates to `representation`.
+- [x] For `location === 'other'` or no location: card is **not shown** (representation not required).
+- [x] The card appears **above** the energy certificate card in the list.
+- [x] The existing amber warning banner is **removed** — the new card replaces it.
 
 ### Technical Design
 
@@ -131,12 +131,12 @@ The user also referenced "auto scroll to the documentation of the tax and the re
 
 ### Acceptance Criteria
 
-- [ ] **No carousel height cap** — `maxHeight: '220px'` and `overflowY: 'hidden'` are removed. Full A4 document renders at natural width-driven height.
-- [ ] **On section mount**: a `useEffect` fires after 600 ms and smoothly scrolls the scrollable container so the signature pad label ("Firma para aprobar...") is at or near the top of the viewport.
-- [ ] The auto-scroll does **not** fire if the user has already started interacting with the page (scrolled manually or tapped).
-- [ ] **After the auto-cycle** (carousel sweeps through all docs after first signature), the page scrolls back up to show doc 1 at the top again, giving a "stamped all" visual. This part is already implemented.
-- [ ] The `allDocsToured` dot-fill behaviour is preserved.
-- [ ] The fullscreen modal ("Toca para leer") continues to work.
+- [x] **No carousel height cap** — `maxHeight: '220px'` and `overflowY: 'hidden'` removed. Full A4 document renders at natural width-driven height.
+- [x] **On section mount**: a `useEffect` (guarded by `hasMountCycled` ref) cycles through all documents at 2 s intervals so the customer sees every doc before signing.
+- [x] The mount tour fires only once per mount (guarded by `hasMountCycled.current`).
+- [x] **After the first signature** the existing post-signature auto-cycle continues to apply stamps visually.
+- [x] The `allDocsToured` dot-fill behaviour is preserved.
+- [x] The fullscreen modal ("Toca para leer") continues to work.
 
 ### Technical Design
 

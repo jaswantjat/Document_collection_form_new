@@ -1,6 +1,6 @@
 # AGENTS.md
 > This file is the AI agent's persistent memory. Read fully every session. Update before ending.
-> Last updated: 2026-04-02
+> Last updated: 2026-04-05
 
 ---
 

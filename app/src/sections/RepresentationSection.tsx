@@ -206,6 +206,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   const [allDocsToured, setAllDocsToured] = useState(false);
   const applyingRef = useRef(false);
   const hasCycled = useRef(false);
+  const hasMountCycled = useRef(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Debounce signature updates so the preview re-renders at most once per 400ms
@@ -218,6 +219,22 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
   useEffect(() => {
     preloadDocumentTemplates(docs.map((d) => d.kind));
   }, [docs]);
+
+  // On mount: tour all documents so the customer can see what they are about
+  // to sign (tax certificate → generalitat → representation). Fires once.
+  useEffect(() => {
+    if (hasMountCycled.current || docs.length <= 1) return;
+    hasMountCycled.current = true;
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    docs.forEach((_, i) => {
+      if (i === 0) return;
+      timers.push(setTimeout(() => goToDoc(i), i * 2000));
+    });
+
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // When the user draws their first signature, auto-cycle through every
   // document in the carousel so they can see their signature applied to each
@@ -401,7 +418,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
                 className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', maxHeight: '220px', overflowY: 'hidden' } as React.CSSProperties}
+                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
               >
                 {docs.map((doc) => (
                   <div

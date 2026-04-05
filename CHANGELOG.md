@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## 2026-04-05.1 — Session: Section persistence, signature card, carousel revert
+
+**Phase**: Developer
+
+**Changes:**
+
+1. **Section persistence on reload** (`App.tsx`)
+   - Added `saveSectionToStorage` / `readSavedSection` helpers (key: `eltex_section_${code}` in localStorage).
+   - `goTo()` now writes the current section to localStorage on every navigation.
+   - `getInitialSection()` reads the saved section first and restores it before falling back to completion-flag routing.
+   - Edge case handled: if saved section is `representation` but `hasRepresentationDone` is now true (completed from another device), advances past it.
+   - `phone` and `success` sections are never persisted.
+
+2. **Representation signature card in review** (`ReviewSection.tsx`)
+   - Added a tappable card for "Representación" above the energy-certificate card.
+   - Shown only when `location && location !== 'other'` and `!followUpMode`.
+   - Done state: emerald border/background, green check, doc count, "Revisar" hint.
+   - Pending state: eltex-blue border/background, alert icon, "Firma pendiente" / deferred message.
+   - Tapping the card navigates to the `representation` section.
+   - Removed the standalone amber warning banner (the new card replaces it).
+
+3. **Document carousel revert + mount auto-tour** (`RepresentationSection.tsx`)
+   - Removed `maxHeight: '220px', overflowY: 'hidden'` from the carousel scroll container — full A4 preview restored.
+   - Added `hasMountCycled` ref and mount `useEffect` that cycles through all docs at 2 s intervals on arrival, so the customer sees each document before signing.
+
+**Files changed:**
+- `app/src/App.tsx`
+- `app/src/sections/ReviewSection.tsx`
+- `app/src/sections/RepresentationSection.tsx`
+- `PRD.md` (created — full product requirements doc)
+
+**Test status:** TypeScript: 0 errors.
+
+---
+
 ## 2026-04-04.3 — Session: Representació — date vertical offset fix
 
 **Phase**: Developer
