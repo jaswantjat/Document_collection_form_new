@@ -3,7 +3,7 @@ import { Toaster } from 'sonner';
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
-import { useLocalStorageBackup, readLocalBackup } from '@/hooks/useLocalStorageBackup';
+import { useLocalStorageBackup, readLocalBackup, clearLocalBackup } from '@/hooks/useLocalStorageBackup';
 import { readIndexedDBBackup } from '@/hooks/useIndexedDBBackup';
 import { fetchProject } from '@/services/api';
 import { PhoneSection } from '@/sections/PhoneSection';
@@ -361,8 +361,12 @@ function FormApp() {
           return;
         }
 
+        // Project was deleted or never existed — clear stale local data and go back
+        // to the phone entry screen rather than showing a dead-end error page.
+        // The assessor can then re-enter the phone number and create a new project.
+        if (urlCode) clearLocalBackup(urlCode);
         setProject(null);
-        setLoadError(res.error || 'PROJECT_NOT_FOUND');
+        navigate('/', { replace: true });
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;

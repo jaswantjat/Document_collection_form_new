@@ -1085,6 +1085,23 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
+  // Safety timeout: force-fail any item stuck in processing for > 30 s.
+  // Prevents a permanent disabled button if a network request hangs silently.
+  useEffect(() => {
+    const processingIds = pendingItems
+      .filter(p => p.status === 'validating' || p.status === 'extracting')
+      .map(p => p.id);
+    if (processingIds.length === 0) return;
+    const timer = setTimeout(() => {
+      setPendingItems(prev => prev.map(p =>
+        processingIds.includes(p.id) && (p.status === 'validating' || p.status === 'extracting')
+          ? { ...p, status: 'failed' as const, error: 'Tiempo de espera agotado. Inténtalo de nuevo.' }
+          : p
+      ));
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [pendingItems]);
+
   const processFiles = useCallback(async (files: File[], uploadedOriginalPdfs: StoredDocumentFile[] = [], skipBlurCheck = false) => {
     const newItems: PendingItem[] = files.map(file => ({ id: genId(), file, preview: null, status: 'validating' }));
     setPendingItems(prev => [...prev, ...newItems]);

@@ -904,8 +904,9 @@ function computeRequiredDocs(productType) {
 }
 
 // Fires new_order webhook to DocFlow. Returns true on success, false on failure.
-// Awaitable — callers that need to guarantee the row exists before doc_update should await this.
-async function fireDocFlowNewOrder(project) {
+// Awaitable — callers must await this to guarantee the row exists before any follow-up calls.
+// On first submission, docs_uploaded is included so no separate doc_update is needed.
+async function fireDocFlowNewOrder(project, docsUploaded = []) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return true;
 
@@ -920,6 +921,7 @@ async function fireDocFlowNewOrder(project) {
     locale: (project.customerLanguage || project.formData?.browserLanguage || '').split('-')[0] || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
     docs_required: computeRequiredDocs(project.productType),
+    docs_uploaded: docsUploaded,
   };
 
   const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET };
@@ -931,7 +933,7 @@ async function fireDocFlowNewOrder(project) {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5000),
     });
-    console.log(`[DocFlow] new_order sent for ${project.code}`);
+    console.log(`[DocFlow] new_order sent for ${project.code} (docs: ${docsUploaded.join(', ') || 'none'})`);
     return true;
   } catch (err) {
     console.error(`[DocFlow] new_order failed for ${project.code}:`, err.message);
@@ -1013,20 +1015,34 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
 
   // DocFlow webhook sequence (after response is sent — does not block the customer).
-  // Rule: new_order must exist in Baserow before doc_update can update it.
-  // If new_order was never confirmed sent (project created before this fix, or creation webhook
-  // failed), we await it here so the row is guaranteed to exist before doc_update fires.
+  //
+  // First submission: fire new_order (with docs_uploaded included in payload).
+  //   doc_update is intentionally skipped — new_order already carries all doc info.
+  //   This eliminates the race condition where doc_update would arrive at n8n before
+  //   the new_order insert completed in Baserow.
+  //
+  // Subsequent submissions: fire doc_update only. new_order is never re-sent.
+  //
+  // Failure handling: if new_order fails, docflowNewOrderSent is rolled back so the
+  //   next submission retries new_order (and again skips doc_update until it succeeds).
   const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
   console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
+
   if (!project.docflowNewOrderSent) {
-    // Mark attempted immediately before awaiting — prevents double-fire on every submit
-    // if new_order previously failed (network error, wrong URL, etc.).
-    // n8n/Baserow should handle duplicate new_order calls idempotently by order_id.
     project.docflowNewOrderSent = true;
     saveDB();
-    await fireDocFlowNewOrder(project);
+    const ok = await fireDocFlowNewOrder(project, docsUploaded);
+    if (!ok) {
+      // new_order failed — roll back flag so next submit retries.
+      // doc_update is also suppressed this submission (no point updating a row that doesn't exist yet).
+      project.docflowNewOrderSent = false;
+      saveDB();
+    }
+    // doc_update intentionally skipped on first submit — new_order payload contains docs_uploaded.
+  } else {
+    // Subsequent submissions: only doc_update fires.
+    fireDocFlowDocUpdate(project.code, docsUploaded);
   }
-  fireDocFlowDocUpdate(project.code, docsUploaded);
 });
 
 // Pre-upload binary assets (photos + PDFs) so the final submit payload can skip them.

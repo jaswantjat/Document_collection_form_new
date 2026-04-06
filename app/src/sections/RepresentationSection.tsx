@@ -295,8 +295,9 @@ function SignedDocumentPreview({
       onClick={onExpand}
       className="relative w-full block group focus:outline-none"
       aria-label={`Ampliar ${alt}`}
+      style={{ touchAction: 'pan-x' }}
     >
-      <img src={imageDataUrl} alt={alt} className="w-full block" />
+      <img src={imageDataUrl} alt={alt} className="w-full block" draggable={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} />
       <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 group-active:bg-black/15 transition-colors rounded-2xl">
         <div className="flex items-center gap-1.5 bg-black/50 text-white text-xs font-medium px-3 py-1.5 rounded-full opacity-70 group-hover:opacity-100 transition-opacity">
           <ZoomIn className="w-3.5 h-3.5" />
@@ -544,7 +545,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               </div>
             </div>
 
-            {/* Carousel — swipe-only on mobile, no arrow buttons */}
+            {/* Carousel — swipe on mobile, arrow buttons for all devices */}
             <div ref={carouselWrapperRef} className="relative">
               <div
                 ref={carouselRef}
@@ -556,6 +557,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                   <div
                     key={doc.kind}
                     className="min-w-full snap-center overflow-hidden [container-type:inline-size]"
+                    style={{ touchAction: 'pan-x' }}
                   >
                     <SignedDocumentPreview
                       formData={previewFormData}
@@ -566,11 +568,33 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                   </div>
                 ))}
               </div>
+
+              {/* Arrow buttons — overlaid on the carousel, visible when multiple docs */}
+              {docs.length > 1 && activeDocIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => goToDoc(activeDocIndex - 1)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-700 hover:bg-white active:scale-95 transition-all z-10"
+                  aria-label="Documento anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {docs.length > 1 && activeDocIndex < docs.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => goToDoc(activeDocIndex + 1)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-700 hover:bg-white active:scale-95 transition-all z-10"
+                  aria-label="Documento siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {docs.length > 1 && (
               <p className="text-xs text-center text-gray-400">
-                Desliza para ver todos los documentos antes de firmar
+                Desliza o usa las flechas para ver todos los documentos
               </p>
             )}
         </div>

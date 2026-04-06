@@ -717,13 +717,15 @@ export function EnergyCertificateSection({
                   thermal: {
                     ...prev.thermal,
                     heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
-                    radiatorMaterial: value === 'suelo-radiante' ? 'no-aplica' : prev.thermal.radiatorMaterial,
+                    radiatorMaterial: value === 'suelo-radiante'
+                      ? 'no-aplica'
+                      : (prev.thermal.radiatorMaterial === 'no-aplica' ? null : prev.thermal.radiatorMaterial),
                   },
                 }))}
                 error={errors.thermalHeatingEmitterType}
                 columns={3}
               />
-              {data.thermal.heatingEmitterType !== 'suelo-radiante' && (
+              {(data.thermal.heatingEmitterType === 'radiadores-agua' || data.thermal.heatingEmitterType === 'radiadores-electricos') && (
                 <SegmentedOptions
                   label="Material Radiadores"
                   options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
