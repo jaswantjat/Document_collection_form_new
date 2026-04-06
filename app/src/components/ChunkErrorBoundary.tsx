@@ -9,19 +9,41 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  isNetworkError: boolean;
+}
+
+function isChunkLoadError(error: Error): boolean {
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('dynamically imported') ||
+    msg.includes('loading chunk') ||
+    msg.includes('error loading') ||
+    msg.includes('importerror') ||
+    error.name === 'ChunkLoadError'
+  );
 }
 
 export class ChunkErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
+    isNetworkError: false,
   };
 
-  public static getDerivedStateFromError(_: Error): State {
-    return { hasError: true };
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, isNetworkError: isChunkLoadError(error) };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
+    const stack = errorInfo.componentStack?.slice(0, 500) ?? '(no stack)';
+    console.error(
+      '[ChunkErrorBoundary] Caught error:',
+      error.name,
+      '—',
+      error.message,
+      '\nComponent stack (truncated):',
+      stack
+    );
   }
 
   private handleRetry = () => {
@@ -30,6 +52,7 @@ export class ChunkErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const { isNetworkError } = this.state;
       return (
         <div className="min-h-[50vh] flex items-center justify-center p-6">
           <Card className="w-full max-w-md border-destructive/20 shadow-lg">
@@ -41,9 +64,11 @@ export class ChunkErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-gray-600 leading-relaxed">
-                Algo fue mal al cargar esta sección. Esto suele ocurrir debido a una mala conexión a internet.
+                {isNetworkError
+                  ? 'No se pudo cargar esta sección. Comprueba tu conexión a internet e inténtalo de nuevo.'
+                  : 'Se produjo un error inesperado al cargar esta sección. Por favor, recarga la página e inténtalo de nuevo.'}
               </p>
-              <Button 
+              <Button
                 onClick={this.handleRetry}
                 className="w-full bg-eltex-blue hover:bg-eltex-blue/90 text-white font-medium py-6"
               >

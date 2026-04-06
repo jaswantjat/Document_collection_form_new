@@ -24,15 +24,13 @@ import './App.css';
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
 ): React.LazyExoticComponent<T> {
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   return lazy(() =>
-    factory().catch(() =>
-      new Promise<{ default: T }>(resolve => setTimeout(resolve, 1000))
-        .then(() => factory())
-        .catch(() =>
-          new Promise<{ default: T }>(resolve => setTimeout(resolve, 1000))
-            .then(() => factory())
-        )
-    )
+    factory()
+      .catch(() => wait(1000).then(() => factory()))
+      .catch(() => wait(2000).then(() => factory()))
+      .catch(() => wait(3000).then(() => factory()))
+      .catch(() => wait(4000).then(() => factory()))
   );
 }
 
@@ -520,6 +518,9 @@ function FormApp() {
         );
 
       case 'representation':
+        // Eagerly warm the EC chunk while the user is signing so the section
+        // transition is instant and cannot fail due to a lazy-load network blip.
+        import('@/sections/EnergyCertificateSection').catch(() => {/* silently handled by lazyWithRetry */});
         return (
           <RepresentationSection
             formData={formData}

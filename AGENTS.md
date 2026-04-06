@@ -3,6 +3,9 @@
 > Last updated: 2026-04-06
 
 ## Quick-Reference: What Changed Recently
+- **ChunkErrorBoundary now categorises errors**: chunk-load failures (network) vs render errors. Detects via `error.message` keywords ("failed to fetch", "dynamically imported", etc.). Shows different Spanish copy for each case. Still reloads on retry (React.lazy state cannot be reset without reload).
+- **lazyWithRetry upgraded to 5 attempts**: initial + 4 retries at 1 s / 2 s / 3 s / 4 s = 10 s total window. Previously 3 attempts at 1 s / 1 s = 2 s — too short for mobile outages.
+- **Eager EC chunk preload at RepresentationSection render**: `import('@/sections/EnergyCertificateSection').catch(()=>{})` fires while the user is on the signing screen. By the time they tap "Continuar" (5–30 s later), the 20 KB chunk is guaranteed in the ESM cache. This eliminates the lazy-load network window at the representation→energy-certificate transition.
 - **Auth model**: Customer routes need only `code` in URL. No `x-project-token` header sent anywhere. `requireProject` middleware only verifies project exists by code.
 - **Dashboard URL**: `/?code=CODE&source=assessor` — no token, no `&token=` param.
 - **Follow-up routing**: `getInitialSection` returns `'review'` when `hasExistingRepresentationFlow(fd)` is true (signatures done).
@@ -429,13 +432,15 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - TypeScript: 0 errors; both workflows running cleanly
 - Files: `backend/server.js`, `app/src/types/index.ts`, `app/src/lib/dashboardProject.ts`, `app/src/hooks/useFormState.ts`, `app/src/pages/Dashboard.tsx`
 
-### 2026-04-06 — Session: Navigation audit + back-button fixes
+### 2026-04-06 — Session: Navigation audit + back-button fixes + ChunkErrorBoundary hardening
 - First-principles read of App.tsx, Dashboard.tsx, ReviewSection, PropertyDocsSection, EnergyCertificateSection, ReviewSection — full routing picture built
 - Found 4 bugs: PropertyDocs onBack → phone (wrong), EnergyCertificate onBack in followUp → property-docs (wrong), Review onBack in followUp → energy-cert (wrong), handlePhoneConfirmed flash of property-docs before syncInitialSection corrects it
-- Fixed all 4 in a single targeted edit of `app/src/App.tsx`
-- Also corrected stale "Auth Headers" convention in AGENTS.md (x-project-token was removed in T001)
-- Pushed commit `e013abb` → Railway auto-deployed
-- No TypeScript errors; clean Vite compile
+- Investigated ChunkErrorBoundary "Error de carga" after signing: determined boundary catches ALL React errors (render + chunk-load). EC chunk is 20 KB — network failure is possible but unlikely. Two failure modes identified.
+- Fix 1: ChunkErrorBoundary now distinguishes chunk-load errors vs render errors (`isChunkLoadError` detector), shows appropriate Spanish copy per type.
+- Fix 2: lazyWithRetry upgraded from 3 attempts/2 s window → 5 attempts/10 s window (1 s, 2 s, 3 s, 4 s delays).
+- Fix 3: Eager EC chunk preload fires when RepresentationSection renders — chunk guaranteed cached before user finishes signing.
+- TypeScript: 0 errors after all changes.
+- Files changed: `app/src/App.tsx`, `app/src/components/ChunkErrorBoundary.tsx`, `AGENTS.md`
 
 ### 2026-04-05 — Session: followUpMode representation card fix
 - Root cause: `!followUpMode &&` guard in `needsRepresentation` suppressed the representation card for fully-signed customers returning to review
@@ -528,6 +533,18 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - **What happened**: PropertyDocs back → 'phone' (assessor source). EnergyCertificate back → 'property-docs'. Review back → 'energy-certificate'. All wrong for follow-up users who land on 'review' and navigate outward.
 - **Fix**: Check `followUpDocumentFlow` first. If true: back always goes to 'review' (or no back button on review itself).
 - **Rule**: In follow-up mode the user's home base is 'review'. ALL back buttons in sub-sections must return to 'review', not to the "next step behind" in the linear flow.
+
+### ❌ ChunkErrorBoundary caught render errors and blamed the user's internet
+- **When**: Post-signing transition to EnergyCertificateSection (2026-04-06)
+- **What happened**: The boundary catches ALL React errors (render errors + chunk-load failures). A runtime crash inside EnergyCertificateSection would show "Algo fue mal al cargar esta sección. Esto suele ocurrir debido a una mala conexión a internet." — a completely wrong diagnosis that blocks the user from understanding or recovering.
+- **Fix**: `getDerivedStateFromError` now calls `isChunkLoadError(error)` which checks for "failed to fetch", "dynamically imported", etc. Different copy shown per error type.
+- **Rule**: Error boundaries that wrap `React.lazy` MUST distinguish chunk-load errors (network) from render errors (bugs). The messages and recovery paths are different.
+
+### ❌ lazyWithRetry had only 3 attempts over 2 seconds — too fragile for mobile
+- **When**: Post-signing transition on mobile (2026-04-06)
+- **What happened**: Mobile networks can drop for 3–10 s on handover or signal loss. 3 total attempts at 1 s intervals gave only a 2 s window — if all failed, React.lazy permanently rejected the lazy component. Recovery requires a full page reload.
+- **Fix**: Increased to 5 total attempts with 1 s / 2 s / 3 s / 4 s delays = 10 s window.
+- **Rule**: lazyWithRetry needs ≥ 5 attempts with increasing delays to be useful on mobile networks.
 
 ### ❌ `serializeProject` omitted `assetFiles` — dashboard could not see uploaded files
 - **When**: Dashboard showed "No se encontraron archivos descargables" on every document action
