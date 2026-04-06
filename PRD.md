@@ -1,9 +1,9 @@
 # Product Requirements Document
 ## Eltex — Bug Fixes, Extraction Intelligence & UX Improvements
 
-**Version**: 2.0
+**Version**: 2.1
 **Date**: 2026-04-06
-**Status**: In Progress
+**Status**: Decisions Finalised — Ready for Implementation
 **Author**: Agent (from user conversation)
 
 ---
@@ -118,44 +118,60 @@ The root of the race condition is on the **n8n side**: the n8n workflow that han
 
 **Backend-side fix**: Introduce a configurable delay between `new_order` and `doc_update` on first submission. Additionally, the `doc_update` on first submission is redundant — the `new_order` payload already contains `docs_required`. The first `doc_update` can simply be **skipped** when `new_order` was just sent for the first time in this submit call.
 
+### Critical Clarification: When the Webhook Should Fire
+
+The webhook must **only fire when the customer completes the full final submission** — i.e. when they reach the Review screen after completing the Energy Certificate, and the form auto-submits (or they press "Enviar"). It must **not** fire on intermediate auto-saves (the server auto-saves `formData` every time the form state changes, but these should never trigger webhooks).
+
+**Current flow confirmed:**
+1. Customer completes Energy Certificate → `onContinue` fires → `setAutoSubmitReview(true)` → navigates to `ReviewSection`.
+2. `ReviewSection` detects `autoSubmit=true` on mount → calls `submit()` → calls `POST /api/project/:code/submit`.
+3. That endpoint is the only place webhooks fire. Auto-saves go to `POST /api/project/:code/save`, which does NOT fire any webhook. ✅
+
+This means the webhook trigger timing is **already correct** — webhooks only fire on final submit. The problem is purely the simultaneous `new_order` + `doc_update` race on that first final submit.
+
 ### User Story
 
-> As an Eltex operations engineer, when a customer submits their form for the first time, I want n8n to receive a `new_order` call, create the Baserow record, and only then receive the `doc_update` call — never both simultaneously, and never with a race condition.
+> As an Eltex operations engineer, when a customer completes and submits their full form (after the Energy Certificate), I want n8n to receive a single `new_order` call that contains all document information — no separate `doc_update` on the same submission, and no race conditions. On subsequent returns (customer re-opens form to add missing docs), only `doc_update` fires.
+
+### Accepted Decisions
+
+- **Skip `doc_update` on first submit** — include `docs_uploaded` inside `new_order` payload instead. One call, no race.
+- On subsequent submissions, only `doc_update` fires (unchanged from current behaviour).
+- If `new_order` fails, `doc_update` is also suppressed for that submission.
 
 ### Acceptance Criteria
 
-- [ ] On a customer's **first ever submission**, only `new_order` fires (no simultaneous `doc_update`). The `doc_update` on first submission is suppressed because `new_order` already carries all required doc information.
-- [ ] On **subsequent submissions** (customer returns to add more docs), only `doc_update` fires. `new_order` is never re-sent (existing guard `docflowNewOrderSent` remains in place).
-- [ ] If `new_order` fails (network error, timeout), `doc_update` is NOT fired for that submission — the next submission retries `new_order` first.
-- [ ] The `new_order` payload is enriched to include `docs_uploaded` (the same list that `doc_update` would have sent), so n8n has full information in a single call on first submission.
-- [ ] A configurable minimum delay (default: 2 seconds) is added between `new_order` completion and `doc_update` on first submissions, as a fallback safety buffer. This delay is configurable via environment variable `DOCFLOW_DOC_UPDATE_DELAY_MS` (default `2000`).
-- [ ] All webhook call outcomes are logged with `[DocFlow]` prefix at the server console for observability.
+- [ ] On a customer's **first final submission**, only `new_order` fires. It includes `docs_uploaded` in its payload. No `doc_update` is sent.
+- [ ] On **subsequent submissions** (customer returns after initial submit to add more docs), only `doc_update` fires. `new_order` is never re-sent.
+- [ ] If `new_order` fails (network error, timeout), `doc_update` is NOT fired. `docflowNewOrderSent` is NOT set to true, so the next submission retries `new_order`.
+- [ ] The `new_order` payload includes: `order_id`, `customer_name`, `phone`, `locale`, `contract_date`, `docs_required`, and **`docs_uploaded`** (new field).
+- [ ] The webhook is never triggered from the auto-save endpoint (`POST /api/project/:code/save`). It only fires from the final submit endpoint (`POST /api/project/:code/submit`).
+- [ ] All webhook outcomes are logged at the server console with `[DocFlow]` prefix.
 
 ### Technical Design
 
 **File: `backend/server.js`** — modify the submit handler's DocFlow block:
 
 ```javascript
-// ── DocFlow webhook sequence ──────────────────────────────────────────────────
 const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
 const isFirstSubmit = !project.docflowNewOrderSent;
 
 if (isFirstSubmit) {
   project.docflowNewOrderSent = true;
   saveDB();
-  const ok = await fireDocFlowNewOrder(project, docsUploaded); // pass docs list
+  const ok = await fireDocFlowNewOrder(project, docsUploaded);
   if (!ok) {
-    // new_order failed — do not fire doc_update; will retry on next submit
+    // new_order failed — reset flag so next submit retries
     project.docflowNewOrderSent = false;
     saveDB();
   }
-  // On first submit: doc_update is skipped (new_order payload already contains docs)
+  // doc_update intentionally skipped — new_order already carries docs_uploaded
 } else {
   fireDocFlowDocUpdate(project.code, docsUploaded);
 }
 ```
 
-**Modify `fireDocFlowNewOrder`** to accept `docsUploaded` and include it in the payload:
+**Modify `fireDocFlowNewOrder`** to accept and include `docs_uploaded`:
 
 ```javascript
 async function fireDocFlowNewOrder(project, docsUploaded = []) {
@@ -167,9 +183,9 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
     locale: project.customerLanguage || 'es',
     contract_date: project.createdAt,
     docs_required: project.docsRequired || [],
-    docs_uploaded: docsUploaded,   // ← NEW: eliminates need for separate doc_update
+    docs_uploaded: docsUploaded,   // ← NEW
   };
-  // ... rest unchanged
+  // ... rest of function unchanged
 }
 ```
 
@@ -205,7 +221,7 @@ Additionally, the arrow button (next slide) is visible on mobile and is the only
 - [ ] Swiping left on mobile navigates to the next document; swiping right navigates to the previous document.
 - [ ] The `activeDocIndex` state correctly tracks the document shown after a swipe (pagination dots update).
 - [ ] The canvas/image element inside each slide does NOT intercept touch events — swipe flows through to the scroll container.
-- [ ] The arrow button (next) remains visible as an alternative navigation option.
+- [ ] The arrow button (next/previous) remains visible on all devices as an alternative navigation option. **Decision: keep arrow buttons — some users prefer tapping.**
 - [ ] Swipe works on both iOS Safari and Android Chrome.
 - [ ] The `onScroll` sync (updating `activeDocIndex`) continues to function after a swipe.
 - [ ] No regression to the auto-tour or signature sync behaviour.
@@ -261,7 +277,7 @@ postalCode:  contract → EB → IBI → representation manual
 - [ ] `province` fallback chain: `contract → EB.provincia → IBI.provincia → DNI back (not available) → null`.
 - [ ] `firstName` / `lastName`: when DNI front is absent, attempt to derive from `fullName` (split on first space: first token = firstName, rest = lastName) using the best available source (contract → EB.titular → IBI.titular). Store derived values only if not overriding real DNI data.
 - [ ] `cups` is stored in `formData.electricityBill.pages[0].extraction.extractedData.cups` and is surfaced in the Energy Certificate form's thermal/electrical step as a pre-filled read-only field (if present).
-- [ ] `tipoFase` (single/three-phase) from EB extraction is pre-filled into the Energy Certificate section's relevant field automatically when the EC section is first opened.
+- [ ] `tipoFase` (single/three-phase) from EB extraction is surfaced in the Energy Certificate section as a **pre-filled suggestion** — the field shows the extracted value but is highlighted to indicate the assessor must explicitly confirm it before proceeding. **Decision: suggestion requiring confirmation, not silent auto-fill.**
 - [ ] `referenciaCatastral` from IBI extraction continues to pre-fill the EC section (already implemented — verify it still works).
 - [ ] `municipality` fallback: `contract → EB → DNI back → IBI → null` (IBI fallback added where missing).
 - [ ] All field fallback chains are applied **both** in the backend (`resolveCustomerSnapshot`) and in the frontend PDF overlay builder so the two are in sync.
@@ -444,14 +460,14 @@ Also update the validation logic (wherever `thermalRadiatorMaterial` is validate
 
 ---
 
-## Open Questions
+## Decisions Log (all resolved)
 
-- Q: For Issue 4 (extraction intelligence) — should `tipoFase` from the electricity bill auto-fill the energy certificate field, or only be shown as a suggestion that the assessor can accept?
-  - **Decision needed from user.**
-- Q: For Issue 2 (n8n) — should we add a configurable delay (e.g. 2s) between `new_order` and `doc_update`, or should we simply skip the `doc_update` on first submission entirely (since `new_order` will now carry `docs_uploaded`)?
-  - **Recommendation**: skip `doc_update` on first submit. Confirm with user.
-- Q: For Issue 3 (swipe) — should the arrow button be removed on mobile once swipe works, or kept as an additional control?
-  - **Decision needed from user.**
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | n8n first submit: skip `doc_update` or add delay? | **Skip `doc_update`** — include `docs_uploaded` in `new_order` payload instead |
+| 2 | `tipoFase` auto-fill or suggestion? | **Pre-filled suggestion** — assessor must explicitly confirm before proceeding |
+| 3 | Arrow button on carousel after swipe works? | **Keep arrow button** on all devices — some users prefer tapping |
+| 4 | When does webhook fire? | **Only on final form submit** (`POST /api/project/:code/submit`). Confirmed it already never fires on auto-save. |
 
 ---
 
@@ -461,3 +477,4 @@ Also update the validation logic (wherever `thermalRadiatorMaterial` is validate
 |------|---------|--------|
 | 2026-04-04 | 1.0 | Initial PRD — section persistence, signature UX, carousel crop |
 | 2026-04-06 | 2.0 | Full rewrite: 6 new issues from user — phone/state bug, n8n double-fire, swipe carousel, extraction intelligence, continue button stuck, radiator conditional |
+| 2026-04-06 | 2.1 | All open questions resolved: skip doc_update on first submit, tipoFase as suggestion, keep arrow button, confirmed webhook fires only on final submit |
