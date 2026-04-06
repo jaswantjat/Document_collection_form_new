@@ -179,6 +179,9 @@ export interface EnergyCertificateThermalData {
   airConditioningDetails: string;
   heatingEmitterType: 'radiadores-agua' | 'radiadores-electricos' | 'suelo-radiante' | null;
   radiatorMaterial: 'hierro-fundido' | 'aluminio' | 'no-aplica' | null;
+  tipoFase?: 'monofasica' | 'trifasica' | null;
+  tipoFaseConfirmed?: boolean;
+  cups?: string;
 }
 
 export interface EnergyCertificateAdditionalData {

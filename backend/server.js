@@ -489,6 +489,21 @@ function getProjectSnapshot(formData) {
   const contract = formData?.contract?.extraction?.extractedData || {};
   const representation = formData?.representation || {};
 
+  const fullName = contract.fullName || dniFront.fullName || eb.titular || ibi.titular || '';
+  let firstName = dniFront.firstName || null;
+  let lastName = dniFront.lastName || null;
+
+  // Derive firstName/lastName if DNI is missing
+  if (!firstName && fullName) {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length > 0) {
+      firstName = parts[0];
+      if (parts.length > 1) {
+        lastName = parts.slice(1).join(' ');
+      }
+    }
+  }
+
   return {
     location: getEffectiveLocation(formData),
     dniFront,
@@ -498,13 +513,13 @@ function getProjectSnapshot(formData) {
     contract,
     representation,
     // Contract is first priority; fall back to other document sources
-    fullName: contract.fullName || dniFront.fullName || eb.titular || ibi.titular || '',
-    firstName: dniFront.firstName || null,
-    lastName: dniFront.lastName || null,
+    fullName,
+    firstName,
+    lastName,
     dniNumber: contract.nif || dniFront.dniNumber || eb.nifTitular || ibi.titularNif || '',
     address: contract.address || eb.direccionSuministro || dniBack.address || ibi.direccion || '',
     municipality: contract.municipality || eb.municipio || dniBack.municipality || ibi.municipio || '',
-    province: contract.province || eb.provincia || '',
+    province: contract.province || eb.provincia || ibi.provincia || '',
     postalCode: contract.postalCode || eb.codigoPostal || ibi.codigoPostal || representation.postalCode || '',
   };
 }

@@ -57,9 +57,14 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
       errs.thermalAirConditioningDetails = 'Introduce la marca y año del aire acondicionado';
     }
     if (!t.heatingEmitterType) errs.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción';
-    if (t.heatingEmitterType && t.heatingEmitterType !== 'suelo-radiante' && !t.radiatorMaterial) {
+    if ((t.heatingEmitterType === 'radiadores-agua' || t.heatingEmitterType === 'radiadores-electricos') && !t.radiatorMaterial) {
       errs.thermalRadiatorMaterial = 'Selecciona el material de los radiadores';
     }
+    if (!t.tipoFase) errs.thermalTipoFase = 'Selecciona el tipo de fase';
+    if (t.tipoFase && t.tipoFaseConfirmed === false) {
+      errs.thermalTipoFase = 'Por favor, confirma el tipo de fase extraído de la factura';
+    }
+    if (!String(t.cups ?? '').trim()) errs.thermalCups = 'Introduce el código CUPS';
   }
 
   if (stepKey === 'additional') {

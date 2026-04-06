@@ -370,6 +370,16 @@ function FormApp() {
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;
+
+        // Gracefully handle "Project Not Found" (404) by redirecting to phone entry.
+        // This fixes the "stale code" issue where a deleted project shows an error screen.
+        if (err?.message === 'PROJECT_NOT_FOUND' || err?.status === 404) {
+          if (urlCode) clearLocalBackup(urlCode);
+          setProject(null);
+          navigate('/', { replace: true });
+          return;
+        }
+
         setProject(null);
         setLoadError('NETWORK_ERROR');
       })

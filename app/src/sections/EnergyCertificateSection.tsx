@@ -311,6 +311,10 @@ export function EnergyCertificateSection({
       ibiExtraction?.manualCorrections?.referenciaCatastral ??
       (ibiExtraction?.extractedData?.referenciaCatastral as string | null | undefined);
 
+    const ebExtraction = formData.electricityBill.pages?.[0]?.extraction;
+    const ebCups = ebExtraction?.extractedData?.cups as string | undefined;
+    const ebTipoFase = ebExtraction?.extractedData?.tipoFase as EnergyCertificateData['thermal']['tipoFase'] | undefined;
+
     const defaultProduct =
       project.productType === 'solar' ? 'solo-paneles'
       : project.productType === 'aerothermal' ? 'solo-aerotermia'
@@ -319,19 +323,29 @@ export function EnergyCertificateSection({
 
     const needsCatastral = !!(ibiCatastral && !data.housing.cadastralReference);
     const needsSoldProduct = !!(defaultProduct && !data.additional.soldProduct);
+    const needsCups = !!(ebCups && !data.thermal.cups);
+    const needsTipoFase = !!(ebTipoFase && !data.thermal.tipoFase);
 
-    if (!needsCatastral && !needsSoldProduct) return;
+    if (!needsCatastral && !needsSoldProduct && !needsCups && !needsTipoFase) return;
 
     onChange({
       ...data,
       status: data.status === 'not-started' ? 'in-progress' : data.status,
       housing: needsCatastral ? { ...data.housing, cadastralReference: ibiCatastral! } : data.housing,
       additional: needsSoldProduct ? { ...data.additional, soldProduct: defaultProduct } : data.additional,
+      thermal: {
+        ...data.thermal,
+        cups: needsCups ? ebCups : data.thermal.cups,
+        tipoFase: needsTipoFase ? ebTipoFase : data.thermal.tipoFase,
+        tipoFaseConfirmed: needsTipoFase ? false : data.thermal.tipoFaseConfirmed,
+      },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     formData.ibi.extraction?.manualCorrections?.referenciaCatastral,
     formData.ibi.extraction?.extractedData?.referenciaCatastral,
+    formData.electricityBill.pages?.[0]?.extraction?.extractedData?.cups,
+    formData.electricityBill.pages?.[0]?.extraction?.extractedData?.tipoFase,
     project.productType,
   ]);
 
@@ -712,16 +726,19 @@ export function EnergyCertificateSection({
                 label="Tipo de Calefacción"
                 options={HEATING_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
                 value={data.thermal.heatingEmitterType}
-                onChange={(value) => mutate((prev) => ({
-                  ...prev,
-                  thermal: {
-                    ...prev.thermal,
-                    heatingEmitterType: value as EnergyCertificateData['thermal']['heatingEmitterType'],
-                    radiatorMaterial: value === 'suelo-radiante'
-                      ? 'no-aplica'
-                      : (prev.thermal.radiatorMaterial === 'no-aplica' ? null : prev.thermal.radiatorMaterial),
-                  },
-                }))}
+                onChange={(value) => {
+                  const val = value as EnergyCertificateData['thermal']['heatingEmitterType'];
+                  mutate((prev) => ({
+                    ...prev,
+                    thermal: {
+                      ...prev.thermal,
+                      heatingEmitterType: val,
+                      radiatorMaterial: (val === 'radiadores-agua' || val === 'radiadores-electricos')
+                        ? (prev.thermal.radiatorMaterial === 'no-aplica' ? null : prev.thermal.radiatorMaterial)
+                        : 'no-aplica',
+                    },
+                  }));
+                }}
                 error={errors.thermalHeatingEmitterType}
                 columns={3}
               />
@@ -729,12 +746,57 @@ export function EnergyCertificateSection({
                 <SegmentedOptions
                   label="Material Radiadores"
                   options={RADIATOR_MATERIAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                  value={data.thermal.radiatorMaterial}
+                  value={data.thermal.radiatorMaterial === 'no-aplica' ? null : data.thermal.radiatorMaterial}
                   onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, radiatorMaterial: value as EnergyCertificateData['thermal']['radiatorMaterial'] } }))}
                   error={errors.thermalRadiatorMaterial}
                   columns={3}
                 />
               )}
+
+              <Field
+                label="Código CUPS (de la factura)"
+                value={data.thermal.cups || ''}
+                onChange={(value) => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, cups: value.toUpperCase() } }))}
+                placeholder="ES0000..."
+                error={errors.thermalCups}
+              />
+
+              <div className="space-y-3">
+                <SegmentedOptions
+                  label="Tipo de Fase"
+                  options={[
+                    { value: 'monofasica', label: 'Monofásica' },
+                    { value: 'trifasica', label: 'Trifásica' },
+                  ]}
+                  value={data.thermal.tipoFase || null}
+                  onChange={(value) => mutate((prev) => ({
+                    ...prev,
+                    thermal: {
+                      ...prev.thermal,
+                      tipoFase: value as 'monofasica' | 'trifasica',
+                      tipoFaseConfirmed: true, // Manually selecting always confirms
+                    },
+                  }))}
+                  error={errors.thermalTipoFase}
+                />
+
+                {data.thermal.tipoFase && data.thermal.tipoFaseConfirmed === false && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl animate-pulse">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-amber-800">Sugerencia de la IA</p>
+                      <p className="text-[11px] text-amber-700">Confirma si el tipo de fase es correcto.</p>
+                      <button
+                        type="button"
+                        onClick={() => mutate((prev) => ({ ...prev, thermal: { ...prev.thermal, tipoFaseConfirmed: true } }))}
+                        className="mt-1.5 px-3 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-bold rounded-lg transition-colors"
+                      >
+                        Confirmar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

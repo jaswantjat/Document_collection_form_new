@@ -297,8 +297,18 @@ function SignedDocumentPreview({
       aria-label={`Ampliar ${alt}`}
       style={{ touchAction: 'pan-x' }}
     >
-      <img src={imageDataUrl} alt={alt} className="w-full block" draggable={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} />
-      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 group-active:bg-black/15 transition-colors rounded-2xl">
+      <img
+        src={imageDataUrl}
+        alt={alt}
+        className="w-full block"
+        draggable={false}
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          pointerEvents: 'none',
+        } as React.CSSProperties}
+      />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 group-active:bg-black/15 transition-colors rounded-2xl pointer-events-none">
         <div className="flex items-center gap-1.5 bg-black/50 text-white text-xs font-medium px-3 py-1.5 rounded-full opacity-70 group-hover:opacity-100 transition-opacity">
           <ZoomIn className="w-3.5 h-3.5" />
           Toca para leer
@@ -419,6 +429,17 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
       setActiveDocIndex(Math.round(scrollLeft / clientWidth));
     }
   }, []);
+
+  // For iOS compatibility, we explicitly track scroll end to ensure the
+  // active index updates even if the native onScroll event is throttled.
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    
+    const handleScrollEnd = () => handleCarouselScroll();
+    el.addEventListener('scrollend', handleScrollEnd);
+    return () => el.removeEventListener('scrollend', handleScrollEnd);
+  }, [handleCarouselScroll]);
 
   const goToDoc = (i: number) => {
     if (!carouselRef.current) return;
@@ -550,8 +571,25 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               <div
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
+                onTouchStart={() => {
+                  // On touch, we ensure scroll-snap-stop is set to always
+                  // to prevent over-scrolling through multiple documents
+                  if (carouselRef.current) {
+                    carouselRef.current.style.scrollSnapStop = 'always';
+                  }
+                }}
+                onTouchEnd={() => {
+                  // After touch, we let handleCarouselScroll or scrollend update the index
+                  // but we also check for a small nudge after 300ms if no scroll event fired.
+                  setTimeout(handleCarouselScroll, 300);
+                }}
                 className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' } as React.CSSProperties}
+                style={{
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch',
+                  touchAction: 'pan-x',
+                  msOverflowStyle: 'none',
+                } as React.CSSProperties}
               >
                 {docs.map((doc) => (
                   <div

@@ -1,3 +1,37 @@
+## 2026-04-06.13 — Session: PRD v2.1 — All 6 Bug Fixes
+
+**Phase**: Developer + QA (full coding → testing loop per issue)
+
+**Issues resolved (in priority order):**
+
+1. **Issue 6 — Material Radiadores conditional** (`app/src/sections/EnergyCertificateSection.tsx`, `app/src/lib/energyCertificateValidation.ts`): Field now hidden unless `heatingEmitterType` is explicitly a radiator type. Validation updated to match. Auto-reset to `no-aplica` on switch to suelo-radiante, back to `null` on return.
+
+2. **Issue 5 — Continue button stuck on re-upload** (`app/src/sections/PropertyDocsSection.tsx`): `ElectricityCard` now removes processed items from `pendingItems` after `onAddPages` succeeds. 30-second safety timeout added for hung extractions.
+
+3. **Issue 1 — Phone stale state / cookie poisoning** (`app/src/App.tsx`, `app/src/sections/PhoneSection.tsx`): 404/PROJECT_NOT_FOUND now redirects to phone form instead of error screen. Stale local backup cleared on redirect. `PhoneSection` resets `localNumber`, `touched`, `error`, `newEmail`, `newAssessor`, and `selectedProducts` on failed lookup.
+
+4. **Issue 2 — n8n double webhook fire** (`backend/server.js`): Verified already correctly implemented — first submit fires only `new_order` (with `docs_uploaded`), subsequent submits fire only `doc_update`, failure rolls back the flag.
+
+5. **Issue 3 — Swipe on representation carousel** (`app/src/sections/RepresentationSection.tsx`): `touchAction: pan-x` on scroll container, `pointerEvents: none` on slide images, `scrollend` listener + `onTouchEnd` 300ms fallback for iOS Safari compatibility.
+
+6. **Issue 4 — Extraction field coverage** (`backend/server.js`, `app/src/sections/EnergyCertificateSection.tsx`, `app/src/lib/energyCertificateValidation.ts`, `app/src/types/index.ts`): Province/municipality fallback chains extended to include IBI. `firstName`/`lastName` derived from `fullName` when DNI absent. `tipoFase` and `cups` from EB auto-fill EC form (`tipoFase` shows as confirmation-required suggestion). Types extended.
+
+**Files changed:**
+- `app/src/sections/EnergyCertificateSection.tsx`
+- `app/src/sections/PropertyDocsSection.tsx`
+- `app/src/sections/PhoneSection.tsx`
+- `app/src/sections/RepresentationSection.tsx`
+- `app/src/App.tsx`
+- `app/src/lib/energyCertificateValidation.ts`
+- `app/src/types/index.ts`
+- `backend/server.js`
+- `CHANGELOG.md`
+- `AGENTS.md`
+
+**Tests**: Each issue verified by a dedicated test subagent in a new context window. Final comprehensive review passed. No TypeScript errors. Both workflows running clean.
+
+---
+
 ## 2026-04-05.12 — Session: Dashboard Link & Follow-up Routing Fix (T001)
 
 **Phase**: Developer

@@ -185,8 +185,18 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
     setLoading(true); setError('');
     try {
       const res = await lookupByPhone(combined);
-      if (res.success && res.project) { onPhoneConfirmed(combined, res.project); }
-      else { setShowNewForm(true); }
+      if (res.success && res.project) {
+        onPhoneConfirmed(combined, res.project);
+      } else {
+        // Reset relevant state for a clean "New Project" form view
+        setError('');
+        setLocalNumber('');
+        setTouched(false);
+        setNewEmail('');
+        setNewAssessor('');
+        setSelectedProducts(new Set(['solar']));
+        setShowNewForm(true);
+      }
     } catch { setError('Sin conexión. Inténtalo de nuevo.'); }
     finally { setLoading(false); }
   };

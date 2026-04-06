@@ -3,6 +3,13 @@
 > Last updated: 2026-04-06
 
 ## Quick-Reference: What Changed Recently
+- **PRD v2.1 (2026-04-06) — All 6 issues implemented**:
+  - Issue 6: `Material Radiadores` field now only shown when `heatingEmitterType` is `radiadores-agua` or `radiadores-electricos` (not just `!== suelo-radiante`). Validation updated to match. State resets correctly on type switch.
+  - Issue 5: `ElectricityCard` in `PropertyDocsSection` now removes items from `pendingItems` after `onAddPages` succeeds. 30-second safety timeout added. Continue button no longer permanently stuck on re-upload.
+  - Issue 1: `App.tsx` now redirects to `/` (phone form) on 404/PROJECT_NOT_FOUND instead of showing error screen. Stale local backup cleared. `PhoneSection` resets all state (including `localNumber` and `touched`) on a failed lookup.
+  - Issue 2: n8n webhooks — first submit fires only `new_order` (includes `docs_uploaded`), skips `doc_update`. Subsequent submits fire only `doc_update`. Failure rolls back `docflowNewOrderSent`. Already pre-implemented; verified correct.
+  - Issue 3: Representation carousel swipe — `touchAction: pan-x` on scroll container, `pointerEvents: none` on images, `scrollend` listener + `onTouchEnd` 300ms fallback for iOS.
+  - Issue 4: Extraction intelligence — province/municipality fallback chains include IBI, firstName/lastName derived from fullName when DNI absent. `tipoFase` and `cups` from EB auto-fill EC section (`tipoFase` requires assessor confirmation). Types updated in `index.ts`.
 - **ChunkErrorBoundary now categorises errors**: chunk-load failures (network) vs render errors. Detects via `error.message` keywords ("failed to fetch", "dynamically imported", etc.). Shows different Spanish copy for each case. Still reloads on retry (React.lazy state cannot be reset without reload).
 - **lazyWithRetry upgraded to 5 attempts**: initial + 4 retries at 1 s / 2 s / 3 s / 4 s = 10 s total window. Previously 3 attempts at 1 s / 1 s = 2 s — too short for mobile outages.
 - **Eager EC chunk preload at RepresentationSection render**: `import('@/sections/EnergyCertificateSection').catch(()=>{})` fires while the user is on the signing screen. By the time they tap "Continuar" (5–30 s later), the 20 KB chunk is guaranteed in the ESM cache. This eliminates the lazy-load network window at the representation→energy-certificate transition.

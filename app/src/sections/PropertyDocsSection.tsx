@@ -1168,18 +1168,23 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
       };
 
       const newPhotos: UploadedPhoto[] = [];
+      const processedIds: string[] = [];
+
       for (const { file, id, preview, width, height } of validFiles) {
         const photo = createUploadedPhoto(file, preview, width, height);
         const isDuplicate = pages.some(p => p.photo?.preview === photo.preview);
         if (!isDuplicate) {
           newPhotos.push(photo);
         }
-        setPendingItems(prev => prev.filter(p => p.id !== id));
+        processedIds.push(id);
       }
 
       if (newPhotos.length > 0 || uploadedOriginalPdfs.length > 0) {
         onAddPages(newPhotos, extraction, uploadedOriginalPdfs);
       }
+
+      // Remove from pending only after onAddPages is called
+      setPendingItems(prev => prev.filter(p => !processedIds.includes(p.id)));
     } catch {
       const errMsg = 'Error de conexión. Inténtalo de nuevo.';
       setPendingItems(prev => prev.map(p =>
