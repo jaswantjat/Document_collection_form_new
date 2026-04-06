@@ -189,8 +189,8 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
         onPhoneConfirmed(combined, res.project);
       } else {
         // Reset relevant state for a clean "New Project" form view
+        // Note: localNumber is intentionally kept — it carries the phone into create()
         setError('');
-        setLocalNumber('');
         setTouched(false);
         setNewEmail('');
         setNewAssessor('');
