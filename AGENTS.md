@@ -1,10 +1,18 @@
 # AGENTS.md
 > This file is the AI agent's persistent memory. Read fully every session. Update before ending.
-> Last updated: 2026-04-05.12
-- Dashboard formulario link: removed token param (no longer needed by backend).
-- Follow-up routing: now lands on 'review' instead of 'property-docs' to show summary first.
-- IBI detection: added repeating-char check for RC (4+ chars) and "all-null" safety override to reject blanks AI missed.
-- Electricity prompt: explicitly reject gas/water/phone bills; added blank template detection; added screen-photo guidance.
+> Last updated: 2026-04-06
+
+## Quick-Reference: What Changed Recently
+- **Auth model**: Customer routes need only `code` in URL. No `x-project-token` header sent anywhere. `requireProject` middleware only verifies project exists by code.
+- **Dashboard URL**: `/?code=CODE&source=assessor` — no token, no `&token=` param.
+- **Follow-up routing**: `getInitialSection` returns `'review'` when `hasExistingRepresentationFlow(fd)` is true (signatures done).
+- **Navigation back-button logic** (all in App.tsx):
+  - PropertyDocs `onBack`: shown only when `followUpDocumentFlow=true` → goes to `'review'`
+  - EnergyCertificate `onBack` in followUp: goes to `'review'` (was `'property-docs'`)
+  - Review `onBack` in followUp: hidden (`undefined`) — no stray back into energy-cert
+  - `handlePhoneConfirmed`: calls `getInitialSection(...)` — no flash of property-docs for returning users
+- **IBI detection**: repeating-char RC check (4+ chars) + all-null blank-template rejection override.
+- **Electricity prompt**: rejects gas/water/phone bills; blank template detection; screen-photo guidance.
 
 ---
 
@@ -125,7 +133,7 @@ Dashboard password (dev): `eltex2025`
 ```
 
 ### Auth Headers
-- Customer routes → `x-project-token: <project.accessToken>`
+- Customer routes → **no auth header** — `requireProject` middleware only checks project exists by code. Token auth was fully removed (2026-04-05 T001).
 - Admin/dashboard routes → `x-dashboard-token: <session token from /api/dashboard/login>`
 
 ### API Paths
@@ -369,6 +377,18 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
   - QA verified: all checks PASS, TypeScript 0 errors.
   - Files: `app/src/App.tsx`, `app/src/components/ChunkErrorBoundary.tsx` (new)
 
+### ✅ Completed (continued)
+
+- **[2026-04-06] Navigation back-button audit + handlePhoneConfirmed flash fix**
+  - Deep first-principles read of entire App.tsx routing logic identified 4 bugs:
+  - **Bug 1 — PropertyDocs onBack wrong target**: `source === 'assessor' ? () => goTo('phone') : undefined` sent follow-up customers to the phone-entry screen. Fixed: `followUpDocumentFlow ? () => goTo('review') : undefined`.
+  - **Bug 2 — EnergyCertificate onBack wrong target in followUp**: went to `'property-docs'`. Fixed: goes to `'review'`.
+  - **Bug 3 — Review onBack visible in followUp**: "Volver" button took follow-up customers back to energy-certificate. Fixed: `onBack={followUpDocumentFlow ? undefined : ...}` — button hidden in follow-up mode.
+  - **Bug 4 — handlePhoneConfirmed flash**: hardcoded `goTo('property-docs')` fired before `syncInitialSection` effect corrected it — returning customers briefly saw property-docs. Fixed: `goTo(getInitialSection(normalizedProject, foundProject.code))` — no flash, direct to correct section.
+  - TypeScript: 0 errors, clean Vite compile.
+  - Deployed: commit `e013abb` → Railway SUCCESS (live at documentos.eltex.es).
+  - File: `app/src/App.tsx`
+
 ### 📋 To Do
 - None
 
@@ -408,6 +428,14 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - Dashboard detail panel: new conditional 3-column info row (Nombre / Apellidos / Idioma del navegador) with `languageLabel()` helper (Intl.DisplayNames)
 - TypeScript: 0 errors; both workflows running cleanly
 - Files: `backend/server.js`, `app/src/types/index.ts`, `app/src/lib/dashboardProject.ts`, `app/src/hooks/useFormState.ts`, `app/src/pages/Dashboard.tsx`
+
+### 2026-04-06 — Session: Navigation audit + back-button fixes
+- First-principles read of App.tsx, Dashboard.tsx, ReviewSection, PropertyDocsSection, EnergyCertificateSection, ReviewSection — full routing picture built
+- Found 4 bugs: PropertyDocs onBack → phone (wrong), EnergyCertificate onBack in followUp → property-docs (wrong), Review onBack in followUp → energy-cert (wrong), handlePhoneConfirmed flash of property-docs before syncInitialSection corrects it
+- Fixed all 4 in a single targeted edit of `app/src/App.tsx`
+- Also corrected stale "Auth Headers" convention in AGENTS.md (x-project-token was removed in T001)
+- Pushed commit `e013abb` → Railway auto-deployed
+- No TypeScript errors; clean Vite compile
 
 ### 2026-04-05 — Session: followUpMode representation card fix
 - Root cause: `!followUpMode &&` guard in `needsRepresentation` suppressed the representation card for fully-signed customers returning to review
@@ -488,6 +516,18 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 - **When**: Adding `useDebounce` import to `RepresentationSection.tsx`
 - **What happened**: Vite HMR error — module not found
 - **Fix**: Create the file first, then add the import
+
+### ❌ `handlePhoneConfirmed` hardcoded `goTo('property-docs')` — flash for returning users
+- **When**: Initial implementation of phone-confirm flow
+- **What happened**: `goTo('property-docs')` set section immediately; `syncInitialSection` useEffect corrected it a render later → visible flash of wrong section for returning customers
+- **Fix**: Call `goTo(getInitialSection(normalizedProject, foundProject.code))` directly — skip the intermediate wrong state
+- **Rule**: Never hardcode a section destination when `getInitialSection` is available. Always derive the target from project state.
+
+### ❌ Back buttons routed to wrong sections in follow-up mode
+- **When**: Original implementation assumed linear forward flow for all users
+- **What happened**: PropertyDocs back → 'phone' (assessor source). EnergyCertificate back → 'property-docs'. Review back → 'energy-certificate'. All wrong for follow-up users who land on 'review' and navigate outward.
+- **Fix**: Check `followUpDocumentFlow` first. If true: back always goes to 'review' (or no back button on review itself).
+- **Rule**: In follow-up mode the user's home base is 'review'. ALL back buttons in sub-sections must return to 'review', not to the "next step behind" in the linear flow.
 
 ### ❌ `serializeProject` omitted `assetFiles` — dashboard could not see uploaded files
 - **When**: Dashboard showed "No se encontraron archivos descargables" on every document action
