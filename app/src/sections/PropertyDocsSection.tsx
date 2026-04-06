@@ -760,38 +760,48 @@ function DNICard({
 
     const preparedFileResults = await Promise.all(splitFiles.map(async ({ file, skipBlurCheck }, index) => {
       const id = newItems[index].id;
-      // Generate preview immediately so it can be shown even if blur check fails
-      const tempPreviewUrl = URL.createObjectURL(file);
-      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
+      try {
+        // Generate preview immediately so it can be shown even if blur check fails
+        const tempPreviewUrl = URL.createObjectURL(file);
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
 
-      const check = await validatePhoto(file, { skipBlurCheck });
-      if (!check.valid) {
+        const check = await validatePhoto(file, { skipBlurCheck });
+        if (!check.valid) {
+          setPendingItems(prev => prev.map(p => p.id === id ? {
+            ...p,
+            status: 'failed' as const,
+            error: check.error || 'Imagen no válida.',
+            reason: check.reason === 'blurry' ? 'blurry' : 'other',
+          } : p));
+          return null;
+        }
+
+        // Convert to persistent base64 preview and revoke the temp object URL
+        const [preview, raw] = await Promise.all([
+          fileToPreview(file),
+          fileToBase64(file),
+        ]);
+        URL.revokeObjectURL(tempPreviewUrl);
+        const base64 = await compressImageForAI(raw);
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
+
+        return {
+          id,
+          file,
+          preview,
+          base64,
+          width: check.width,
+          height: check.height,
+        };
+      } catch {
+        // Any unexpected error during validation/preview — mark as failed so isBusy resets
         setPendingItems(prev => prev.map(p => p.id === id ? {
           ...p,
           status: 'failed' as const,
-          error: check.error || 'Imagen no válida.',
-          reason: check.reason === 'blurry' ? 'blurry' : 'other',
+          error: 'Error al procesar el archivo.',
         } : p));
         return null;
       }
-
-      // Convert to persistent base64 preview and revoke the temp object URL
-      const [preview, raw] = await Promise.all([
-        fileToPreview(file),
-        fileToBase64(file),
-      ]);
-      URL.revokeObjectURL(tempPreviewUrl);
-      const base64 = await compressImageForAI(raw);
-      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
-
-      return {
-        id,
-        file,
-        preview,
-        base64,
-        width: check.width,
-        height: check.height,
-      };
     }));
 
     const preparedFiles: PreparedDniItem[] = preparedFileResults.filter(
@@ -1084,28 +1094,38 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
 
     const validFileResults: Array<ValidFile | null> = await Promise.all(files.map(async (file, i) => {
       const id = newItems[i].id;
-      // Generate preview immediately so it can be shown even if blur check fails
-      const tempPreviewUrl = URL.createObjectURL(file);
-      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
+      try {
+        // Generate preview immediately so it can be shown even if blur check fails
+        const tempPreviewUrl = URL.createObjectURL(file);
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview: tempPreviewUrl } : p));
 
-      const check = await validatePhoto(file, { skipBlurCheck });
-      if (!check.valid) {
+        const check = await validatePhoto(file, { skipBlurCheck });
+        if (!check.valid) {
+          setPendingItems(prev => prev.map(p => p.id === id ? {
+            ...p,
+            status: 'failed' as const,
+            error: check.error || 'Imagen no válida.',
+            reason: check.reason === 'blurry' ? 'blurry' : 'other',
+          } : p));
+          return null;
+        }
+
+        // Convert to persistent base64 preview and revoke the temp object URL
+        const preview = await fileToPreview(file);
+        URL.revokeObjectURL(tempPreviewUrl);
+        const raw = await fileToBase64(file);
+        const base64 = await compressImageForAI(raw);
+        setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
+        return { file, id, preview, base64, width: check.width, height: check.height };
+      } catch {
+        // Any unexpected error during validation/preview — mark as failed so isBusy resets
         setPendingItems(prev => prev.map(p => p.id === id ? {
           ...p,
           status: 'failed' as const,
-          error: check.error || 'Imagen no válida.',
-          reason: check.reason === 'blurry' ? 'blurry' : 'other',
+          error: 'Error al procesar el archivo.',
         } : p));
         return null;
       }
-
-      // Convert to persistent base64 preview and revoke the temp object URL
-      const preview = await fileToPreview(file);
-      URL.revokeObjectURL(tempPreviewUrl);
-      const raw = await fileToBase64(file);
-      const base64 = await compressImageForAI(raw);
-      setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
-      return { file, id, preview, base64, width: check.width, height: check.height };
     }));
 
     const validFiles = validFileResults.filter((item): item is ValidFile => item !== null);

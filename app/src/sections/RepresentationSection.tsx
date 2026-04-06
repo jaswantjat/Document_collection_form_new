@@ -544,13 +544,13 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               </div>
             </div>
 
-            {/* Carousel */}
+            {/* Carousel — swipe-only on mobile, no arrow buttons */}
             <div ref={carouselWrapperRef} className="relative">
               <div
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
                 className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
-                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' } as React.CSSProperties}
               >
                 {docs.map((doc) => (
                   <div
@@ -566,29 +566,6 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
                   </div>
                 ))}
               </div>
-
-              {docs.length > 1 && (
-                <>
-                  {activeDocIndex > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => goToDoc(activeDocIndex - 1)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                  )}
-                  {activeDocIndex < docs.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={() => goToDoc(activeDocIndex + 1)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center text-gray-600 hover:bg-white transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  )}
-                </>
-              )}
             </div>
 
             {docs.length > 1 && (

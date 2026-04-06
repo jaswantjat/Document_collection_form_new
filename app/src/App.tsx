@@ -271,7 +271,15 @@ function FormApp() {
           if (bestBackup) {
             const backupFd = normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]);
 
-            if (bestBackup.savedAt > serverTs + 500) {
+            // If the backup predates the project's creation time, the project was
+            // deleted and recreated (possibly with the same code). Discard stale data.
+            const projectCreatedAt = normalizedProject.createdAt
+              ? new Date(normalizedProject.createdAt).getTime()
+              : 0;
+            const backupIsStalePriorSession = projectCreatedAt > 0 && bestBackup.savedAt < projectCreatedAt - 1000;
+            if (backupIsStalePriorSession) {
+              clearLocalBackup(urlCode);
+            } else if (bestBackup.savedAt > serverTs + 500) {
               // Backup is significantly newer than server — use it for everything
               // (e.g. user changed something and reloaded before server auto-save fired).
               normalizedProject = { ...normalizedProject, formData: backupFd };

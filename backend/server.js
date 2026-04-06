@@ -960,10 +960,12 @@ app.post('/api/project/:code/save', requireProject, (req, res) => {
   }
   project.formData = formData;
   project.lastActivity = new Date().toISOString();
-  // Update customer name: contract first, then DNI front
+  // Update customer name: contract → DNI → IBI titular → electricity titular
   const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
   const contractName = formData?.contract?.extraction?.extractedData?.fullName;
-  const resolvedName = contractName || dniName;
+  const ibiTitular = formData?.ibi?.extraction?.extractedData?.titular ?? null;
+  const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
+  const resolvedName = contractName || dniName || ibiTitular || ebTitular;
   if (resolvedName) project.customerName = resolvedName;
   if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
 
@@ -994,10 +996,12 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   project.submissions.push(submission);
   project.formData = formData;
   project.lastActivity = new Date().toISOString();
-  // Update customer name: contract first, then DNI front
+  // Update customer name: contract → DNI → IBI titular → electricity titular
   const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
   const contractName = formData?.contract?.extraction?.extractedData?.fullName;
-  const resolvedName = contractName || dniName;
+  const ibiTitular = formData?.ibi?.extraction?.extractedData?.titular ?? null;
+  const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
+  const resolvedName = contractName || dniName || ibiTitular || ebTitular;
   if (resolvedName) project.customerName = resolvedName;
   if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
 
@@ -1015,11 +1019,12 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
   console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
   if (!project.docflowNewOrderSent) {
-    const sent = await fireDocFlowNewOrder(project);
-    if (sent) {
-      project.docflowNewOrderSent = true;
-      saveDB();
-    }
+    // Mark attempted immediately before awaiting — prevents double-fire on every submit
+    // if new_order previously failed (network error, wrong URL, etc.).
+    // n8n/Baserow should handle duplicate new_order calls idempotently by order_id.
+    project.docflowNewOrderSent = true;
+    saveDB();
+    await fireDocFlowNewOrder(project);
   }
   fireDocFlowDocUpdate(project.code, docsUploaded);
 });
