@@ -2,6 +2,8 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+const apiBaseURL = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001'
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
@@ -17,11 +19,11 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: apiBaseURL,
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:3001',
+        target: apiBaseURL,
         changeOrigin: true,
       },
     },

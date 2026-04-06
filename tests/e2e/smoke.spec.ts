@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+const FRONTEND_BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5000';
+const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+
 test.describe('Smoke tests', () => {
   test('app loads and shows the form', async ({ page }) => {
     await page.goto('/');
@@ -8,12 +11,12 @@ test.describe('Smoke tests', () => {
   });
 
   test('page responds with HTTP 200', async ({ request }) => {
-    const response = await request.get('http://localhost:5000/');
+    const response = await request.get(`${FRONTEND_BASE}/`);
     expect(response.status()).toBe(200);
   });
 
   test('backend health — /api responds', async ({ request }) => {
-    const response = await request.get('http://localhost:3001/api/health', {
+    const response = await request.get(`${API_BASE}/api/health`, {
       failOnStatusCode: false,
     });
     expect([200, 404]).toContain(response.status());

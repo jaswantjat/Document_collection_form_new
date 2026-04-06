@@ -305,6 +305,14 @@ On load: if localStorage is >500ms newer than server, localStorage wins.
 
 ### ✅ Completed (continued)
 
+- **[2026-04-06] Sync GitHub commit 3c83fca — "Harden mobile resilience and stabilize QA baseline"**
+  - Synced via GitHub API (git fetch blocked in main agent environment)
+  - Files updated: `app/eslint.config.js`, `app/src/App.tsx`, `app/src/hooks/useProject.ts`, `app/src/lib/signedDocumentOverlays.ts`, `app/src/sections/PropertyDocsSection.tsx`, `app/src/sections/RepresentationSection.tsx`, `app/src/services/api.ts`, `app/vite.config.ts`, `playwright.config.ts`, `scripts/e2e.sh`
+  - Files added: `app/src/lib/signedDocumentOverlays.test.ts`, `tests/e2e/low-network.spec.ts`, `tests/e2e/smoke.spec.ts`
+  - TypeScript: 0 errors. Both workflows running cleanly after sync.
+
+### ✅ Completed (continued)
+
 - **[2026-04-05] Dashboard "No se encontraron archivos" bug fix**
   - Root cause: auto-save strips `preview` from formData → db.json has no images; `preUploadAssets` stores files on disk in `project.assetFiles`; but `serializeProject` did not include `assetFiles` so the frontend never saw the disk paths
   - Fix 1: Added `assetFiles` to `serializeProject` output (backend)

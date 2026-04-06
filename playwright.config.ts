@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const chromiumExecutable = process.env.REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5000';
 const ldLibraryPath = [
   process.env.REPLIT_LD_LIBRARY_PATH,
   process.env.LD_LIBRARY_PATH,
@@ -19,7 +20,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: 'http://localhost:5000',
+    baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

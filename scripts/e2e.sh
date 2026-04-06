@@ -3,7 +3,12 @@ set -e
 
 # Resolve the playwright-driver.browsers path from the nix store at runtime.
 # This is deterministic as long as the nixpkgs channel (stable-25_05) stays the same.
-NIX_BROWSERS=$(nix-build --no-out-link -E 'let pkgs = import <nixpkgs> {}; in pkgs.playwright-driver.browsers' 2>/dev/null)
+NIX_BROWSERS=""
+if command -v nix-build >/dev/null 2>&1; then
+  NIX_BROWSERS=$(nix-build --no-out-link -E 'let pkgs = import <nixpkgs> {}; in pkgs.playwright-driver.browsers' 2>/dev/null || true)
+else
+  echo "[e2e] WARNING: nix-build not found. Falling back to local cache."
+fi
 
 if [ -z "$NIX_BROWSERS" ]; then
   echo "[e2e] WARNING: Could not resolve playwright-driver.browsers from nix. Falling back to local cache."

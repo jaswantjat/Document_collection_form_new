@@ -25,6 +25,19 @@ interface DocDef {
   title: string;
 }
 
+interface ResolvedDocImagesState {
+  formData: FormData;
+  images: Partial<Record<SignedDocumentKind, string | null>>;
+}
+
+interface ResolvedPreviewState {
+  formData: FormData;
+  kind: SignedDocumentKind;
+  imageDataUrl: string | null;
+}
+
+const EMPTY_RESOLVED_IMAGES: Partial<Record<SignedDocumentKind, string | null>> = {};
+
 function getDocsForLocation(location: LocationRegion | null): DocDef[] {
   if (location === 'cataluna') {
     return [
@@ -54,31 +67,55 @@ function DocumentFullscreenModal({
   onClose: () => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const imageCache = useRef<Record<string, string | null>>({});
-  const [, forceUpdate] = useState(0);
-  const [loadingKinds, setLoadingKinds] = useState<Set<string>>(new Set());
+  const [resolvedImages, setResolvedImages] = useState<ResolvedDocImagesState>({
+    formData,
+    images: {},
+  });
+  const pendingKindsRef = useRef<{ formData: FormData; kinds: Set<SignedDocumentKind> } | null>(null);
 
   const currentDoc = docs[currentIndex];
+  const currentImages = useMemo(
+    () => (resolvedImages.formData === formData ? resolvedImages.images : EMPTY_RESOLVED_IMAGES),
+    [formData, resolvedImages]
+  );
 
   const loadDoc = useCallback((index: number) => {
     const doc = docs[index];
     if (!doc) return;
-    if (doc.kind in imageCache.current) return;
-    imageCache.current[doc.kind] = undefined as unknown as string;
-    setLoadingKinds(prev => new Set(prev).add(doc.kind));
+
+    const pendingKinds = pendingKindsRef.current?.formData === formData
+      ? pendingKindsRef.current.kinds
+      : (() => {
+          const nextPending = { formData, kinds: new Set<SignedDocumentKind>() };
+          pendingKindsRef.current = nextPending;
+          return nextPending.kinds;
+        })();
+
+    if (currentImages[doc.kind] !== undefined || pendingKinds.has(doc.kind)) return;
+
+    pendingKinds.add(doc.kind);
     renderSignedDocumentModalPreview({ formData }, doc.kind)
       .then((image) => {
-        imageCache.current[doc.kind] = image;
-        setLoadingKinds(prev => { const s = new Set(prev); s.delete(doc.kind); return s; });
-        forceUpdate(n => n + 1);
+        setResolvedImages((prev) => {
+          const nextImages = prev.formData === formData ? { ...prev.images } : {};
+          nextImages[doc.kind] = image;
+          return { formData, images: nextImages };
+        });
       })
       .catch((err) => {
         console.error(`Failed to render ${doc.kind} modal preview:`, err);
-        imageCache.current[doc.kind] = null as unknown as string;
-        setLoadingKinds(prev => { const s = new Set(prev); s.delete(doc.kind); return s; });
-        forceUpdate(n => n + 1);
+        setResolvedImages((prev) => {
+          const nextImages = prev.formData === formData ? { ...prev.images } : {};
+          nextImages[doc.kind] = null;
+          return { formData, images: nextImages };
+        });
+      })
+      .finally(() => {
+        if (pendingKindsRef.current?.formData === formData) {
+          pendingKindsRef.current.kinds.delete(doc.kind);
+        }
       });
-  }, [formData, docs]);
+  }, [currentImages, docs, formData]);
 
   useEffect(() => {
     loadDoc(currentIndex);
@@ -97,8 +134,8 @@ function DocumentFullscreenModal({
     setCurrentIndex(index);
   };
 
-  const imageDataUrl = imageCache.current[currentDoc?.kind ?? ''];
-  const loading = currentDoc ? loadingKinds.has(currentDoc.kind) || !(currentDoc.kind in imageCache.current) : false;
+  const imageDataUrl = currentDoc ? (currentImages[currentDoc.kind] ?? null) : null;
+  const loading = currentDoc ? currentImages[currentDoc.kind] === undefined : false;
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < docs.length - 1;
 
@@ -203,26 +240,32 @@ function SignedDocumentPreview({
   alt: string;
   onExpand: () => void;
 }) {
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [resolvedPreview, setResolvedPreview] = useState<ResolvedPreviewState | null>(null);
+  const previewMatchesCurrentInput = resolvedPreview?.formData === formData && resolvedPreview.kind === kind;
+  const imageDataUrl = previewMatchesCurrentInput ? resolvedPreview.imageDataUrl : null;
+  const loading = !previewMatchesCurrentInput;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setImageDataUrl(null);
 
     renderSignedDocumentPreview({ formData }, kind)
       .then((image) => {
         if (!cancelled) {
-          setImageDataUrl(image);
-          setLoading(false);
+          setResolvedPreview({
+            formData,
+            kind,
+            imageDataUrl: image,
+          });
         }
       })
       .catch((err) => {
         console.error(`Failed to render ${kind} preview:`, err);
         if (!cancelled) {
-          setImageDataUrl(null);
-          setLoading(false);
+          setResolvedPreview({
+            formData,
+            kind,
+            imageDataUrl: null,
+          });
         }
       });
 

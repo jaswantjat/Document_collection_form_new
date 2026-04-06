@@ -1,6 +1,36 @@
-import type { ProjectData, FormData as AppFormData, UploadedPhoto, StoredDocumentFile } from '@/types';
+import type {
+  AIExtraction,
+  ProjectData,
+  FormData as AppFormData,
+  UploadedPhoto,
+  StoredDocumentFile,
+} from '@/types';
 
 const API_BASE = '/api';
+
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K];
+};
+
+type DashboardProjectRecord = ProjectData & {
+  summary?: Record<string, unknown>;
+  submissionCount?: number;
+};
+
+interface ExtractDocumentResponse {
+  success: boolean;
+  side?: 'front' | 'back';
+  extraction?: AIExtraction;
+  needsManualReview?: boolean;
+  isWrongDocument?: boolean;
+  isUnreadable?: boolean;
+  reason?: 'unreadable' | 'wrong-document' | 'wrong-side' | 'temporary-error';
+  message?: string;
+}
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return null;
@@ -77,7 +107,7 @@ export async function preUploadAssets(
   appendStoredPdfs(fd, 'ibiOriginal', formData.ibi?.originalPdfs);
   appendStoredPdfs(fd, 'electricityOriginal', formData.electricityBill?.originalPdfs);
 
-  const hasAnyFile = (fd as any).entries ? [...(fd as any).entries()].length > 0 : true;
+  const hasAnyFile = Array.from(fd.entries()).length > 0;
   if (!hasAnyFile) return { success: true, savedKeys: [] };
 
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/upload-assets`, {
@@ -143,7 +173,7 @@ export async function dashboardLogout(token: string): Promise<void> {
   });
 }
 
-export async function fetchDashboard(token: string): Promise<{ success: boolean; projects?: any[]; error?: string }> {
+export async function fetchDashboard(token: string): Promise<{ success: boolean; projects?: DashboardProjectRecord[]; error?: string }> {
   const res = await fetch(`${API_BASE}/dashboard`, {
     headers: { 'x-dashboard-token': token },
   });
@@ -162,7 +192,7 @@ export async function fetchDashboardProject(
 
 export async function saveProgress(
   code: string,
-  formData: any
+  formData: AppFormData
 ): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/save`, {
     method: 'POST',
@@ -175,7 +205,7 @@ export async function saveProgress(
 
 export async function submitForm(
   code: string,
-  formData: any,
+  formData: AppFormData,
   source: string
 ): Promise<{ success: boolean; submissionId?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/submit`, {
@@ -190,16 +220,7 @@ export async function submitForm(
 export async function extractDocument(
   imageBase64: string | string[],
   documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto' | 'contract'
-): Promise<{
-  success: boolean;
-  side?: 'front' | 'back';
-  extraction?: any;
-  needsManualReview?: boolean;
-  isWrongDocument?: boolean;
-  isUnreadable?: boolean;
-  reason?: 'unreadable' | 'wrong-document' | 'wrong-side' | 'temporary-error';
-  message?: string;
-}> {
+): Promise<ExtractDocumentResponse> {
   const body = Array.isArray(imageBase64)
     ? { imagesBase64: imageBase64, documentType }
     : { imageBase64, documentType };
@@ -217,7 +238,7 @@ export async function extractDocumentBatch(
   documentType: 'electricity' | 'ibi' | 'contract'
 ): Promise<{
   success: boolean;
-  extraction?: any;
+  extraction?: AIExtraction;
   needsManualReview?: boolean;
   isWrongDocument?: boolean;
   isUnreadable?: boolean;
@@ -270,7 +291,7 @@ export async function deleteProject(
 
 export async function adminUpdateFormData(
   code: string,
-  formDataPatch: any,
+  formDataPatch: DeepPartial<AppFormData>,
   dashboardToken: string
 ): Promise<{ success: boolean; message?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/admin-formdata`, {

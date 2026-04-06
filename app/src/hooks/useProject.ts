@@ -2,32 +2,70 @@ import { useState, useEffect } from 'react';
 import type { ProjectData } from '@/types';
 import { fetchProject } from '@/services/api';
 
+interface UseProjectState {
+  projectCode: string | null;
+  project: ProjectData | null;
+  loading: boolean;
+  error: string | null;
+}
+
 export const useProject = (projectCode: string | null) => {
-  const [project, setProject] = useState<ProjectData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<UseProjectState>(() => ({
+    projectCode,
+    project: null,
+    loading: Boolean(projectCode),
+    error: projectCode ? null : 'INVALID_CODE',
+  }));
 
   useEffect(() => {
-    if (!projectCode) {
-      setError('INVALID_CODE');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
+    if (!projectCode) return;
+    let cancelled = false;
 
     fetchProject(projectCode)
       .then(res => {
+        if (cancelled) return;
         if (res.success && res.project) {
-          setProject(res.project);
-        } else {
-          setError(res.error || 'UNKNOWN_ERROR');
+          setState({
+            projectCode,
+            project: res.project,
+            loading: false,
+            error: null,
+          });
+          return;
         }
+        setState({
+          projectCode,
+          project: null,
+          loading: false,
+          error: res.error || 'UNKNOWN_ERROR',
+        });
       })
-      .catch(() => setError('NETWORK_ERROR'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setState({
+          projectCode,
+          project: null,
+          loading: false,
+          error: 'NETWORK_ERROR',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectCode]);
 
-  return { project, loading, error };
+  if (!projectCode) {
+    return { project: null, loading: false, error: 'INVALID_CODE' };
+  }
+
+  if (state.projectCode !== projectCode) {
+    return { project: null, loading: true, error: null };
+  }
+
+  return {
+    project: state.project,
+    loading: state.loading,
+    error: state.error,
+  };
 };

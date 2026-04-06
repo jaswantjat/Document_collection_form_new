@@ -1,4 +1,12 @@
-import type { FormData, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
+import type {
+  AIExtractionValue,
+  DocSlot,
+  FormData,
+  LocationRegion,
+  RenderedDocumentAsset,
+  RenderedDocumentKey,
+  RepresentationData,
+} from '@/types';
 
 const BLUE = '#1e3a8a';
 const FONT_FAMILY = 'Helvetica, Arial, sans-serif';
@@ -12,6 +20,26 @@ export type SignedDocumentKind =
   | 'spain-poder';
 
 type Box = readonly [number, number, number, number];
+type SignedDocumentSource = FormData | { code?: string; formData?: FormData | null } | null | undefined;
+type ExtractionData = Record<string, AIExtractionValue>;
+
+interface SignedDocumentDefinition {
+  key: SignedDocumentKind;
+  label: string;
+  present: boolean;
+  filename: string;
+}
+
+interface SignedDocumentSnapshot {
+  location: LocationRegion | null;
+  representation: Partial<RepresentationData>;
+  fullName: string;
+  dniNumber: string;
+  address: string;
+  municipality: string;
+  province: string;
+  postalCode: string;
+}
 
 const REPRESENTACIO_PAGE_SIZE = { width: 1241, height: 1754 };
 const REPRESENTACIO_FIELDS = {
@@ -71,29 +99,40 @@ const PODER_ES_FIELDS = {
   firma_persona_interesada_safe_box: [100, 1855, 620, 1975] as Box,
 } as const;
 
-function getSourceFormData(source: any): FormData {
-  return source?.formData ?? source ?? {};
+function isProjectEnvelope(source: SignedDocumentSource): source is { code?: string; formData?: FormData | null } {
+  return typeof source === 'object' && source !== null && 'formData' in source;
 }
 
-function getLocation(source: any) {
+function getSourceFormData(source: SignedDocumentSource): Partial<FormData> {
+  return isProjectEnvelope(source) ? (source.formData ?? {}) : (source ?? {});
+}
+
+function getSourceCode(source: SignedDocumentSource): string {
+  if (typeof source === 'object' && source !== null && 'code' in source && typeof source.code === 'string' && source.code) {
+    return source.code;
+  }
+  return 'project';
+}
+
+function getLocation(source: SignedDocumentSource): LocationRegion | null {
   const formData = getSourceFormData(source);
   return formData?.location ?? formData?.representation?.location ?? null;
 }
 
-function getSnapshot(source: any) {
+function getSnapshot(source: SignedDocumentSource): SignedDocumentSnapshot {
   const fd = getSourceFormData(source);
-  const contract = fd?.contract?.extraction?.extractedData || {};
-  const dniFront = fd?.dni?.front?.extraction?.extractedData || {};
-  const dniBack = fd?.dni?.back?.extraction?.extractedData || {};
-  const ibi = fd?.ibi?.extraction?.extractedData || {};
-  const representation = fd?.representation || {};
+  const contract: ExtractionData = fd?.contract?.extraction?.extractedData ?? {};
+  const dniFront: ExtractionData = fd?.dni?.front?.extraction?.extractedData ?? {};
+  const dniBack: ExtractionData = fd?.dni?.back?.extraction?.extractedData ?? {};
+  const ibi: ExtractionData = fd?.ibi?.extraction?.extractedData ?? {};
+  const representation: Partial<RepresentationData> = fd?.representation ?? {};
   const ebRaw = fd?.electricityBill;
-  const ebPages: any[] = ebRaw?.pages?.length
+  const ebPages: Array<Partial<DocSlot>> = Array.isArray(ebRaw?.pages) && ebRaw.pages.length > 0
     ? ebRaw.pages
-    : [ebRaw?.front, ebRaw?.back].filter(Boolean);
-  const ebData = ebPages.map((p: any) => p?.extraction?.extractedData || {});
-  const eb0 = ebData[0] || {};
-  const eb1 = ebData[1] || {};
+    : [ebRaw?.front, ebRaw?.back].filter((page): page is DocSlot => Boolean(page));
+  const ebData = ebPages.map((page) => page.extraction?.extractedData ?? {});
+  const eb0: ExtractionData = ebData[0] ?? {};
+  const eb1: ExtractionData = ebData[1] ?? {};
 
   return {
     location: getLocation(source),
@@ -116,7 +155,7 @@ export function renderedDocumentKeyForKind(kind: SignedDocumentKind): RenderedDo
   return 'spainPoder';
 }
 
-export function getStoredRenderedDocument(source: any, kind: SignedDocumentKind): RenderedDocumentAsset | null {
+export function getStoredRenderedDocument(source: SignedDocumentSource, kind: SignedDocumentKind): RenderedDocumentAsset | null {
   const formData = getSourceFormData(source);
   const key = renderedDocumentKeyForKind(kind);
   return formData?.representation?.renderedDocuments?.[key] || null;
@@ -142,7 +181,7 @@ export function setStoredRenderedDocument(
   };
 }
 
-export async function createRenderedDocumentAsset(source: any, kind: SignedDocumentKind): Promise<RenderedDocumentAsset> {
+export async function createRenderedDocumentAsset(source: SignedDocumentSource, kind: SignedDocumentKind): Promise<RenderedDocumentAsset> {
   const imageDataUrl = await renderSignedDocumentOverlay(source, kind);
   return {
     imageDataUrl,
@@ -286,7 +325,7 @@ function setFont(ctx: CanvasRenderingContext2D, sizePx: number, weight = 600) {
   ctx.fillStyle = BLUE;
 }
 
-function drawBoxText(ctx: CanvasRenderingContext2D, text: string, pageSize: { width: number; height: number }, box: Box, sizePct: number, align: CanvasTextAlign = 'left') {
+function drawBoxText(ctx: CanvasRenderingContext2D, text: string | null | undefined, pageSize: { width: number; height: number }, box: Box, sizePct: number, align: CanvasTextAlign = 'left') {
   if (!text) return;
   const x = scaledX(box[0], pageSize.width, ctx.canvas.width);
   const y = scaledY(box[1], pageSize.height, ctx.canvas.height);
@@ -299,7 +338,7 @@ function drawBoxText(ctx: CanvasRenderingContext2D, text: string, pageSize: { wi
 
 function drawPercentText(
   ctx: CanvasRenderingContext2D,
-  text: string,
+  text: string | null | undefined,
   leftPct: number,
   topPct: number,
   fontSizePx: number
@@ -311,7 +350,7 @@ function drawPercentText(
   ctx.fillText(String(text), (leftPct / 100) * ctx.canvas.width, (topPct / 100) * ctx.canvas.height);
 }
 
-function drawLineText(ctx: CanvasRenderingContext2D, text: string, pageSize: { width: number; height: number }, box: Box, sizePct: number) {
+function drawLineText(ctx: CanvasRenderingContext2D, text: string | null | undefined, pageSize: { width: number; height: number }, box: Box, sizePct: number) {
   if (!text) return;
   const x = scaledX(box[0], pageSize.width, ctx.canvas.width);
   const y = scaledY(box[1], pageSize.height, ctx.canvas.height);
@@ -323,7 +362,7 @@ function drawLineText(ctx: CanvasRenderingContext2D, text: string, pageSize: { w
 
 function drawAnchoredText(
   ctx: CanvasRenderingContext2D,
-  text: string,
+  text: string | null | undefined,
   pageSize: { width: number; height: number },
   field: { x: number; y: number; stopX: number },
   sizePct: number,
@@ -420,22 +459,23 @@ function getCurrentSpanishDate() {
   };
 }
 
-export function getSignedDocumentDefinitions(project: any) {
+export function getSignedDocumentDefinitions(project: SignedDocumentSource): SignedDocumentDefinition[] {
   const snapshot = getSnapshot(project);
   const representation = snapshot.representation;
+  const code = getSourceCode(project);
 
   if (snapshot.location === 'cataluna') {
     return [
-      { key: 'cataluna-iva' as const, label: 'IVA 10% Cataluña', present: !!representation.ivaCertificateSignature, filename: `${project.code}_iva-cat.pdf` },
-      { key: 'cataluna-generalitat' as const, label: 'Declaració Generalitat', present: !!representation.generalitatSignature, filename: `${project.code}_generalitat.pdf` },
-      { key: 'cataluna-representacio' as const, label: 'Autorització de representació', present: !!representation.representacioSignature, filename: `${project.code}_autoritzacio-representacio.pdf` },
+      { key: 'cataluna-iva', label: 'IVA 10% Cataluña', present: !!representation.ivaCertificateSignature, filename: `${code}_iva-cat.pdf` },
+      { key: 'cataluna-generalitat', label: 'Declaració Generalitat', present: !!representation.generalitatSignature, filename: `${code}_generalitat.pdf` },
+      { key: 'cataluna-representacio', label: 'Autorització de representació', present: !!representation.representacioSignature, filename: `${code}_autoritzacio-representacio.pdf` },
     ];
   }
 
   if (snapshot.location === 'madrid' || snapshot.location === 'valencia') {
     return [
-      { key: 'spain-iva' as const, label: 'IVA 10% España', present: !!representation.ivaCertificateEsSignature, filename: `${project.code}_iva-es.pdf` },
-      { key: 'spain-poder' as const, label: 'Poder de representación', present: !!representation.poderRepresentacioSignature, filename: `${project.code}_poder-representacion.pdf` },
+      { key: 'spain-iva', label: 'IVA 10% España', present: !!representation.ivaCertificateEsSignature, filename: `${code}_iva-es.pdf` },
+      { key: 'spain-poder', label: 'Poder de representación', present: !!representation.poderRepresentacioSignature, filename: `${code}_poder-representacion.pdf` },
     ];
   }
 
@@ -453,7 +493,7 @@ export function getSignedDocumentDefinitions(project: any) {
  *                   - Leave undefined for full-resolution rendering (final artifact).
  */
 async function renderSignedDocumentOverlayAtScale(
-  project: any,
+  project: SignedDocumentSource,
   kind: SignedDocumentKind,
   scale: number,
   getSrc?: (kind: SignedDocumentKind) => string | null
@@ -555,7 +595,7 @@ async function renderSignedDocumentOverlayAtScale(
  * Render a signed document at full resolution (1.0 scale).
  * Use this for final artifacts stored in formData and downloaded by the admin.
  */
-export async function renderSignedDocumentOverlay(project: any, kind: SignedDocumentKind): Promise<string> {
+export async function renderSignedDocumentOverlay(project: SignedDocumentSource, kind: SignedDocumentKind): Promise<string> {
   return renderSignedDocumentOverlayAtScale(project, kind, 1.0);
 }
 
@@ -571,7 +611,7 @@ export async function renderSignedDocumentOverlay(project: any, kind: SignedDocu
  * The fullscreen read modal (renderSignedDocumentModalPreview) still uses full-res
  * for pixel-perfect quality when the user explicitly taps to open it.
  */
-export async function renderSignedDocumentPreview(project: any, kind: SignedDocumentKind): Promise<string> {
+export async function renderSignedDocumentPreview(project: SignedDocumentSource, kind: SignedDocumentKind): Promise<string> {
   return renderSignedDocumentOverlayAtScale(project, kind, 1.0, modalSrcForKind);
 }
 
@@ -586,6 +626,6 @@ export async function renderSignedDocumentPreview(project: any, kind: SignedDocu
  * The full-res PNG is already being preloaded in the background by preloadDocumentTemplates,
  * so on good connections the image is already decoded by the time the user taps.
  */
-export async function renderSignedDocumentModalPreview(project: any, kind: SignedDocumentKind): Promise<string> {
+export async function renderSignedDocumentModalPreview(project: SignedDocumentSource, kind: SignedDocumentKind): Promise<string> {
   return renderSignedDocumentOverlayAtScale(project, kind, 1.0);
 }

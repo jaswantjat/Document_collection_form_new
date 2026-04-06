@@ -263,29 +263,24 @@ interface ContractCardProps {
 }
 
 type ContractStatus = 'idle' | 'processing' | 'accepted' | 'failed';
+type ContractTransientStatus = 'processing' | 'failed' | null;
 
 function ContractCard({ contract, onChange }: ContractCardProps) {
-  const [status, setStatus] = useState<ContractStatus>(() =>
-    contract.originalPdfs.length > 0 || contract.extraction ? 'accepted' : 'idle'
-  );
+  const [status, setStatus] = useState<ContractTransientStatus>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
 
-  // Sync status when saved contract data loads asynchronously (e.g. on form reload).
-  // useState's lazy initializer only runs once at mount; if the project data arrives
-  // after mount (async API fetch), the status must be updated explicitly.
-  // Using a boolean primitive as the dependency avoids object-reference churn from
-  // normalizeFormData() while still reacting to real data presence changes.
   const hasContractData = contract.originalPdfs.length > 0 || !!contract.extraction;
-  useEffect(() => {
-    setStatus(prev => {
-      if (prev === 'processing') return prev; // never interrupt an in-flight upload
-      return hasContractData ? 'accepted' : 'idle';
-    });
-  }, [hasContractData]);
+  const resolvedStatus: ContractStatus = status === 'processing'
+    ? 'processing'
+    : status === 'failed'
+      ? 'failed'
+      : hasContractData
+        ? 'accepted'
+        : 'idle';
 
-  const accepted = status === 'accepted';
-  const isBusy = status === 'processing';
+  const accepted = resolvedStatus === 'accepted';
+  const isBusy = resolvedStatus === 'processing';
 
   const processFiles = useCallback(async (files: File[]) => {
     setStatus('processing');
@@ -333,7 +328,7 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
           confirmedByUser: true,
         },
       });
-      setStatus('accepted');
+      setStatus(null);
     } catch {
       setStatus('failed');
       setErrorMessage('Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.');
@@ -342,7 +337,7 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
 
   const reset = useCallback(() => {
     onChange({ originalPdfs: [], extraction: null });
-    setStatus('idle');
+    setStatus(null);
     setErrorMessage(null);
     setPageCount(0);
   }, [onChange]);
@@ -387,7 +382,7 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
         </div>
       )}
 
-      {status === 'failed' && !isBusy && (
+      {resolvedStatus === 'failed' && !isBusy && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
           <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
           <p className="text-sm text-red-700">{errorMessage}</p>

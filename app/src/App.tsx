@@ -18,20 +18,43 @@ import { getLocationInfo } from '@/lib/provinceMapping';
 // instantly after submit completes, avoiding a Suspense/LoadingSection flash.
 import { SuccessSection } from '@/sections/SuccessSection';
 import { FlowProgressBar } from '@/components/FlowProgressBar';
-import type { FormData, ProjectData, Section } from '@/types';
+import type { FormData, ProjectData, RepresentationData, Section } from '@/types';
 import './App.css';
 
+// React.lazy needs a maximally wide component constraint here so inference keeps
+// each imported section's real props instead of collapsing them to `never`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
 ): React.LazyExoticComponent<T> {
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  return lazy(() =>
-    factory()
-      .catch(() => wait(1000).then(() => factory()))
-      .catch(() => wait(2000).then(() => factory()))
-      .catch(() => wait(3000).then(() => factory()))
-      .catch(() => wait(4000).then(() => factory()))
-  );
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch {
+      await wait(1000);
+    }
+
+    try {
+      return await factory();
+    } catch {
+      await wait(2000);
+    }
+
+    try {
+      return await factory();
+    } catch {
+      await wait(3000);
+    }
+
+    try {
+      return await factory();
+    } catch {
+      await wait(4000);
+    }
+
+    return factory();
+  });
 }
 
 const ProvinceSelectionSection = lazyWithRetry(() => import('@/sections/ProvinceSelectionSection').then((module) => ({ default: module.ProvinceSelectionSection })));
@@ -409,7 +432,7 @@ function FormApp() {
     if (currentLocation) return;
     const info = getLocationInfo(String(contractProvince));
     if (info) setLocation(info.id);
-  }, [formData.contract?.extraction]);
+  }, [formData.contract?.extraction, formData.location, formData.representation?.location, setLocation]);
 
   const goTo = (section: Section | 'phone') => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -502,12 +525,12 @@ function FormApp() {
 
       case 'province-selection':
         return (
-          <ProvinceSelectionSection
-            formData={formData}
-            representationData={formData.representation}
-            onLocationSelect={setLocation}
-            onRepresentationChange={(patch) => setRepresentation({ ...formData.representation, ...patch })}
-            onBack={() => goTo('property-docs')}
+            <ProvinceSelectionSection
+              formData={formData}
+              representationData={formData.representation}
+              onLocationSelect={setLocation}
+              onRepresentationChange={(patch: Partial<RepresentationData>) => setRepresentation({ ...formData.representation, ...patch })}
+              onBack={() => goTo('property-docs')}
             onContinue={() => {
               const loc = formData.location ?? formData.representation?.location ?? null;
               goTo(loc === 'other'
@@ -559,9 +582,9 @@ function FormApp() {
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}
-            onEdit={(s) => {
+            onEdit={(s: string) => {
               setAutoSubmitReview(false);
-              const [sectionName, docTarget] = (s as string).split(':');
+              const [sectionName, docTarget] = s.split(':');
               setPropertyDocsTarget(docTarget || undefined);
               goTo(sectionName as Section);
             }}
