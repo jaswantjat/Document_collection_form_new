@@ -430,15 +430,58 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
     }
   }, []);
 
-  // For iOS compatibility, we explicitly track scroll end to ensure the
-  // active index updates even if the native onScroll event is throttled.
+  // Non-passive touch handling for iOS: intercept touchmove and call
+  // preventDefault() when the gesture is clearly horizontal. This stops the
+  // outer overflow-y-auto container from stealing the scroll, which is the
+  // main reason swipe doesn't work inside a vertical scroll area on iOS.
   useEffect(() => {
     const el = carouselRef.current;
     if (!el) return;
-    
-    const handleScrollEnd = () => handleCarouselScroll();
-    el.addEventListener('scrollend', handleScrollEnd);
-    return () => el.removeEventListener('scrollend', handleScrollEnd);
+
+    let startX = 0;
+    let startY = 0;
+    let decided = false;
+    let isHorizontal = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      decided = false;
+      isHorizontal = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!decided) {
+        const dx = Math.abs(e.touches[0].clientX - startX);
+        const dy = Math.abs(e.touches[0].clientY - startY);
+        if (dx > 3 || dy > 3) {
+          isHorizontal = dx > dy;
+          decided = true;
+        }
+      }
+      if (isHorizontal) {
+        e.preventDefault(); // stop the vertical-scroll parent from taking over
+      }
+    };
+
+    const onTouchEnd = () => {
+      // After the gesture, sync the active index with where the carousel settled
+      setTimeout(handleCarouselScroll, 50);
+    };
+
+    const onScrollEnd = () => handleCarouselScroll();
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('scrollend', onScrollEnd);
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('scrollend', onScrollEnd);
+    };
   }, [handleCarouselScroll]);
 
   const goToDoc = (i: number) => {
@@ -571,18 +614,6 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
               <div
                 ref={carouselRef}
                 onScroll={handleCarouselScroll}
-                onTouchStart={() => {
-                  // On touch, we ensure scroll-snap-stop is set to always
-                  // to prevent over-scrolling through multiple documents
-                  if (carouselRef.current) {
-                    carouselRef.current.style.scrollSnapStop = 'always';
-                  }
-                }}
-                onTouchEnd={() => {
-                  // After touch, we let handleCarouselScroll or scrollend update the index
-                  // but we also check for a small nudge after 300ms if no scroll event fired.
-                  setTimeout(handleCarouselScroll, 300);
-                }}
                 className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl border border-gray-200 shadow-sm"
                 style={{
                   scrollbarWidth: 'none',
