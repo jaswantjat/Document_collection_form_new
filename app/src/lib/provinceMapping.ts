@@ -75,11 +75,11 @@ export function getLocationInfo(province: string | null | undefined): LocationIn
 }
 
 /**
- * List of all available locations for manual selection
+ * List of all available locations for manual selection.
+ * 'other' is intentionally excluded — users must select one of the three supported regions.
  */
 export const AVAILABLE_LOCATIONS: LocationInfo[] = [
   { id: 'cataluna', label: 'Cataluña' },
   { id: 'madrid', label: 'Madrid' },
   { id: 'valencia', label: 'Valencia' },
-  { id: 'other', label: 'Otra provincia' }
 ];

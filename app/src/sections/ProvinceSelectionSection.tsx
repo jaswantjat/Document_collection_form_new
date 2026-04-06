@@ -36,7 +36,9 @@ export function ProvinceSelectionSection({
     return null;
   }
   const province = getAutoProvince();
+  // Only use auto-detected location if it maps to a supported region (not 'other')
   const locationInfo = province ? getLocationInfo(province) : null;
+  const detectedLocationInfo = locationInfo?.id !== 'other' ? locationInfo : null;
 
   const data = representationData;
   const update = (patch: Partial<RepresentationData>) => onRepresentationChange(patch);
@@ -65,7 +67,7 @@ export function ProvinceSelectionSection({
         </div>
 
         {/* ── Location block ─────────────────────────────────────── */}
-        {!locationConfirmed && !showManual && province && (
+        {!locationConfirmed && !showManual && detectedLocationInfo && (
           <div className="bg-white rounded-2xl border-2 border-green-200 p-5 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center shrink-0">
@@ -73,14 +75,14 @@ export function ProvinceSelectionSection({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-500">Detectada automáticamente</p>
-                <p className="text-lg font-semibold text-gray-900">{locationInfo?.label}</p>
+                <p className="text-lg font-semibold text-gray-900">{detectedLocationInfo.label}</p>
               </div>
               <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => locationInfo && confirmLocation(locationInfo.id)}
+                onClick={() => confirmLocation(detectedLocationInfo.id)}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" /> Confirmar
@@ -96,7 +98,7 @@ export function ProvinceSelectionSection({
           </div>
         )}
 
-        {!locationConfirmed && !showManual && !province && (
+        {!locationConfirmed && !showManual && !detectedLocationInfo && (
           <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
@@ -138,7 +140,7 @@ export function ProvinceSelectionSection({
                 );
               })}
             </div>
-            {province && (
+            {detectedLocationInfo && (
               <button
                 type="button"
                 onClick={() => setShowManual(false)}
@@ -162,7 +164,7 @@ export function ProvinceSelectionSection({
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500">Ubicación confirmada</p>
               <p className="font-semibold text-green-800">
-                {AVAILABLE_LOCATIONS.find(l => l.id === selectedLocation)?.label}
+                {AVAILABLE_LOCATIONS.find(l => l.id === selectedLocation)?.label ?? selectedLocation}
               </p>
             </div>
             <span className="text-xs text-gray-400">Cambiar</span>
