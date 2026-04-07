@@ -1833,10 +1833,12 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract what you can.
 
-Note: A single image may sometimes show BOTH sides of the document simultaneously (e.g. a scan of both sides on one page, or a photo with two cards). If you see two document cards (one above the other or side-by-side) or both sides in one image:
-1. Treat the image as the side whose data is most prominent or contains the primary identification.
-2. Add "combined image" to the 'notes' field.
-3. Extract as much data as possible from the prominent side.
+COMBINED IMAGE RULE — READ CAREFULLY: If a single image shows BOTH sides of the document at the same time (two cards stacked, or both sides on one scan/photo), apply ALL of these rules:
+1. Set side: "front" — the DNI number and personal identity data take priority.
+2. Extract ONLY the front-side fields: fullName, firstName, lastName, dniNumber, dateOfBirth, expiryDate, sex, nationality.
+3. Set address, municipality, province, placeOfBirth to null — these are back-side fields. Do NOT read them from the back even if visible. Keep them null.
+4. Add "combined image" to the notes field.
+This prevents data from two different sides being mixed into one result.
 
 Your PRIMARY goal is to extract a person's identity number from whatever documents are shown. Accepted documents include:
 - Spanish DNI plastic card
@@ -1922,22 +1924,51 @@ function normalizeIdentityExtraction(item) {
     }
   }
 
-  let side = normalized.side === 'front' || normalized.side === 'back'
+  const aiExplicitSide = normalized.side === 'front' || normalized.side === 'back'
     ? normalized.side
     : null;
+
+  let side = aiExplicitSide;
 
   // passport and nie-certificate are always single-page → always front
   if (identityDocumentKind === 'nie-certificate' || identityDocumentKind === 'passport') {
     side = 'front';
-  } else if (hasAddressData) {
-    // Address data only appears on the back of a Spanish DNI/NIE card — strongest signal
+  } else if (hasAddressData && !hasIdentityCore) {
+    // Pure back-side image: has address data but NO identity core (name/number/dob)
+    // This is the strongest signal that it is a standalone back photo.
     side = 'back';
+  } else if (hasAddressData && hasIdentityCore) {
+    // COMBINED IMAGE: the AI saw both sides and returned data from both.
+    // The AI should have set side='front' via the prompt instruction, trust it.
+    // If the AI didn't specify, default to 'front' (identity number takes priority).
+    if (!side) side = 'front';
   } else if (explicitBackCue) {
     side = 'back';
   } else if (!side) {
     // Only infer side when the AI didn't specify one
     if (hasIdentityCore) side = 'front';
     else if (identityDocumentKind === 'nie-card') side = 'back';
+  }
+
+  // Defence layer: strip fields that don't belong to the resolved side.
+  // This handles the case where the AI bled data from both sides into one result
+  // (combined-image cross-contamination). Each slot should only contain its own fields.
+  if (side === 'front') {
+    // Address fields live on the back — never store them in the front extraction
+    extractedData.address = null;
+    extractedData.municipality = null;
+    extractedData.province = null;
+    extractedData.placeOfBirth = null;
+  } else if (side === 'back') {
+    // Identity fields live on the front — never store them in the back extraction
+    extractedData.fullName = null;
+    extractedData.firstName = null;
+    extractedData.lastName = null;
+    extractedData.dniNumber = null;
+    extractedData.dateOfBirth = null;
+    extractedData.expiryDate = null;
+    extractedData.sex = null;
+    extractedData.nationality = null;
   }
 
   normalized.identityDocumentKind = identityDocumentKind;
