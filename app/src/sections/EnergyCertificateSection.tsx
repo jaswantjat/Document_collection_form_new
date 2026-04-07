@@ -463,6 +463,7 @@ export function EnergyCertificateSection({
             </div>
             <button
               type="button"
+              data-testid="skip-energy-certificate-btn"
               onClick={skipSurvey}
               className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors px-2 py-1 rounded-lg"
             >
@@ -917,6 +918,7 @@ export function EnergyCertificateSection({
         <div className="max-w-2xl mx-auto flex gap-3">
           <button
             type="button"
+            data-testid="energy-cert-back-btn"
             onClick={goBack}
             className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]"
           >
@@ -928,6 +930,7 @@ export function EnergyCertificateSection({
             {currentStep.key !== 'final' ? (
               <button
                 type="button"
+                data-testid="energy-cert-next-btn"
                 onClick={goNext}
                 className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 py-3.5"
               >
@@ -937,6 +940,7 @@ export function EnergyCertificateSection({
             ) : (
               <button
                 type="button"
+                data-testid="energy-cert-confirm-btn"
                 onClick={() => void completeSurvey()}
                 disabled={completing || renderingPreview}
                 className="btn-primary inline-flex w-full items-center justify-center gap-2 px-6 py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"

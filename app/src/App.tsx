@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Toaster } from 'sonner';
-import { BrowserRouter, Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
 import { useLocalStorageBackup, readLocalBackup, clearLocalBackup } from '@/hooks/useLocalStorageBackup';
@@ -663,6 +663,13 @@ function FormApp() {
   );
 }
 
+// ── Redirect any section deep-link back to the SPA root (preserving ?code=...) ─
+function RedirectToRoot() {
+  const [searchParams] = useSearchParams();
+  const qs = searchParams.toString();
+  return <Navigate to={qs ? `/?${qs}` : '/'} replace />;
+}
+
 // ── Root with Router ──────────────────────────────────────────────────────────
 function App() {
   return (
@@ -670,6 +677,12 @@ function App() {
       <Routes>
         <Route path="/" element={<FormApp />} />
         <Route path="/dashboard" element={<DashboardApp />} />
+        {/* Section deep-links — redirect back to root so the SPA renders correctly */}
+        <Route path="/property-docs" element={<RedirectToRoot />} />
+        <Route path="/province-selection" element={<RedirectToRoot />} />
+        <Route path="/representation" element={<RedirectToRoot />} />
+        <Route path="/energy-certificate" element={<RedirectToRoot />} />
+        <Route path="/review" element={<RedirectToRoot />} />
       </Routes>
     </BrowserRouter>
   );

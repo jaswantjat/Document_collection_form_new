@@ -112,6 +112,7 @@ export function ProvinceSelectionSection({
             </div>
             <button
               type="button"
+              data-testid="select-province-btn"
               onClick={() => setShowManual(true)}
               className="w-full bg-eltex-blue hover:bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors"
             >
@@ -130,6 +131,8 @@ export function ProvinceSelectionSection({
                   <button
                     key={location.id}
                     type="button"
+                    data-testid={`province-btn-${location.id}`}
+                    data-selected={isSelected ? 'true' : 'false'}
                     onClick={() => confirmLocation(location.id)}
                     className={`w-full text-left p-3.5 rounded-xl border-2 transition-all flex items-center gap-3 ${
                       isSelected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -271,11 +274,12 @@ export function ProvinceSelectionSection({
 
       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 px-4 py-3 safe-area-bottom sm:static sm:border-0 sm:bg-transparent sm:px-5 sm:pb-5">
         <div className="max-w-sm mx-auto flex gap-3">
-          <button type="button" onClick={onBack} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
+          <button type="button" onClick={onBack} data-testid="province-back-btn" className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-50 active:scale-[0.97]">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <button
             type="button"
+            data-testid="province-continue-btn"
             onClick={onContinue}
             disabled={!canContinue}
             className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"

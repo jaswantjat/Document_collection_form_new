@@ -10,18 +10,29 @@ tech_stack:
   - react-hook-form
   - zod
   - pdfjs-dist
-  - react-signature-canvas
+  - canvas-based SignaturePad
   - Node.js / Express (backend)
 
 routing_notes: >
   IMPORTANT: This is a pure SPA. ALL customer routes are accessed via the root
   path with a query param: /?code=ELTXXXXXX (e.g. /?code=ELT20250001).
-  There are NO path-based customer routes like /property-docs or /review.
-  The app uses internal React state to switch between sections (property-docs,
-  province-selection, representation, energy-certificate, review, success).
+  Section paths like /property-docs, /province-selection, /representation,
+  /energy-certificate, /review now redirect back to /?code=... automatically.
+  So these paths ARE safe to navigate to — they will redirect correctly.
+  The app uses internal React state (currentSection) to switch between sections.
   To test a specific section, navigate to /?code=ELTXXXXXX and the app routes
   automatically to the correct step based on form completion state.
   Test project ELT20250004 and ELT20250005 are pre-seeded for energy-certificate flow.
+  Test project ELT20250001 is a standard Solar project — Cataluña region.
+
+test_helpers:
+  - name: window.__eltexFillTestSignature
+    description: >
+      Call this JS function in the browser to programmatically draw a valid
+      signature on the signature canvas without needing canvas mouse events.
+      Available only in non-production (dev) builds. Usage in Playwright:
+      await page.evaluate('window.__eltexFillTestSignature && window.__eltexFillTestSignature()')
+    available_in: development only (not production)
 
 routes:
   - path: /
@@ -31,7 +42,7 @@ routes:
   - path: /?code=ELT20250001
     file: app/src/App.tsx
     auth_required: false
-    description: Solar project — starts at property-docs step. All customer sections accessed via this root URL.
+    description: Solar project — Cataluña region. Starts at property-docs if fresh.
   - path: /?code=ELT20250002
     file: app/src/App.tsx
     auth_required: false
@@ -48,6 +59,92 @@ routes:
     file: app/src/pages/Dashboard.tsx
     auth_required: true
     description: Admin dashboard. Password = eltex2025. Enter at /dashboard login page.
+
+key_testids:
+  property_docs_section:
+    - testid: property-docs-continue-btn
+      element: button
+      description: Continue button on property documents upload step
+    - testid: contract-card
+      element: div
+      description: Eltex contract acceptance card
+    - testid: contract-accepted-icon
+      element: svg
+      description: Checkmark shown when Eltex contract is accepted
+
+  province_selection_section:
+    - testid: select-province-btn
+      element: button
+      description: Opens province manual selection list
+    - testid: province-btn-cataluna
+      element: button
+      description: Select Cataluña province button (data-selected=true/false)
+    - testid: province-btn-madrid
+      element: button
+      description: Select Madrid province button (data-selected=true/false)
+    - testid: province-btn-valencia
+      element: button
+      description: Select Valencia province button (data-selected=true/false)
+    - testid: province-continue-btn
+      element: button
+      description: Continue button on province selection step
+    - testid: province-back-btn
+      element: button
+      description: Back button on province selection step
+
+  representation_section:
+    - testid: signature-canvas
+      element: canvas
+      description: >
+        Signature pad canvas. Use window.__eltexFillTestSignature() to inject
+        a valid test signature programmatically. data-has-signature=true/false.
+    - testid: representation-continue-btn
+      element: button
+      description: >
+        Apply signature + continue button. Disabled until signature drawn.
+        data-signed=true/false. Use window.__eltexFillTestSignature() first.
+    - testid: representation-defer-btn
+      element: button
+      description: Firmar-mas-tarde button. Defers signing and continues to next step without signature.
+    - testid: representation-back-btn
+      element: button
+      description: Back button on representation signing step
+
+  energy_certificate_section:
+    - testid: skip-energy-certificate-btn
+      element: button
+      description: Skip the entire energy certificate survey (marks as skipped)
+    - testid: energy-cert-next-btn
+      element: button
+      description: Next step button in the energy certificate survey
+    - testid: energy-cert-back-btn
+      element: button
+      description: Previous step button in the energy certificate survey
+    - testid: energy-cert-confirm-btn
+      element: button
+      description: Final confirm/complete button on the last survey step
+
+  review_section:
+    - testid: review-submit-btn
+      element: button
+      description: Submit documentation button (green). Only visible when all items complete.
+
+  dashboard:
+    - testid: ver-expediente-btn
+      element: button
+      description: Open project detail modal for a project in the dashboard list
+    - testid: project-detail-modal
+      element: div
+      description: Project detail modal overlay
+    - testid: asset-action-buttons
+      element: div
+      description: Container for view/download buttons per file
+    - testid: view-asset-btn
+      element: button
+      description: Eye icon — opens asset file in new browser tab
+    - testid: download-asset-btn
+      element: button
+      description: Download icon — downloads the asset file
 
 features:
   - name: Phone Number Entry
@@ -80,7 +177,9 @@ features:
       - Tap to upload DNI back photo (required for card-front-only uploads)
       - Tap to upload IBI certificate photo or PDF
       - Tap to upload electricity bill (one or more pages)
-      - Click "Siguiente" to proceed to province selection
+      - Click property-docs-continue-btn to proceed to province selection
+    testids_available:
+      - property-docs-continue-btn
     api_calls:
       - method: POST
         endpoint: /api/extract/dni
@@ -97,47 +196,60 @@ features:
       - app/src/lib/provinceMapping.ts
     entry_route: /?code=ELT20250001
     user_interactions:
-      - Select province from dropdown or list
-      - Click "Siguiente" to proceed
+      - If province not auto-detected click select-province-btn to open list
+      - Click province-btn-cataluna or province-btn-madrid or province-btn-valencia
+      - Click province-continue-btn to proceed
+    testids_available:
+      - select-province-btn
+      - province-btn-cataluna
+      - province-btn-madrid
+      - province-btn-valencia
+      - province-continue-btn
+      - province-back-btn
     api_calls: []
     auth_required: false
 
   - name: Legal Document Signing (Representation)
-    description: Customer signs region-specific legal PDFs using a canvas-based signature pad. Cataluña requires 3 signatures, Madrid/Valencia require 2, other provinces skip.
+    description: >
+      Customer signs region-specific legal PDFs using a canvas-based signature pad.
+      Cataluña requires 3 signatures, Madrid/Valencia require 2, other provinces skip.
+      IMPORTANT: Use window.__eltexFillTestSignature() to inject a test signature on
+      the signature-canvas element. Then click representation-continue-btn to apply.
     files:
       - app/src/sections/RepresentationSection.tsx
       - app/src/components/SignaturePad.tsx
       - app/src/lib/signedDocumentOverlays.ts
     entry_route: /?code=ELT20250001
     user_interactions:
-      - Draw signature on signature pad canvas
-      - Tap "Firmar" to apply signature to document
-      - Review signed PDF preview
-      - Repeat for each required document
-      - Click "Siguiente" to continue
+      - Call window.__eltexFillTestSignature() to draw test signature on canvas
+      - Click representation-continue-btn to apply signatures to all documents
+      - Or click representation-defer-btn to skip signing for now
+    testids_available:
+      - signature-canvas (data-has-signature=true/false)
+      - representation-continue-btn (data-signed=true/false, disabled until signed)
+      - representation-defer-btn
+      - representation-back-btn
     api_calls:
       - method: POST
         endpoint: /api/sign-documents
     auth_required: false
 
   - name: Energy Certificate Survey
-    description: 4-step survey capturing technical housing data for the energy certificate. Customer signs the completed certificate.
+    description: 4-step survey capturing technical housing data for the energy certificate. Customer signs the completed certificate or skips the whole survey.
     files:
       - app/src/sections/EnergyCertificateSection.tsx
       - app/src/lib/energyCertificateValidation.ts
       - app/src/lib/energyCertificateDocument.ts
     entry_route: /?code=ELT20250001
     user_interactions:
-      - Fill in cadastral reference, habitable area, floor count, bedroom count
-      - Enter door and window counts by orientation (N/E/S/W)
-      - Select window frame material, glass type, shutter presence
-      - Select thermal installation type and boiler fuel
-      - Select air conditioning type
-      - Select heating emitter type
-      - Select product sold (solar panels, aerothermal, or both)
-      - Indicate if existing customer, if has solar panels
-      - Draw signature on signature pad
-      - Click "Finalizar" to complete or "Omitir" to skip
+      - Click skip-energy-certificate-btn to skip the entire survey
+      - Or fill in fields and use energy-cert-next-btn to advance steps
+      - On final step sign with window.__eltexFillTestSignature() then click energy-cert-confirm-btn
+    testids_available:
+      - skip-energy-certificate-btn
+      - energy-cert-next-btn
+      - energy-cert-back-btn
+      - energy-cert-confirm-btn
     api_calls:
       - method: POST
         endpoint: /api/projects/:code/submit
@@ -151,8 +263,10 @@ features:
     user_interactions:
       - View checklist of all submitted items
       - Click incomplete items to go back and fix them
-      - Click "Enviar documentación" to submit
+      - Click review-submit-btn to submit (only visible when all docs complete)
       - See success screen after submission
+    testids_available:
+      - review-submit-btn
     api_calls:
       - method: POST
         endpoint: /api/projects/:code/submit
@@ -167,11 +281,19 @@ features:
     user_interactions:
       - Enter password "eltex2025" to log in
       - View list of all submitted projects
-      - Click a project to view its details
-      - View uploaded document images and extracted data
-      - Click "Descargar ZIP" to download all project files
+      - Click ver-expediente-btn to open project-detail-modal for a project
+      - Inside modal view uploaded document images and extracted data
+      - Click view-asset-btn (eye) to open individual file in new tab
+      - Click download-asset-btn to download individual file
+      - Click "Descargar ZIP" to download all project files as ZIP
       - Click "Exportar CSV" to export project list
       - Click "Cerrar sesión" to log out
+    testids_available:
+      - ver-expediente-btn
+      - project-detail-modal
+      - asset-action-buttons
+      - view-asset-btn
+      - download-asset-btn
     api_calls:
       - method: GET
         endpoint: /api/dashboard/projects
@@ -182,12 +304,15 @@ features:
     auth_required: true
 
 known_limitations:
-  - issue: Photos are stored as base64 in localStorage/IndexedDB — not sent to server during extraction, only metadata is synced
-    location: app/src/hooks/useFormState.ts
-    impact: Large images may hit localStorage quota on older devices
-  - issue: Autocropper Python service may not be running in development
-    location: autocropper/app.py
-    impact: Document photos will not be auto-straightened before AI extraction
+  - issue: File inputs cannot be pre-populated — browser security prevents this. After restoring form state, check for visible thumbnail previews not input.files values.
+    location: app/src/sections/PropertyDocsSection.tsx
+    impact: Tests checking input.files will show null even when file is restored from localStorage backup
+  - issue: Province auto-detection reads from IBI/electricity bill extraction. ELT20250001 may auto-detect Cataluña from stored extraction data.
+    location: app/src/sections/ProvinceSelectionSection.tsx
+    impact: If province is already detected, the select-province-btn won't appear — the confirmed province chip will show instead
+  - issue: Signature canvas requires mouse events to draw. Use window.__eltexFillTestSignature() instead.
+    location: app/src/components/SignaturePad.tsx
+    impact: Canvas mouse-draw events in headless browsers do not trigger signature detection
   - issue: Province "other" is no longer a user-selectable option but exists in legacy data
     location: app/src/lib/provinceMapping.ts
     impact: Old projects with location="other" will skip signing section correctly

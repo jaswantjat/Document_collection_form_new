@@ -483,6 +483,7 @@ export function ReviewSection({
             {followUpMode ? (
               <button
                 type="button"
+                data-testid="review-submit-btn"
                 onClick={submit}
                 disabled={hasBlockingDocumentProcessing}
                 className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition-colors disabled:opacity-40 shadow-sm"
@@ -492,6 +493,7 @@ export function ReviewSection({
             ) : docsAllDone ? (
               <button
                 type="button"
+                data-testid="review-submit-btn"
                 onClick={submit}
                 disabled={hasBlockingDocumentProcessing}
                 className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition-colors disabled:opacity-40 shadow-sm"

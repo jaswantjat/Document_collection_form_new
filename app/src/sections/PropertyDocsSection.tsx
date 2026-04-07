@@ -1632,6 +1632,7 @@ export function PropertyDocsSection({
           )}
           <button
             type="button"
+            data-testid="property-docs-continue-btn"
             onClick={onContinue}
             disabled={isAnyBusy}
             className="btn-primary flex-1 inline-flex items-center justify-center gap-2 py-3.5 disabled:opacity-40 disabled:cursor-not-allowed"
