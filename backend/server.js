@@ -950,7 +950,7 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
   const payload = {
     type: 'new_order',
     order_id: project.code,
-    customer_name: snapshot.fullName || project.customerName || '',
+    customer_name: snapshot.fullName || (project.customerName !== 'Cliente nuevo' ? project.customerName : null) || 'cliente',
     first_name: snapshot.firstName || null,
     last_name: snapshot.lastName || null,
     phone: project.phone || '',
