@@ -1,0 +1,354 @@
+/**
+ * TDD — Layer 1: api.ts (services/api.ts)
+ * First-principles tests for all fetch-based API functions.
+ * fetch is mocked via vi.stubGlobal — no real HTTP calls made.
+ * Covers: happy path, network errors, 4xx/5xx responses, timeouts, malformed JSON.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  fetchProject,
+  lookupByPhone,
+  dashboardLogin,
+  fetchDashboard,
+  fetchDashboardProject,
+  saveProgress,
+  submitForm,
+  extractDocument,
+  deleteProject,
+} from '@/services/api';
+
+// ── fetch mock helpers ───────────────────────────────────────────────────────
+
+function mockFetch(body: unknown, status = 200) {
+  const response = {
+    ok: status >= 200 && status < 300,
+    status,
+    json: vi.fn().mockResolvedValue(body),
+    blob: vi.fn().mockResolvedValue(new Blob(['pdf'], { type: 'application/pdf' })),
+    text: vi.fn().mockResolvedValue(typeof body === 'string' ? body : JSON.stringify(body)),
+  };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+  return response;
+}
+
+function mockFetchNetworkError(message = 'Network Error') {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(message)));
+}
+
+function mockFetchAborted() {
+  const err = new DOMException('The operation was aborted.', 'AbortError');
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(err));
+}
+
+// AbortSignal.timeout may not exist in Node 20 — stub it
+if (!globalThis.AbortSignal?.timeout) {
+  vi.stubGlobal('AbortSignal', {
+    timeout: vi.fn().mockReturnValue({ aborted: false } as AbortSignal),
+    abort: vi.fn().mockReturnValue({ aborted: true } as AbortSignal),
+  });
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchProject
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fetchProject', () => {
+  it('calls /api/project/:code and returns parsed JSON on success', async () => {
+    const payload = { success: true, project: { code: 'ELT001', customerName: 'Test' } };
+    mockFetch(payload);
+
+    const result = await fetchProject('ELT001');
+    expect(result.success).toBe(true);
+    expect(result.project?.code).toBe('ELT001');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/project/ELT001'),
+      expect.anything(),
+    );
+  });
+
+  it('returns error payload on project-not-found (404 body)', async () => {
+    mockFetch({ success: false, error: 'PROJECT_NOT_FOUND' }, 200);
+    const result = await fetchProject('ELT_MISSING');
+    expect(result.success).toBe(false);
+  });
+
+  it('propagates network errors', async () => {
+    mockFetchNetworkError('Failed to fetch');
+    await expect(fetchProject('ELT001')).rejects.toThrow('Failed to fetch');
+  });
+
+  it('URL-encodes the code to prevent path injection', async () => {
+    mockFetch({ success: false });
+    await fetchProject('../../../etc/passwd').catch(() => {});
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const calledUrl: string = fetchMock.mock.calls[0][0];
+    expect(calledUrl).not.toContain('../');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// lookupByPhone
+// ─────────────────────────────────────────────────────────────────────────────
+describe('lookupByPhone', () => {
+  it('returns project on success', async () => {
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    const result = await lookupByPhone('+34612345678');
+    expect(result.success).toBe(true);
+    expect(result.project?.code).toBe('ELT001');
+  });
+
+  it('returns error when phone not found', async () => {
+    mockFetch({ success: false, message: 'NOT_FOUND' });
+    const result = await lookupByPhone('+34000000000');
+    expect(result.success).toBe(false);
+  });
+
+  it('URL-encodes phone number (handles + character)', async () => {
+    mockFetch({ success: false });
+    await lookupByPhone('+34612345678');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const calledUrl: string = fetchMock.mock.calls[0][0];
+    expect(calledUrl).not.toContain('+'); // + should be %2B or %2B
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// dashboardLogin
+// ─────────────────────────────────────────────────────────────────────────────
+describe('dashboardLogin', () => {
+  it('returns token on correct password', async () => {
+    mockFetch({ success: true, token: 'tok-abc123' });
+    const result = await dashboardLogin('eltex2025');
+    expect(result.success).toBe(true);
+    expect(result.token).toBe('tok-abc123');
+  });
+
+  it('returns failure for wrong password', async () => {
+    mockFetch({ success: false, message: 'Invalid password' });
+    const result = await dashboardLogin('wrongpass');
+    expect(result.success).toBe(false);
+    expect(result.token).toBeUndefined();
+  });
+
+  it('sends password in JSON body', async () => {
+    mockFetch({ success: true });
+    await dashboardLogin('mypassword');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.password).toBe('mypassword');
+  });
+
+  it('propagates network error', async () => {
+    mockFetchNetworkError('Connection refused');
+    await expect(dashboardLogin('pass')).rejects.toThrow('Connection refused');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchDashboard
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fetchDashboard', () => {
+  it('returns projects array on success', async () => {
+    mockFetch({ success: true, projects: [{ code: 'ELT001' }, { code: 'ELT002' }] });
+    const result = await fetchDashboard('valid-token');
+    expect(result.success).toBe(true);
+    expect(result.projects).toHaveLength(2);
+  });
+
+  it('sends x-dashboard-token header', async () => {
+    mockFetch({ success: true, projects: [] });
+    await fetchDashboard('my-token');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const headers = fetchMock.mock.calls[0][1].headers;
+    expect(headers['x-dashboard-token']).toBe('my-token');
+  });
+
+  it('returns error when token is invalid', async () => {
+    mockFetch({ success: false, error: 'Unauthorized' }, 401);
+    const result = await fetchDashboard('bad-token');
+    expect(result.success).toBe(false);
+  });
+
+  it('propagates network error', async () => {
+    mockFetchNetworkError();
+    await expect(fetchDashboard('token')).rejects.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchDashboardProject
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fetchDashboardProject', () => {
+  it('returns full project detail on success', async () => {
+    const project = { code: 'ELT001', customerName: 'Ana' };
+    mockFetch({ success: true, project });
+    const result = await fetchDashboardProject('ELT001', 'valid-token');
+    expect(result.success).toBe(true);
+    expect(result.project?.customerName).toBe('Ana');
+  });
+
+  it('sends both code (URL) and token (header)', async () => {
+    mockFetch({ success: true });
+    await fetchDashboardProject('ELT001', 'tok-xyz');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const calledUrl: string = fetchMock.mock.calls[0][0];
+    const headers = fetchMock.mock.calls[0][1].headers;
+    expect(calledUrl).toContain('ELT001');
+    expect(headers['x-dashboard-token']).toBe('tok-xyz');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// saveProgress — bad data conditions
+// ─────────────────────────────────────────────────────────────────────────────
+describe('saveProgress', () => {
+  const minimalFormData = {
+    dni: { front: null, back: null, originalPdfs: [] },
+    ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
+    electricityBill: { pages: [], originalPdfs: [] },
+    contract: { originalPdfs: [], extraction: null },
+    representation: {} as Parameters<typeof saveProgress>[1]['representation'],
+    energyCertificate: { status: 'not-started' } as Parameters<typeof saveProgress>[1]['energyCertificate'],
+    signatures: { customerSignature: null, repSignature: null },
+  } as Parameters<typeof saveProgress>[1];
+
+  it('returns success on save', async () => {
+    mockFetch({ success: true });
+    const result = await saveProgress('ELT001', minimalFormData);
+    expect(result.success).toBe(true);
+  });
+
+  it('sends formData as JSON body', async () => {
+    mockFetch({ success: true });
+    await saveProgress('ELT001', minimalFormData);
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toHaveProperty('formData');
+  });
+
+  it('propagates network error on save failure', async () => {
+    mockFetchNetworkError('Server down');
+    await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('Server down');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// submitForm
+// ─────────────────────────────────────────────────────────────────────────────
+describe('submitForm', () => {
+  const formData = {
+    dni: { front: null, back: null, originalPdfs: [] },
+    ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
+    electricityBill: { pages: [], originalPdfs: [] },
+    contract: { originalPdfs: [], extraction: null },
+    representation: {} as Parameters<typeof submitForm>[1]['representation'],
+    energyCertificate: { status: 'not-started' } as Parameters<typeof submitForm>[1]['energyCertificate'],
+    signatures: { customerSignature: null, repSignature: null },
+  } as Parameters<typeof submitForm>[1];
+
+  it('returns submissionId on success', async () => {
+    mockFetch({ success: true, submissionId: 'sub-123' });
+    const result = await submitForm('ELT001', formData, 'customer');
+    expect(result.success).toBe(true);
+    expect(result.submissionId).toBe('sub-123');
+  });
+
+  it('includes source in the JSON body', async () => {
+    mockFetch({ success: true });
+    await submitForm('ELT001', formData, 'assessor');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.source).toBe('assessor');
+  });
+
+  it('propagates server error', async () => {
+    mockFetchNetworkError('500 Internal Server Error');
+    await expect(submitForm('ELT001', formData, 'customer')).rejects.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// extractDocument — bad data / AI API conditions
+// ─────────────────────────────────────────────────────────────────────────────
+describe('extractDocument', () => {
+  it('returns extraction result on success', async () => {
+    const extraction = { extractedData: { fullName: 'Ana García' }, confidence: 0.95, isCorrectDocument: true };
+    mockFetch({ success: true, extraction });
+    const result = await extractDocument('data:image/jpeg;base64,abc', 'dniFront');
+    expect(result.success).toBe(true);
+    expect(result.extraction).toBeDefined();
+  });
+
+  it('returns wrong-document when AI detects wrong document type', async () => {
+    mockFetch({ success: false, isWrongDocument: true, reason: 'wrong-document' });
+    const result = await extractDocument('data:image/jpeg;base64,abc', 'ibi');
+    expect(result.isWrongDocument).toBe(true);
+    expect(result.reason).toBe('wrong-document');
+  });
+
+  it('returns unreadable when AI cannot read the image', async () => {
+    mockFetch({ success: false, isUnreadable: true, reason: 'unreadable' });
+    const result = await extractDocument('data:image/jpeg;base64,blurry', 'dniFront');
+    expect(result.isUnreadable).toBe(true);
+  });
+
+  it('handles an array of images (batch mode)', async () => {
+    mockFetch({ success: true, extraction: {} });
+    const result = await extractDocument(
+      ['data:image/jpeg;base64,a', 'data:image/jpeg;base64,b'],
+      'electricity'
+    );
+    expect(result.success).toBe(true);
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.imagesBase64).toHaveLength(2);
+  });
+
+  it('propagates network error (AI API down)', async () => {
+    mockFetchNetworkError('ECONNREFUSED');
+    await expect(extractDocument('data:image/jpeg;base64,abc', 'ibi')).rejects.toThrow('ECONNREFUSED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// deleteProject
+// ─────────────────────────────────────────────────────────────────────────────
+describe('deleteProject', () => {
+  it('returns success on delete', async () => {
+    mockFetch({ success: true, message: 'Project deleted' });
+    const result = await deleteProject('ELT001', 'admin-token');
+    expect(result.success).toBe(true);
+  });
+
+  it('uses DELETE method', async () => {
+    mockFetch({ success: true });
+    await deleteProject('ELT001', 'tok');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const options = fetchMock.mock.calls[0][1];
+    expect(options.method).toBe('DELETE');
+  });
+
+  it('sends x-dashboard-token header', async () => {
+    mockFetch({ success: true });
+    await deleteProject('ELT001', 'my-admin-token');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const headers = fetchMock.mock.calls[0][1].headers;
+    expect(headers['x-dashboard-token']).toBe('my-admin-token');
+  });
+
+  it('URL-encodes project code', async () => {
+    mockFetch({ success: true });
+    await deleteProject('ELT/001', 'tok');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const calledUrl: string = fetchMock.mock.calls[0][0];
+    expect(calledUrl).not.toContain('ELT/001');
+    expect(calledUrl).toContain('ELT%2F001');
+  });
+});

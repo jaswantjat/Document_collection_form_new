@@ -1340,7 +1340,7 @@ function ProjectDetailModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[220] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[220] bg-black/60 flex items-center justify-center p-4" data-testid="project-detail-modal" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -1620,6 +1620,7 @@ function ProjectTableRow({
         <div className="grid grid-cols-2 gap-1.5 min-w-[180px]">
           <button
             type="button"
+            data-testid="ver-expediente-btn"
             onClick={() => setShowDetail(true)}
             className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
           >
