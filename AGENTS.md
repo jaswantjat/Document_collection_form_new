@@ -3,6 +3,7 @@
 > Last updated: 2026-04-06
 
 ## Quick-Reference: What Changed Recently
+- **Codebase cleanup (2026-04-07)**: Removed 42 unused shadcn/ui components (kept: button, card, dialog, input, label, separator, sheet, skeleton, textarea, toggle, tooltip). Deleted dev debug files (cert-debug.html, cert-measure.html, cert-preview.html, cert-template.jpg 1.1MB, align/ 676KB). Removed stale scripts/ Python files (stamp_poder.py, stamp_poder_representacio.py, example_usage.py, README_PODER_STAMP.md, test_data.json). Removed stale docs (TASKS.md, TEST-TRACKER.md, PERFORMANCE_RELIABILITY_TRACKER.md). Removed app/pnpm-lock.yaml (app uses npm). Removed app/test-output.log. 74/74 tests still pass.
 - **DNI back required (2026-04-07)**: For `dni-card` documents, back side is now mandatory when the front is uploaded as a separate photo. Exception: combined image (both sides in one photo — AI notes 'combined image') counts as complete. NIE cert and NIE card remain front-only. `isIdentityDocumentComplete` updated with this logic; `isDNIBackRequired` helper exported; `getIdentityDocumentPendingLabel` now returns 'Falta la trasera' for DNI card front-only; back slot shows amber '(obligatorio)' styling. 74/74 tests pass. Files: `app/src/lib/identityDocument.ts`, `app/src/types/index.ts`, `app/src/sections/PropertyDocsSection.tsx`, `app/src/sections/ReviewSection.tsx`, `app/src/lib/identityDocument.test.ts`.
 
 
