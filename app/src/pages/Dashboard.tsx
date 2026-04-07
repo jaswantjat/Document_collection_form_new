@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Archive,
+  Building2,
   CheckCircle,
   Clock,
   CreditCard,
@@ -1419,6 +1420,7 @@ function ProjectDetailModal({
                 <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
               </div>
 
+              <CompanyDisplay representation={project.formData?.representation} />
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
               <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
@@ -1529,8 +1531,17 @@ function ProjectTableRow({
             <span className="font-mono text-[11px] font-bold text-eltex-blue bg-eltex-blue-light px-2 py-1 rounded-lg">
               {project.code}
             </span>
+            {summary.isCompany && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-md">
+                <Building2 className="w-3 h-3" />
+                Empresa
+              </span>
+            )}
           </div>
           <p className="font-semibold text-gray-900 truncate">{summary.customerDisplayName}</p>
+          {summary.isCompany && summary.companyName && (
+            <p className="text-xs text-blue-700 font-medium truncate">{summary.companyName}</p>
+          )}
           <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
             <User className="w-3 h-3 shrink-0" />
             {project.assessor || '—'}
@@ -1875,6 +1886,23 @@ export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string
             </span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function CompanyDisplay({ representation }: { representation: any }) {
+  if (!representation?.isCompany) return null;
+
+  return (
+    <div className="space-y-3">
+      <SectionHeading icon={Building2} label="Datos de la empresa" />
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-1">
+        <FieldRow label="Nombre empresa" value={representation.companyName} />
+        <FieldRow label="NIF empresa" value={representation.companyNIF} />
+        <FieldRow label="Dirección" value={representation.companyAddress} />
+        <FieldRow label="Municipio" value={representation.companyMunicipality} />
+        <FieldRow label="Código postal" value={representation.companyPostalCode} />
       </div>
     </div>
   );

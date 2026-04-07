@@ -735,6 +735,12 @@ function buildDashboardSummary(project) {
     postalCode: snapshot.postalCode || null,
     municipality: snapshot.municipality || null,
     province: snapshot.province || null,
+    isCompany: !!representation.isCompany,
+    companyName: representation.companyName || null,
+    companyNIF: representation.companyNIF || null,
+    companyAddress: representation.companyAddress || null,
+    companyMunicipality: representation.companyMunicipality || null,
+    companyPostalCode: representation.companyPostalCode || null,
     documents,
     electricityPages: electricityDocs,
     signedDocuments,
@@ -1250,6 +1256,7 @@ app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
     'DNI Domicilio', 'DNI Municipio', 'DNI Provincia',
     'Ref. Catastral', 'Titular IBI', 'Dirección IBI',
     'CUPS', 'Potencia (kW)', 'Tipo fase', 'Dirección suministro',
+    'Es empresa', 'Nombre empresa', 'NIF empresa', 'Dirección empresa', 'Municipio empresa', 'CP empresa',
     'Firma cliente', 'Firma comercial'
   ];
 
@@ -1260,6 +1267,7 @@ app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
     const ibi = fd?.ibi?.extraction?.extractedData || {};
     const snapshot = getProjectSnapshot(fd);
     const sigs = fd?.signatures || {};
+    const rep = fd?.representation || {};
 
     return [
       p.code,
@@ -1286,6 +1294,12 @@ app.get('/api/dashboard/export/csv', requireDashboardAuth, (req, res) => {
       snapshot.electricityData.potenciaContratada || '',
       snapshot.electricityData.tipoFase || '',
       snapshot.electricityData.direccionSuministro || '',
+      rep.isCompany ? 'Sí' : 'No',
+      rep.companyName || '',
+      rep.companyNIF || '',
+      rep.companyAddress || '',
+      rep.companyMunicipality || '',
+      rep.companyPostalCode || '',
       sigs.customerSignature ? 'Sí' : 'No',
       sigs.repSignature ? 'Sí' : 'No',
     ].map(escape).join(',');

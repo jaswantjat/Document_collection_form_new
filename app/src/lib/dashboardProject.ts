@@ -61,6 +61,12 @@ export interface DashboardProjectSummary {
   firstName: string | null;
   lastName: string | null;
   customerLanguage: string | null;
+  isCompany: boolean;
+  companyName: string | null;
+  companyNIF: string | null;
+  companyAddress: string | null;
+  companyMunicipality: string | null;
+  companyPostalCode: string | null;
   documents: DashboardDocumentItem[];
   electricityPages: DashboardDocumentItem[];
   signedDocuments: DashboardSignedPdfItem[];
@@ -528,6 +534,8 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const counts = buildCounts(project, documents, electricityPages, signedDocuments, finalSignatures);
   const warnings = computeDashboardWarnings(project);
 
+  const rep = project?.formData?.representation || {};
+
   return {
     location: getLocation(project),
     lastUpdated:
@@ -541,6 +549,12 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     firstName: project?.summary?.firstName ?? snapshot.firstName ?? null,
     lastName: project?.summary?.lastName ?? snapshot.lastName ?? null,
     customerLanguage: project?.summary?.customerLanguage ?? project?.customerLanguage ?? null,
+    isCompany: !!(project?.summary?.isCompany ?? rep.isCompany),
+    companyName: project?.summary?.companyName ?? rep.companyName ?? null,
+    companyNIF: project?.summary?.companyNIF ?? rep.companyNIF ?? null,
+    companyAddress: project?.summary?.companyAddress ?? rep.companyAddress ?? null,
+    companyMunicipality: project?.summary?.companyMunicipality ?? rep.companyMunicipality ?? null,
+    companyPostalCode: project?.summary?.companyPostalCode ?? rep.companyPostalCode ?? null,
     documents,
     electricityPages,
     signedDocuments,
