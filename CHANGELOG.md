@@ -1,3 +1,30 @@
+## 2026-04-07.14 — Session: DNI Combined-Image Extraction Bug Fix
+
+**Phase**: Developer + QA
+
+**Bug**: When a customer uploaded a single photo showing BOTH sides of their DNI, the AI returned name, DNI number AND address/municipality in one result. The old `normalizeIdentityExtraction` logic saw `hasAddressData=true` and unconditionally set `side='back'`. The frontend then called `onBackExtractionChange()` — putting name+address in the back slot while the front slot stayed empty. The UI showed the name field blank and address filled incorrectly.
+
+**Root cause**: Two bugs working together:
+1. `dniAutoBatch` AI prompt had no instruction for combined images — AI mixed front+back data freely.
+2. `normalizeIdentityExtraction` treated "has address data" as a definitive back-side signal, even when front-side identity data was also present.
+
+**Fix 1 — `dniAutoBatch` prompt** (`backend/server.js` line ~1836): Added explicit "COMBINED IMAGE RULE" block:
+- If both sides visible in one photo → `side: "front"`, extract only front fields, set address/municipality/province/placeOfBirth to null, add "combined image" to notes.
+
+**Fix 2 — `normalizeIdentityExtraction`** (`backend/server.js` line ~1936):
+- `hasAddressData && !hasIdentityCore` → side = 'back' (pure back-side photo — unchanged)
+- `hasAddressData && hasIdentityCore` → side = 'front' (combined image — AI took priority, default 'front')
+- Defence layer: if `side='front'`, strip all 4 address fields; if `side='back'`, strip all 8 identity fields.
+
+**Frontend** (already correct — no changes needed): Line 846 of `PropertyDocsSection.tsx` routes `side === 'back'` to `onBackExtractionChange` and everything else to `onFrontExtractionChange`.
+
+**Tests**: 26/26 unit tests pass covering: combined image (no AI side), combined image (AI set front), pure back, pure front, passport, NIE-certificate, explicit back cue, whitespace normalization.
+
+**Files changed**:
+- `backend/server.js` (dniAutoBatch prompt + normalizeIdentityExtraction)
+
+---
+
 ## 2026-04-06.13 — Session: PRD v2.1 — All 6 Bug Fixes
 
 **Phase**: Developer + QA (full coding → testing loop per issue)
