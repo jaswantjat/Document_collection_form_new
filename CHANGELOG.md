@@ -1,3 +1,28 @@
+## 2026-04-07.15 — Session: Customer Name Resolution Fix
+
+**Phase**: Developer + QA
+
+**Bug 1 — Webhook sends "Cliente nuevo"**: `fireDocFlowNewOrder` used `project.customerName` (database value, defaulting to `'Cliente nuevo'` on project creation) instead of the freshly-derived name from the submitted formData. The function already computed `snapshot = getProjectSnapshot(project.formData)` but ignored `snapshot.fullName`.
+
+**Bug 2 — Success screen shows "¡Todo listo, Cliente!"**: After submission, `project` state in the frontend was never updated with the resolved customer name. `SuccessSection` received the original stale `project.customerName` ('Cliente nuevo'), split on space, and showed 'Cliente'.
+
+**Fixes:**
+
+1. **`backend/server.js` `fireDocFlowNewOrder` (line 956)**:  
+   `customer_name: project.customerName || ''` → `customer_name: snapshot.fullName || project.customerName || ''`  
+   `snapshot.fullName` is already computed and mirrors the dashboard display logic (`contract → DNI front → electricity titular → IBI titular`).
+
+2. **`app/src/App.tsx` `onSuccess` callback (line 621)**:  
+   Before calling `goTo('success')`, resolve the customer name from the current `formData` using the same priority chain (contract → DNI front → IBI → electricity). If a name is found and differs from the stored `project.customerName`, update the project state via `setProject(...)`. `SuccessSection` then receives the correct name.
+
+**Tests**: 19/19 pass covering: DNI name in front slot (normal), old combined-image bug (name in back slot), fixed combined-image flow, electricity-only, IBI-only, contract-priority, no-documents fallback.
+
+**Files changed**:
+- `backend/server.js` (webhook customer_name priority fix)
+- `app/src/App.tsx` (onSuccess project name update)
+
+---
+
 ## 2026-04-07.14 — Session: DNI Combined-Image Extraction Bug Fix
 
 **Phase**: Developer + QA

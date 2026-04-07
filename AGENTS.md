@@ -3,6 +3,7 @@
 > Last updated: 2026-04-06
 
 ## Quick-Reference: What Changed Recently
+- **Customer name resolution fix (2026-04-07)**: Webhook sent "Cliente nuevo" because `fireDocFlowNewOrder` used stale `project.customerName` instead of `snapshot.fullName`. Fix: `customer_name: snapshot.fullName || project.customerName || ''`. Success screen showed "¡Todo listo, Cliente!" because frontend project state was never updated after submit. Fix: `onSuccess` in App.tsx now computes name from current formData and calls `setProject(...)` before navigating. 19/19 tests pass. Files: `backend/server.js`, `app/src/App.tsx`.
 - **DNI combined-image extraction fix (2026-04-07)**: When a single photo shows both sides of the DNI, the AI used to return name+address together and `normalizeIdentityExtraction` misclassified it as "back" side. Fix: (1) `dniAutoBatch` prompt now has a "COMBINED IMAGE RULE" — set `side: "front"`, extract only front fields, null out address fields; (2) `normalizeIdentityExtraction` now correctly handles `hasAddressData && hasIdentityCore` → `side = 'front'`; defence layer strips wrong-side fields. 26/26 unit tests pass. File: `backend/server.js`.
 - **PRD v2.1 (2026-04-06) — All 6 issues implemented**:
   - Issue 6: `Material Radiadores` field now only shown when `heatingEmitterType` is `radiadores-agua` or `radiadores-electricos` (not just `!== suelo-radiante`). Validation updated to match. State resets correctly on type switch.

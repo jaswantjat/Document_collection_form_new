@@ -615,7 +615,19 @@ function FormApp() {
               setPropertyDocsTarget(docTarget || undefined);
               goTo(sectionName as Section);
             }}
-            onSuccess={() => goTo('success')}
+            onSuccess={() => {
+              const resolvedName = (
+                formData.contract?.extraction?.extractedData?.fullName
+                || formData.dni?.front?.extraction?.extractedData?.fullName
+                || formData.ibi?.extraction?.extractedData?.titular
+                || formData.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular
+                || null
+              ) as string | null;
+              if (resolvedName && activeProject && resolvedName !== activeProject.customerName) {
+                setProject({ ...activeProject, customerName: resolvedName });
+              }
+              goTo('success');
+            }}
             onBack={followUpDocumentFlow ? undefined : () => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
             autoSubmit={autoSubmitReview}
           />
