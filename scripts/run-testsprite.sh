@@ -1,5 +1,7 @@
 #!/bin/bash
-# Wrapper to run TestSprite CLI with correct environment
+# Run the TestSprite MCP client — generates and executes AI browser tests.
+# The client spawns @testsprite/testsprite-mcp@latest via npx each time,
+# so no hardcoded cache paths that break across sessions.
 export API_KEY="$TESTSPRITE_API_KEY"
 cd /home/runner/workspace
-exec node /home/runner/.npm/_npx/8ddf6bea01b2519d/node_modules/@testsprite/testsprite-mcp/dist/index.js generateCodeAndExecute
+exec node testsprite_client.mjs
