@@ -165,6 +165,23 @@ describe('identityDocument', () => {
       expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE — cara principal');
     });
 
+    it('should return "DNI / NIE — cara principal" for passport (unknown kind) with front only', () => {
+      const extraction: AIExtraction = {
+        extractedData: {},
+        confidence: 0.95,
+        isCorrectDocument: true,
+        documentTypeDetected: 'passport',
+        identityDocumentKind: 'passport' as any,
+        needsManualReview: false,
+        confirmedByUser: true,
+      };
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front'), extraction),
+        back: createDocSlot(null, null),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE — cara principal');
+    });
+
     it('should return "DNI / NIE — cara trasera" when only back is present', () => {
       const dni: Pick<DNIData, 'front' | 'back'> = {
         front: createDocSlot(null, null),

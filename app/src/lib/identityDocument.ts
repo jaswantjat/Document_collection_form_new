@@ -28,9 +28,7 @@ export function getIdentityDocumentDoneLabel(dni: Pick<DNIData, 'front' | 'back'
   if (dni.front.photo && kind === 'nie-card') {
     return 'NIE — documento válido';
   }
-  if (dni.front.photo && kind === 'dni-card') {
-    return 'DNI / NIE — cara principal';
-  }
+  if (dni.front.photo) return 'DNI / NIE — cara principal';
   if (dni.back.photo) return 'DNI / NIE — cara trasera';
   return 'DNI / NIE';
 }

@@ -21,13 +21,19 @@
    Description updated to "Sube tu DNI o NIE — una o dos fotos. Con solo la cara principal es suficiente."
    Back-slot empty state relabelled "Reverso / (opcional)".
 
+**Post-audit fixes** (caught during review):
+- `getIdentityDocumentDoneLabel` was missing a catch-all for passport and any unknown kind — it returned the empty `'DNI / NIE'` label even when front was uploaded. Fixed with a `if (dni.front.photo) return 'DNI / NIE — cara principal'` fallback after the NIE-specific branches.
+- `ReviewSection.tsx` hint text still said "DNI por ambas caras o NIE válido" — updated to "DNI, NIE o pasaporte — una cara es suficiente".
+- Added regression test: passport (kind='passport') with front → `getIdentityDocumentDoneLabel` returns "DNI / NIE — cara principal".
+
 **Architecture unchanged**: `DNIData.{ front, back }` type unchanged. `dniAutoBatch` already handled 1 or 2 images. No backend changes needed.
 
-**Tests**: 64/64 pass — 24 new tests in `app/src/lib/identityDocument.test.ts` covering all completion, pending-label, and done-label scenarios.
+**Tests**: 65/65 pass — 25 new tests in `app/src/lib/identityDocument.test.ts` covering all completion, pending-label, done-label scenarios, and passport regression.
 
 **Files changed**:
 - `app/src/lib/identityDocument.ts`
 - `app/src/sections/PropertyDocsSection.tsx`
+- `app/src/sections/ReviewSection.tsx`
 - `app/src/lib/identityDocument.test.ts` (new)
 
 ---

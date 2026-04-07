@@ -89,7 +89,7 @@ export function ReviewSection({
     {
       id: 'dni',
       description: 'Documento de identidad del titular',
-      hint: dniDone ? 'Toca para revisar o actualizar' : 'DNI por ambas caras o NIE válido',
+      hint: dniDone ? 'Toca para revisar o actualizar' : 'DNI, NIE o pasaporte — una cara es suficiente',
       label: dniDoneLabel ?? 'DNI / NIE',
       icon: Camera,
       status: (dniDone ? 'done' : 'pending') as ChecklistStatus,
