@@ -64,7 +64,6 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     if (t.tipoFase && t.tipoFaseConfirmed === false) {
       errs.thermalTipoFase = 'Por favor, confirma el tipo de fase extraído de la factura';
     }
-    if (!String(t.cups ?? '').trim()) errs.thermalCups = 'Introduce el código CUPS';
   }
 
   if (stepKey === 'additional') {

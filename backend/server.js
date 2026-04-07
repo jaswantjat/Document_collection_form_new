@@ -609,7 +609,6 @@ function isEcDataComplete(ec) {
   if ((t.heatingEmitterType === 'radiadores-agua' || t.heatingEmitterType === 'radiadores-electricos') && !t.radiatorMaterial) return false;
   if (!t.tipoFase) return false;
   if (t.tipoFase && t.tipoFaseConfirmed === false) return false;
-  if (!String(t.cups ?? '').trim()) return false;
 
   // ── Additional ───────────────────────────────────────────────────────────────
   if (!a.soldProduct) return false;
