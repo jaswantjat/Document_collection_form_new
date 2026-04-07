@@ -561,8 +561,8 @@ function getEnergyCertificate(formData) {
 
 /**
  * Validates that an energyCertificate object has all required fields filled.
- * Mirrors the logic in app/src/lib/energyCertificateValidation.ts so the backend
- * can detect stale 'completed' status (saved before per-step validation was added).
+ * Kept in sync with app/src/lib/energyCertificateValidation.ts — update both
+ * together whenever a required field is added or removed.
  * Returns true only if every required field across all three data steps is present.
  */
 function isEcDataComplete(ec) {
@@ -571,7 +571,8 @@ function isEcDataComplete(ec) {
   const t = ec.thermal || {};
   const a = ec.additional || {};
 
-  // Housing required fields — convert to string first so numeric 0 is not treated as missing
+  // ── Housing ──────────────────────────────────────────────────────────────────
+  // cadastralReference is intentionally optional — all other housing fields are required.
   const _area = h.habitableAreaM2 !== null && h.habitableAreaM2 !== undefined ? String(h.habitableAreaM2).trim() : '';
   if (!_area) return false;
   const _floors = h.floorCount !== null && h.floorCount !== undefined ? String(h.floorCount).trim() : '';
@@ -579,22 +580,42 @@ function isEcDataComplete(ec) {
   const _bedrooms = h.bedroomCount !== null && h.bedroomCount !== undefined ? String(h.bedroomCount).trim() : '';
   if (!_bedrooms) return false;
   if (!h.averageFloorHeight) return false;
+
+  // All four orientations for doors and windows must be filled in
+  const directions = ['north', 'east', 'south', 'west'];
+  const doors = h.doorsByOrientation || {};
+  const windows = h.windowsByOrientation || {};
+  const missingDoors = directions.some((d) => String(doors[d] ?? '').trim() === '');
+  const missingWindows = directions.some((d) => String(windows[d] ?? '').trim() === '');
+  if (missingDoors || missingWindows) return false;
+
   if (!h.windowFrameMaterial) return false;
+  if (!String(h.doorMaterial ?? '').trim()) return false;
   if (!h.windowGlassType) return false;
   if (h.hasShutters === null || h.hasShutters === undefined) return false;
+  if (h.hasShutters === true) {
+    const _shutterCount = String(h.shutterWindowCount ?? '').trim();
+    if (!_shutterCount) return false;
+  }
 
-  // Thermal required fields
+  // ── Thermal ──────────────────────────────────────────────────────────────────
   if (!t.thermalInstallationType) return false;
   if (!t.boilerFuelType) return false;
+  if (!String(t.equipmentDetails ?? '').trim()) return false;
   if (t.hasAirConditioning === null || t.hasAirConditioning === undefined) return false;
   if (t.hasAirConditioning === true && !t.airConditioningType) return false;
+  if (t.hasAirConditioning === true && !String(t.airConditioningDetails ?? '').trim()) return false;
   if (!t.heatingEmitterType) return false;
-  if (t.heatingEmitterType && t.heatingEmitterType !== 'suelo-radiante' && !t.radiatorMaterial) return false;
+  if ((t.heatingEmitterType === 'radiadores-agua' || t.heatingEmitterType === 'radiadores-electricos') && !t.radiatorMaterial) return false;
+  if (!t.tipoFase) return false;
+  if (t.tipoFase && t.tipoFaseConfirmed === false) return false;
+  if (!String(t.cups ?? '').trim()) return false;
 
-  // Additional required fields
+  // ── Additional ───────────────────────────────────────────────────────────────
   if (!a.soldProduct) return false;
   if (a.isExistingCustomer === null || a.isExistingCustomer === undefined) return false;
   if (a.hasSolarPanels === null || a.hasSolarPanels === undefined) return false;
+  if (a.hasSolarPanels === true && !String(a.solarPanelDetails ?? '').trim()) return false;
 
   return true;
 }
