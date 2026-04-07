@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-03-31T14:30:00Z",
-  "category": "bug",
-  "issue": "Radiator material field visible but unselectable when suelo-radiante is chosen",
-  "text": "When heatingEmitterType === 'suelo-radiante', the radiator material field was still rendered in EnergyCertificateSection.tsx but with value 'no-aplica' (which is not in RADIATOR_MATERIAL_OPTIONS). This left the field appearing with no active button — confusing for assessors. Fix: wrap the SegmentedOptions in a conditional that hides the field entirely when heatingEmitterType === 'suelo-radiante'. Validation already skips the radiatorMaterial requirement for suelo-radiante, so this is purely a UX fix.",
-  "pointers": ["app/src/sections/EnergyCertificateSection.tsx:697-706"]
-}

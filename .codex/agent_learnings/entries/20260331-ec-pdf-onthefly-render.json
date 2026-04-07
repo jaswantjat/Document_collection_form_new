@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-03-31T11:20:00Z",
-  "category": "architecture",
-  "text": "Energy certificate PDF download in the dashboard originally required renderedDocument.imageDataUrl to be pre-stored in the project. Projects completed before rendering was introduced (or where rendering was skipped) had no download option at all. Fix: buildEnergyCertificatePdfFactory now falls back to renderEnergyCertificateOverlay(project.formData) on-the-fly when no stored image exists. SignedDocumentsSection now shows the EC card for any status='completed' project, not only when asset is present.",
-  "pointers": ["app/src/pages/Dashboard.tsx:245-252", "app/src/lib/energyCertificateDocument.ts:462-466"],
-  "issue": "No download button for energy certificate PDF in dashboard for projects with completed EC but missing renderedDocument.imageDataUrl"
-}

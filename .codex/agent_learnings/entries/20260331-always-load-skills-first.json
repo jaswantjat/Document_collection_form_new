@@ -1,6 +1,0 @@
-{
-  "ts_utc": "2026-03-31T12:05:00Z",
-  "category": "workflow",
-  "text": "The ai-coding-workflow and ecc-patterns skills are marked MUST-LOAD for all planning and implementation work in this project. The ecc-patterns skill explicitly requires checking .codex/agent_learnings/ BEFORE writing any code. Skipping this step caused: (1) missing context from prior fixes that were relevant to the current bug, (2) jumping to code without requirements clarity scoring, (3) missing the learning that EC was intentionally added to SignedDocumentsSection in a prior session. Always load both skills at the very start of any task in this codebase.",
-  "issue": "Skills not loaded before starting implementation work"
-}

@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-04-02T12:00:00Z",
-  "category": "technical-gotcha",
-  "text": "API endpoint naming follows a singular pattern: use `/api/project/:code` instead of the plural `/api/projects/:code`. Incorrectly using the plural form results in 404 errors during E2E testing.",
-  "pointers": ["backend/server.js", "tests/e2e/form-diagnosis.spec.ts"],
-  "issue": "DIAG-T08 test failure due to 404 on pluralized API route."
-}

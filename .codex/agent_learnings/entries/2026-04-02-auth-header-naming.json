@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-04-02T12:05:00Z",
-  "category": "technical-gotcha",
-  "text": "The backend expects the authentication header to be named `x-project-token`, not `x-token`. Using the wrong header name leads to unauthorized access errors (401/403) even with a valid token.",
-  "pointers": ["backend/server.js", "tests/e2e/form-diagnosis.spec.ts"],
-  "issue": "DIAG-T08 test failure due to incorrect auth header name."
-}

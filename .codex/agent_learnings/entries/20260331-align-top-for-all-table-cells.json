@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-03-31T12:30:00Z",
-  "category": "technical-gotcha",
-  "text": "Dashboard table columns 1-4 (Last updated, Project/customer, Product/region, Address) used align-middle while columns 5-11 used align-top. When document columns (SignedPdfsTableCell, StatusCell) stretch the row height, the align-middle cells appear to have large blank regions above and below their content — visible as a 'big white space' between the project and product columns. Fix: change all td elements to align-top for consistent layout. Never mix align-middle with align-top in the same table when cells can have variable heights.",
-  "pointers": ["app/src/pages/Dashboard.tsx:ProjectTableRow"],
-  "issue": "Big white space between Project column and Product column in dashboard table"
-}

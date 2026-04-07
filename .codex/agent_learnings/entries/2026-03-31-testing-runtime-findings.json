@@ -1,7 +1,0 @@
-{
-  "ts_utc": "2026-03-31T09:00:00Z",
-  "category": "technical-gotcha",
-  "text": "The express.json 25MB limit applies to raw JSON body size, not file size. Since customer form images are sent as base64 in JSON (not multipart), a 19MB binary image encodes to ~25.3MB base64 JSON and is rejected with 413. However, compressImageForAI() in photoValidation.ts resizes all images to max 1600px JPEG 0.82 quality before upload, making real-world payloads well under 1MB. The server limit is only relevant for direct API abuse.",
-  "pointers": ["app/src/lib/photoValidation.ts:213", "backend/server.js:57"],
-  "issue": "E2E testing N2/N3 — file size limit behavior runtime test"
-}

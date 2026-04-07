@@ -1,8 +1,0 @@
-{
-  "ts_utc": "2026-03-31T11:00:00Z",
-  "category": "bug",
-  "text": "BUG-06: In normalizeIdentityExtraction() (server.js), NIE certificates contain birthplace info (e.g. 'nacido/a en HILVERSUM') which the AI correctly extracts into both `municipality` and `placeOfBirth` fields. These triggered `hasAddressData = true`, which forced `side = 'back'` BEFORE the `identityDocumentKind === 'nie-certificate' → side = 'front'` rule could execute. This caused NIE certificates to be stored in the back DNI slot with the front slot empty, making `isIdentityDocumentComplete()` return false and blocking the user. Fix: move the `nie-certificate → front` rule to the highest priority (before hasAddressData check), since a NIE certificate is always a single-page document and must always go to the front slot regardless of what fields are extracted from it.",
-  "fix": "server.js normalizeIdentityExtraction(): moved `if (identityDocumentKind === 'nie-certificate') side = 'front'` to be the first/highest-priority branch, before `if (hasAddressData) side = 'back'`.",
-  "pointers": ["backend/server.js:1230"],
-  "discovered_via": "Live runtime test with real NIE certificate (Z1743921-C, paper format, Ministerio del Interior / Comisaría de Policía Marbella, 2024)"
-}
