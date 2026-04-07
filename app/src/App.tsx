@@ -451,9 +451,14 @@ function FormApp() {
     const contractProvince = formData.contract?.extraction?.extractedData?.province;
     if (!contractProvince) return;
     const currentLocation = formData.location ?? formData.representation?.location ?? null;
-    if (currentLocation) return;
+    // Skip if a valid region is already set.  Treat legacy 'other' as unset so
+    // the contract province can still promote it to a real supported region.
+    if (currentLocation && currentLocation !== 'other') return;
     const info = getLocationInfo(String(contractProvince));
-    if (info) setLocation(info.id);
+    // Only auto-set location for the three supported regions.
+    // Provinces outside these map to 'other', which is no longer a valid
+    // user-selectable option — the user will be prompted to pick manually.
+    if (info && info.id !== 'other') setLocation(info.id);
   }, [formData.contract?.extraction, formData.location, formData.representation?.location, setLocation]);
 
   const goTo = (section: Section | 'phone') => {

@@ -20,7 +20,11 @@ export function ProvinceSelectionSection({
   onBack,
   onContinue,
 }: Props) {
-  const existingLocation = formData.location ?? formData.representation.location ?? null;
+  const rawExistingLocation = formData.location ?? formData.representation.location ?? null;
+  // Treat legacy 'other' as unset — it is no longer a valid selectable region,
+  // so the user should be prompted to pick a supported province instead.
+  const existingLocation: LocationRegion | null =
+    rawExistingLocation !== 'other' ? rawExistingLocation : null;
   const [locationConfirmed, setLocationConfirmed] = useState(!!existingLocation);
   const [showManual, setShowManual] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationRegion | null>(existingLocation);
