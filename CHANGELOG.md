@@ -1,3 +1,37 @@
+## 2026-04-07.16 — Session: DNI/NIE Optional-Back Upload
+
+**Phase**: Developer + QA
+
+**Feature**: Front photo alone is now sufficient for DNI/NIE upload. Back side is optional enrichment (extracts address data if present) but is never required for form completion.
+
+**Why**: Spanish installers often scan both DNI sides onto a single page, or the customer only has a clear front photo. Requiring the back was an unnecessary blocker.
+
+**Changes:**
+
+1. **`app/src/lib/identityDocument.ts` — `isIdentityDocumentComplete`**:
+   Simplified to `return !!dni.front.photo;`. Removed the DNI-card exception that required both sides.
+
+2. **`app/src/lib/identityDocument.ts` — `getIdentityDocumentPendingLabel`**:
+   Removed "Falta la trasera" case. Function now only returns "Falta la frontal" (back present, front missing) or null.
+
+3. **`app/src/lib/identityDocument.ts` — `getIdentityDocumentDoneLabel`**:
+   Added label for front-only DNI card: "DNI / NIE — cara principal". NIE cert/card labels unchanged.
+
+4. **`app/src/sections/PropertyDocsSection.tsx` — `DNICard` UI**:
+   Description updated to "Sube tu DNI o NIE — una o dos fotos. Con solo la cara principal es suficiente."
+   Back-slot empty state relabelled "Reverso / (opcional)".
+
+**Architecture unchanged**: `DNIData.{ front, back }` type unchanged. `dniAutoBatch` already handled 1 or 2 images. No backend changes needed.
+
+**Tests**: 64/64 pass — 24 new tests in `app/src/lib/identityDocument.test.ts` covering all completion, pending-label, and done-label scenarios.
+
+**Files changed**:
+- `app/src/lib/identityDocument.ts`
+- `app/src/sections/PropertyDocsSection.tsx`
+- `app/src/lib/identityDocument.test.ts` (new)
+
+---
+
 ## 2026-04-07.15 — Session: Customer Name Resolution Fix
 
 **Phase**: Developer + QA

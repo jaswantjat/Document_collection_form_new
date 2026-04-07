@@ -906,7 +906,7 @@ function DNICard({
       </div>
 
       <p className="text-xs text-gray-500">
-        Sube tu DNI o NIE. El sistema detecta el tipo de documento y algunos NIE válidos se aceptan con una sola página útil.
+        Sube tu DNI o NIE — una o dos fotos. Con solo la cara principal es suficiente.
       </p>
 
       {originalPdfs.length > 0 && (
@@ -974,8 +974,8 @@ function DNICard({
               </>
             ) : (
               <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
-                <p className="text-[10px] text-gray-400 text-center">Página complementaria</p>
-                <p className="text-[9px] text-gray-300 text-center mt-1">Reverso o datos adicionales</p>
+                <p className="text-[10px] text-gray-400 text-center">Reverso</p>
+                <p className="text-[9px] text-gray-300 text-center mt-1">(opcional)</p>
               </div>
             )}
           </div>

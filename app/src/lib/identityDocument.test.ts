@@ -1,0 +1,220 @@
+import { describe, it, expect } from 'vitest';
+import type { AIExtraction, DNIData, DocSlot, UploadedPhoto } from '@/types';
+import {
+  getIdentityDocumentKind,
+  isSingleSidedIdentityKind,
+  isIdentityDocumentComplete,
+  getIdentityDocumentDoneLabel,
+  getIdentityDocumentPendingLabel,
+} from './identityDocument';
+
+function createMockPhoto(id = 'photo-1'): UploadedPhoto {
+  return {
+    id,
+    preview: 'data:image/jpeg;base64,test',
+    timestamp: Date.now(),
+    sizeBytes: 1024,
+  };
+}
+
+function createMockExtraction(kind?: 'dni-card' | 'nie-card' | 'nie-certificate'): AIExtraction {
+  return {
+    extractedData: {},
+    confidence: 0.95,
+    isCorrectDocument: true,
+    documentTypeDetected: kind || 'dni-card',
+    identityDocumentKind: kind,
+    needsManualReview: false,
+    confirmedByUser: true,
+  };
+}
+
+function createDocSlot(photo: UploadedPhoto | null, extraction: AIExtraction | null): DocSlot {
+  return {
+    photo,
+    extraction,
+  };
+}
+
+describe('identityDocument', () => {
+  describe('isIdentityDocumentComplete', () => {
+    // Test 1: front only (DNI card) → isIdentityDocumentComplete = true
+    it('Test 1: front only (DNI card) → should be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front-1'), createMockExtraction('dni-card')),
+        back: createDocSlot(null, null),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(true);
+    });
+
+    // Test 2: front only (NIE card) → isIdentityDocumentComplete = true
+    it('Test 2: front only (NIE card) → should be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front-2'), createMockExtraction('nie-card')),
+        back: createDocSlot(null, null),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(true);
+    });
+
+    // Test 3: front only (NIE cert) → isIdentityDocumentComplete = true
+    it('Test 3: front only (NIE cert) → should be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front-3'), createMockExtraction('nie-certificate')),
+        back: createDocSlot(null, null),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(true);
+    });
+
+    // Test 4: front only (passport/unknown) → isIdentityDocumentComplete = true
+    it('Test 4: front only (passport/unknown) → should be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front-4'), createMockExtraction()),
+        back: createDocSlot(null, null),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(true);
+    });
+
+    // Test 5: both front and back → isIdentityDocumentComplete = true
+    it('Test 5: both front and back → should be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front-5'), createMockExtraction('dni-card')),
+        back: createDocSlot(createMockPhoto('back-5'), createMockExtraction()),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(true);
+    });
+
+    // Test 6: no photos at all → isIdentityDocumentComplete = false
+    it('Test 6: no photos at all → should not be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(null, null),
+        back: createDocSlot(null, null),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(false);
+    });
+
+    // Test 7: back only (no front) → isIdentityDocumentComplete = false
+    it('Test 7: back only (no front) → should not be complete', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(null, null),
+        back: createDocSlot(createMockPhoto('back-7'), createMockExtraction()),
+      };
+      expect(isIdentityDocumentComplete(dni)).toBe(false);
+    });
+  });
+
+  describe('getIdentityDocumentPendingLabel', () => {
+    // Test 8: pendingLabel: front only → null (not "Falta la trasera")
+    it('Test 8: front only → should return null (not "Falta la trasera")', () => {
+      const front = createDocSlot(createMockPhoto('front-8'), createMockExtraction('dni-card'));
+      const back = createDocSlot(null, null);
+      expect(getIdentityDocumentPendingLabel(front, back)).toBeNull();
+    });
+
+    // Test 9: pendingLabel: back only → "Falta la frontal"
+    it('Test 9: back only → should return "Falta la frontal"', () => {
+      const front = createDocSlot(null, null);
+      const back = createDocSlot(createMockPhoto('back-9'), createMockExtraction());
+      expect(getIdentityDocumentPendingLabel(front, back)).toBe('Falta la frontal');
+    });
+
+    // Test 10: pendingLabel: both → null
+    it('Test 10: both front and back → should return null', () => {
+      const front = createDocSlot(createMockPhoto('front-10'), createMockExtraction('dni-card'));
+      const back = createDocSlot(createMockPhoto('back-10'), createMockExtraction());
+      expect(getIdentityDocumentPendingLabel(front, back)).toBeNull();
+    });
+
+    // Test 11: pendingLabel: neither → null
+    it('Test 11: neither front nor back → should return null', () => {
+      const front = createDocSlot(null, null);
+      const back = createDocSlot(null, null);
+      expect(getIdentityDocumentPendingLabel(front, back)).toBeNull();
+    });
+  });
+
+  describe('getIdentityDocumentDoneLabel', () => {
+    it('should return "DNI / NIE — ambas caras" when both front and back are present', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front'), createMockExtraction('dni-card')),
+        back: createDocSlot(createMockPhoto('back'), createMockExtraction()),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE — ambas caras');
+    });
+
+    it('should return "NIE — certificado válido" for NIE certificate with front only', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front'), createMockExtraction('nie-certificate')),
+        back: createDocSlot(null, null),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('NIE — certificado válido');
+    });
+
+    it('should return "NIE — documento válido" for NIE card with front only', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front'), createMockExtraction('nie-card')),
+        back: createDocSlot(null, null),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('NIE — documento válido');
+    });
+
+    it('should return "DNI / NIE — cara principal" for DNI card with front only', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(createMockPhoto('front'), createMockExtraction('dni-card')),
+        back: createDocSlot(null, null),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE — cara principal');
+    });
+
+    it('should return "DNI / NIE — cara trasera" when only back is present', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(null, null),
+        back: createDocSlot(createMockPhoto('back'), createMockExtraction()),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE — cara trasera');
+    });
+
+    it('should return "DNI / NIE" when no photos are present', () => {
+      const dni: Pick<DNIData, 'front' | 'back'> = {
+        front: createDocSlot(null, null),
+        back: createDocSlot(null, null),
+      };
+      expect(getIdentityDocumentDoneLabel(dni)).toBe('DNI / NIE');
+    });
+  });
+
+  describe('getIdentityDocumentKind', () => {
+    it('should return the identity document kind from extraction', () => {
+      const extraction = createMockExtraction('dni-card');
+      expect(getIdentityDocumentKind(extraction)).toBe('dni-card');
+    });
+
+    it('should return null for invalid kind', () => {
+      const extraction = createMockExtraction();
+      extraction.identityDocumentKind = 'invalid-kind' as any;
+      expect(getIdentityDocumentKind(extraction)).toBeNull();
+    });
+
+    it('should return null for missing extraction', () => {
+      expect(getIdentityDocumentKind(null)).toBeNull();
+      expect(getIdentityDocumentKind(undefined)).toBeNull();
+    });
+  });
+
+  describe('isSingleSidedIdentityKind', () => {
+    it('should return true for nie-card', () => {
+      expect(isSingleSidedIdentityKind('nie-card')).toBe(true);
+    });
+
+    it('should return true for nie-certificate', () => {
+      expect(isSingleSidedIdentityKind('nie-certificate')).toBe(true);
+    });
+
+    it('should return false for dni-card', () => {
+      expect(isSingleSidedIdentityKind('dni-card')).toBe(false);
+    });
+
+    it('should return false for null', () => {
+      expect(isSingleSidedIdentityKind(null)).toBe(false);
+    });
+  });
+});

@@ -16,26 +16,26 @@ export function isSingleSidedIdentityKind(kind: IdentityDocumentKind | null): bo
 }
 
 export function isIdentityDocumentComplete(dni: Pick<DNIData, 'front' | 'back'>): boolean {
-  if (dni.front.photo && dni.back.photo) return true;
-  if (!dni.front.photo) return false;
-  return isSingleSidedIdentityKind(getIdentityDocumentKind(dni.front.extraction));
+  return !!dni.front.photo;
 }
 
 export function getIdentityDocumentDoneLabel(dni: Pick<DNIData, 'front' | 'back'>): string {
   const kind = getIdentityDocumentKind(dni.front.extraction);
   if (dni.front.photo && dni.back.photo) return 'DNI / NIE — ambas caras';
-  if (dni.front.photo && isSingleSidedIdentityKind(kind)) {
-    return kind === 'nie-certificate' ? 'NIE — certificado válido' : 'NIE — documento válido';
+  if (dni.front.photo && kind === 'nie-certificate') {
+    return 'NIE — certificado válido';
   }
-  if (dni.front.photo) return 'DNI / NIE — cara frontal';
+  if (dni.front.photo && kind === 'nie-card') {
+    return 'NIE — documento válido';
+  }
+  if (dni.front.photo && kind === 'dni-card') {
+    return 'DNI / NIE — cara principal';
+  }
   if (dni.back.photo) return 'DNI / NIE — cara trasera';
   return 'DNI / NIE';
 }
 
 export function getIdentityDocumentPendingLabel(front: DocSlot, back: DocSlot): string | null {
   if (!front.photo && back.photo) return 'Falta la frontal';
-  if (front.photo && !back.photo && !isSingleSidedIdentityKind(getIdentityDocumentKind(front.extraction))) {
-    return 'Falta la trasera';
-  }
   return null;
 }
