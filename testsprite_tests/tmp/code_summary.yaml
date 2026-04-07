@@ -1,0 +1,74 @@
+project_name: workspace
+tech_stack:
+  frontend:
+    framework: React 19
+    language: TypeScript
+    build_tool: Vite
+    css: Tailwind CSS
+    router: React Router v6
+    port: 5000
+    entry: app/src/main.tsx
+  backend:
+    framework: Express (Node.js)
+    language: JavaScript
+    database: flat-file JSON (backend/db.json)
+    port: 3001
+    entry: backend/server.js
+  microservices:
+    - name: autocropper
+      framework: Flask (Python)
+      purpose: auto-crop uploaded document images
+
+features:
+  - name: Customer document upload flow
+    description: >
+      Multi-step mobile-first form guiding customers through uploading identity
+      documents (DNI/NIE front/back), IBI certificate, electricity bill,
+      and optionally a CUPS contract. Accessed via ?code=ELTXXXXXX URL param.
+    steps:
+      - phone number entry
+      - property document uploads (DNI/NIE, IBI, electricity bill, CUPS contract)
+      - province selection
+      - representation document signing (region-specific PDF overlays)
+      - energy certificate survey
+      - review and submission
+
+  - name: Document signing with PDF overlays
+    description: >
+      Customers sign region-specific legal PDFs using a canvas-based signature pad.
+      Cataluña requires 3 signed docs; Madrid/Valencia require 2; other provinces skip signing.
+
+  - name: DNI/NIE document rules
+    description: >
+      DNI card front → back required; combined image → back not required;
+      NIE certificate/card → front only sufficient.
+
+  - name: Admin dashboard
+    description: >
+      Internal dashboard for Eltex assessors to review customer submissions,
+      view uploaded documents, and download ZIPs of all project files.
+      Authenticated via x-dashboard-token header with password eltex2025.
+
+  - name: Offline resilience
+    description: >
+      localStorage + IndexedDB backup with 2-second debounce auto-save,
+      beforeunload flush, and progressive background photo pre-upload.
+
+auth:
+  customer: query param ?code=ELTXXXXXX (e.g. ELT20250001–ELT20250005)
+  admin: HTTP header x-dashboard-token with value eltex2025
+
+api_endpoints:
+  - GET /api/projects/:code — load project data
+  - POST /api/projects/:code/submit — submit form data
+  - POST /api/upload — upload document file
+  - GET /api/dashboard/projects — list all submissions (admin)
+  - GET /api/dashboard/projects/:code/download — download ZIP (admin)
+  - GET /health — health check
+
+test_users:
+  - code: ELT20250001
+  - code: ELT20250002
+  - code: ELT20250003
+  - code: ELT20250004
+  - code: ELT20250005

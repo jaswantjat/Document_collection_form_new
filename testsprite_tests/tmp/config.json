@@ -1,0 +1,17 @@
+{
+  "status": "init",
+  "scope": "codebase",
+  "type": "frontend",
+  "localEndpoint": "http://localhost:5000/?code=ELT20250001",
+  "serverPort": 36895,
+  "executionArgs": {
+    "projectName": "workspace",
+    "projectPath": "/home/runner/workspace",
+    "testIds": [],
+    "additionalInstruction": "App uses ?code=ELT20250001 for customer auth. Admin dashboard at /dashboard uses password eltex2025.",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-hbyZI2ZHknv0YSy0kxTBcHawPrymM68Fpy-Sqs0p0r6xjgytx5uiFCoKhp_rYRIrY-b6XQQLQUCHdbGdFvGVQa7sVUIg0Zs9cdOD-HdF9SSWUKkstP8YWnOKynoH-tFZ0yM"
+    }
+  }
+}
