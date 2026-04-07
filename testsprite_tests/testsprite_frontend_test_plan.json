@@ -1,0 +1,941 @@
+[
+  {
+    "id": "TC001",
+    "title": "Session recovery restores progress after reload and allows continuing from last step",
+    "description": "Verifies that after making progress and waiting for auto-save, a reload restores the session and the user can continue from the last saved step.",
+    "category": "Offline resilience and session recovery",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Navigate through at least two steps and enter some form data"
+      },
+      {
+        "type": "action",
+        "description": "Wait for 2 seconds"
+      },
+      {
+        "type": "action",
+        "description": "Reload the page"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to resume the project"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user is returned to the last saved step with previously entered data restored"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Access project by phone number and start at the next required step",
+    "description": "Verifies a customer can enter a valid Spanish phone number and is redirected into their project session where the form opens on the correct next step.",
+    "category": "Project access via phone number",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid Spanish phone number into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user is redirected into a project session identified by a project code in the URL"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the first required form step is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Submit project after completing all required items",
+    "description": "Verifies that a customer can complete all required sections, see all checklist items marked complete, submit the project, and reach a confirmation screen.",
+    "category": "Review and submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Navigate through the form to complete all required sections until reaching the review step"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /review"
+      },
+      {
+        "type": "action",
+        "description": "Submit the project from the review step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a submission confirmation screen is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Enforce DNI back-side requirement when only front is provided",
+    "description": "Verifies that uploading a DNI front-only triggers a back-side requirement and the user can satisfy it by uploading the back image.",
+    "category": "Property document upload",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /property-docs"
+      },
+      {
+        "type": "action",
+        "description": "Upload a DNI front-only image that is detected as the card front"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a prompt indicates the DNI back-side is required"
+      },
+      {
+        "type": "action",
+        "description": "Upload a DNI back-side image"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the identity document upload"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the identity document requirement is satisfied and the flow allows continuation"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Local backups preserve property-docs photos and inputs across restart",
+    "description": "Verifies that photos and inputs added on the property documents step are saved locally and restored when reopening the same project code.",
+    "category": "Offline resilience and session recovery",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the property documents step"
+      },
+      {
+        "type": "action",
+        "description": "Add at least one document photo through the in-app capture/selection flow"
+      },
+      {
+        "type": "action",
+        "description": "Fill a text input on the property documents step with a distinctive value like ELT-RESTORE-CHECK"
+      },
+      {
+        "type": "action",
+        "description": "Wait for 2 seconds"
+      },
+      {
+        "type": "action",
+        "description": "Reload the page"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the property documents step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify previously added document photos and the entered value ELT-RESTORE-CHECK are present"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Upload all required property documents, review extracted data, and continue",
+    "description": "Verifies a customer can upload required documents, review AI-extracted data for each, confirm, and proceed to the next step.",
+    "category": "Property document upload",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /property-docs"
+      },
+      {
+        "type": "action",
+        "description": "Upload an identity document using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Upload an IBI certificate using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Upload electricity bill pages using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Review the extracted data shown for the uploaded documents"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the uploads and continue"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the next step after property documents is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Checklist gating prevents submit when a required item is incomplete",
+    "description": "Verifies that the review step blocks final submission while any required checklist item is incomplete and guides the user to fix it.",
+    "category": "Review and submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Proceed through the form leaving at least one required section incomplete and reach the review step"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /review"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to submit the project"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the project is not submitted and the UI indicates at least one required item must be completed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Assessor can access dashboard and open a project detail view",
+    "description": "Verifies that an assessor can authenticate into the dashboard, see a list of submitted projects, and open a project to view its details.",
+    "category": "Admin dashboard for assessors",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the admin password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the admin password"
+      },
+      {
+        "type": "action",
+        "description": "Select a project from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the project detail view shows uploaded documents, extracted data, and signatures"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Assessor can download a project ZIP from project details",
+    "description": "Verifies that an assessor can open a project in the dashboard and initiate a ZIP download for that project from the UI.",
+    "category": "Admin dashboard for assessors",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the admin password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the admin password"
+      },
+      {
+        "type": "action",
+        "description": "Select a project from the list"
+      },
+      {
+        "type": "action",
+        "description": "Initiate the project ZIP download"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a ZIP download is initiated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Fix an incomplete checklist item via deep link and successfully submit",
+    "description": "Verifies that a user can jump from an incomplete checklist item to its step, complete it, return to review, and submit successfully.",
+    "category": "Review and submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Proceed through the form leaving exactly one required item incomplete and reach the review step"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /review"
+      },
+      {
+        "type": "action",
+        "description": "Click the incomplete checklist item to navigate to the referenced step"
+      },
+      {
+        "type": "action",
+        "description": "Complete the missing requirement on that step"
+      },
+      {
+        "type": "action",
+        "description": "Return through the form to the review step"
+      },
+      {
+        "type": "action",
+        "description": "Submit the project"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a submission confirmation screen is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Complete all required legal signatures and proceed",
+    "description": "Verifies that a customer can sign each required legal PDF in sequence and proceed to the next step after all signatures are completed.",
+    "category": "Representation / legal signing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /representation"
+      },
+      {
+        "type": "action",
+        "description": "Add a signature in the signature pad for the current legal document"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the signed document"
+      },
+      {
+        "type": "action",
+        "description": "Repeat signing for each remaining required legal document"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on either the energy certificate survey step or the review step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the representation signing step shows all required documents as completed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Auto-save keeps progress when navigating away and returning to the same project",
+    "description": "Verifies that after auto-save runs, leaving the flow and returning with the same project code restores progress without requiring re-entry.",
+    "category": "Offline resilience and session recovery",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to any mid-flow step and enter some form data"
+      },
+      {
+        "type": "action",
+        "description": "Wait for 2 seconds"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to resume the project"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the previous session is restored and the user can continue without losing entered data"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Route Madrid customers to representation signing with two required signatures",
+    "description": "Verifies that selecting Madrid shows a requirement of two legal signatures and routes the customer to the representation signing step when continuing.",
+    "category": "Province selection and smart routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /province-selection"
+      },
+      {
+        "type": "action",
+        "description": "Select Madrid as the province"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the representation signing step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI indicates that two legal documents require signature"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Route Cataluña customers to representation signing with three required signatures",
+    "description": "Verifies that selecting Cataluña shows a requirement of three legal signatures and routes the customer to the representation signing step when continuing.",
+    "category": "Province selection and smart routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /province-selection"
+      },
+      {
+        "type": "action",
+        "description": "Select Cataluña as the province"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the representation signing step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI indicates that three legal documents require signature"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Completing housing, openings, thermal systems, additional info and signature proceeds to review",
+    "description": "Verifies that completing all four survey steps plus the certificate signature allows the customer to continue to review.",
+    "category": "Energy certificate survey",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /energy-certificate"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid values into the housing data step fields"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next survey step"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid values into the openings step fields"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next survey step"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid values into the thermal systems step fields"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next survey step"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid values into the additional info step fields"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the signature step"
+      },
+      {
+        "type": "action",
+        "description": "Add a signature for the completed certificate"
+      },
+      {
+        "type": "action",
+        "description": "Confirm and continue"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the review step"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Allow NIE certificate upload without requiring a back-side",
+    "description": "Verifies that uploading a single-document NIE certificate satisfies identity requirements without prompting for a back-side.",
+    "category": "DNI/NIE upload rules",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /property-docs"
+      },
+      {
+        "type": "action",
+        "description": "Upload an NIE certificate document using a supported file type"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no prompt is shown requiring an additional back-side upload"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the identity document upload"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the identity document requirement is satisfied"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Skip signing for non-listed provinces and route forward",
+    "description": "Verifies that selecting an Other province skips the representation signing requirement and routes the customer to the next step (energy-certificate or review) when continuing.",
+    "category": "Province selection and smart routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /province-selection"
+      },
+      {
+        "type": "action",
+        "description": "Select an Other province option"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user does not land on the representation signing step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on either the energy certificate survey step or the review step"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Review displays completion status for each required section",
+    "description": "Verifies that the review step shows a checklist with clear completion status for the major required sections.",
+    "category": "Review and submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill {{LOGIN_USER}} into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number to start or resume the project"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /review"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a checklist with completion status is displayed for identity, property documents, province/signing, and energy certificate"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Skip the energy certificate survey and proceed to review",
+    "description": "Verifies that choosing to skip the energy certificate survey routes the customer directly to review without completing survey steps.",
+    "category": "Energy certificate survey",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /energy-certificate"
+      },
+      {
+        "type": "action",
+        "description": "Choose to skip the energy certificate survey"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the review step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the energy certificate section is shown as skipped or not required in review"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC020",
+    "title": "Prevent proceeding when at least one required legal document is unsigned",
+    "description": "Verifies that the customer cannot continue past representation signing until all required legal documents have been signed.",
+    "category": "Representation / legal signing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /representation"
+      },
+      {
+        "type": "action",
+        "description": "Add a signature for the first legal document"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the signed document"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the representation signing step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an incomplete-signatures validation state is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC021",
+    "title": "Assessor can export projects list as CSV",
+    "description": "Verifies that an assessor can export the projects list to CSV from the dashboard UI.",
+    "category": "Admin dashboard for assessors",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the admin password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the admin password"
+      },
+      {
+        "type": "action",
+        "description": "Initiate export of the projects list as CSV"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a CSV download is initiated"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC022",
+    "title": "Recalculate signing requirement when changing province selection before continuing",
+    "description": "Verifies that changing the selected province updates the displayed signing requirement before proceeding.",
+    "category": "Province selection and smart routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /province-selection"
+      },
+      {
+        "type": "action",
+        "description": "Select Cataluña as the province"
+      },
+      {
+        "type": "action",
+        "description": "Select Madrid as the province"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI indicates that two legal documents require signature"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the representation signing step"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC023",
+    "title": "Optionally upload CUPS contract without blocking continuation",
+    "description": "Verifies a customer can optionally upload a CUPS contract and still proceed after confirming the required document set.",
+    "category": "Property document upload",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /property-docs"
+      },
+      {
+        "type": "action",
+        "description": "Upload an identity document using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Upload an IBI certificate using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Upload electricity bill pages using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Upload a CUPS contract using a supported file type"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the uploads and continue"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the next step after property documents is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC024",
+    "title": "Allow re-signing a legal document before continuing",
+    "description": "Verifies that the customer can clear or redo a signature for a legal PDF and still complete signing successfully.",
+    "category": "Representation / legal signing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /representation"
+      },
+      {
+        "type": "action",
+        "description": "Add a signature in the signature pad for the current legal document"
+      },
+      {
+        "type": "action",
+        "description": "Clear the signature"
+      },
+      {
+        "type": "action",
+        "description": "Add a new signature in the signature pad"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the signed document"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the current legal document is marked as signed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC025",
+    "title": "Prevent progressing from a survey step with missing required fields",
+    "description": "Verifies that required fields in the energy certificate survey must be completed before continuing to the next step.",
+    "category": "Energy certificate survey",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /energy-certificate"
+      },
+      {
+        "type": "action",
+        "description": "Leave required fields empty on the current survey step"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next survey step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the current survey step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a required-field validation error is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC026",
+    "title": "Block continuing until a province is selected",
+    "description": "Verifies that the user cannot continue without selecting a province and is shown an inline validation state.",
+    "category": "Province selection and smart routing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /province-selection"
+      },
+      {
+        "type": "action",
+        "description": "Click to continue to the next step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the province selection step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a province selection validation error is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC027",
+    "title": "Reject incorrectly formatted phone number",
+    "description": "Verifies that submitting an incorrectly formatted phone number shows a validation error and the user remains on the entry step.",
+    "category": "Project access via phone number",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill an incorrectly formatted phone number into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone number"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a phone number validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the phone number entry step"
+      }
+    ],
+    "priority": "Low"
+  }
+]

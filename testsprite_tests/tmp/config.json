@@ -3,15 +3,16 @@
   "scope": "codebase",
   "type": "frontend",
   "localEndpoint": "http://localhost:5000/?code=ELT20250001",
-  "serverPort": 36895,
+  "serverPort": 39961,
   "executionArgs": {
-    "projectName": "workspace",
+    "projectName": "eltex-document-collection",
     "projectPath": "/home/runner/workspace",
     "testIds": [],
-    "additionalInstruction": "App uses ?code=ELT20250001 for customer auth. Admin dashboard at /dashboard uses password eltex2025.",
+    "additionalInstruction": "App uses ?code=ELT20250001 through ?code=ELT20250005 for customer auth. Admin dashboard at /dashboard uses password eltex2025. Backend API runs on port 3001, frontend on port 5000. DNI back photo is required when uploading front of a DNI card (not required for NIE). Province determines which legal PDFs must be signed: Cataluña=3 docs, Madrid/Valencia=2 docs, other=none.",
     "serverMode": "development",
     "envs": {
       "API_KEY": "sk-user-hbyZI2ZHknv0YSy0kxTBcHawPrymM68Fpy-Sqs0p0r6xjgytx5uiFCoKhp_rYRIrY-b6XQQLQUCHdbGdFvGVQa7sVUIg0Zs9cdOD-HdF9SSWUKkstP8YWnOKynoH-tFZ0yM"
     }
-  }
+  },
+  "proxy": "http://3cb4b44a-f4a3-4b4d-9582-d2730511b164:Xe9TTitvIkyAouyonvzVxEBI45YeO0C4@tun.testsprite.com:8080"
 }
