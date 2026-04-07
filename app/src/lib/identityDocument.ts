@@ -15,25 +15,43 @@ export function isSingleSidedIdentityKind(kind: IdentityDocumentKind | null): bo
   return kind === 'nie-card' || kind === 'nie-certificate';
 }
 
+function isCombinedDNIImage(extraction?: AIExtraction | null): boolean {
+  return !!extraction?.notes?.toLowerCase().includes('combined');
+}
+
 export function isIdentityDocumentComplete(dni: Pick<DNIData, 'front' | 'back'>): boolean {
-  return !!dni.front.photo;
+  if (!dni.front.photo) return false;
+  const kind = getIdentityDocumentKind(dni.front.extraction);
+  if (kind === 'dni-card' && !isCombinedDNIImage(dni.front.extraction)) {
+    return !!dni.back.photo;
+  }
+  return true;
 }
 
 export function getIdentityDocumentDoneLabel(dni: Pick<DNIData, 'front' | 'back'>): string {
   const kind = getIdentityDocumentKind(dni.front.extraction);
   if (dni.front.photo && dni.back.photo) return 'DNI / NIE — ambas caras';
-  if (dni.front.photo && kind === 'nie-certificate') {
-    return 'NIE — certificado válido';
-  }
-  if (dni.front.photo && kind === 'nie-card') {
-    return 'NIE — documento válido';
-  }
+  if (dni.front.photo && kind === 'nie-certificate') return 'NIE — certificado válido';
+  if (dni.front.photo && kind === 'nie-card') return 'NIE — documento válido';
+  if (dni.front.photo && isCombinedDNIImage(dni.front.extraction)) return 'DNI / NIE — ambas caras';
   if (dni.front.photo) return 'DNI / NIE — cara principal';
   if (dni.back.photo) return 'DNI / NIE — cara trasera';
   return 'DNI / NIE';
 }
 
+export function isDNIBackRequired(front: DocSlot): boolean {
+  if (!front.photo) return false;
+  const kind = getIdentityDocumentKind(front.extraction);
+  return kind === 'dni-card' && !isCombinedDNIImage(front.extraction);
+}
+
 export function getIdentityDocumentPendingLabel(front: DocSlot, back: DocSlot): string | null {
   if (!front.photo && back.photo) return 'Falta la frontal';
+  if (front.photo && !back.photo) {
+    const kind = getIdentityDocumentKind(front.extraction);
+    if (kind === 'dni-card' && !isCombinedDNIImage(front.extraction)) {
+      return 'Falta la trasera';
+    }
+  }
   return null;
 }

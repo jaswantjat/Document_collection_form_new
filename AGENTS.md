@@ -3,6 +3,9 @@
 > Last updated: 2026-04-06
 
 ## Quick-Reference: What Changed Recently
+- **DNI back required (2026-04-07)**: For `dni-card` documents, back side is now mandatory when the front is uploaded as a separate photo. Exception: combined image (both sides in one photo — AI notes 'combined image') counts as complete. NIE cert and NIE card remain front-only. `isIdentityDocumentComplete` updated with this logic; `isDNIBackRequired` helper exported; `getIdentityDocumentPendingLabel` now returns 'Falta la trasera' for DNI card front-only; back slot shows amber '(obligatorio)' styling. 74/74 tests pass. Files: `app/src/lib/identityDocument.ts`, `app/src/types/index.ts`, `app/src/sections/PropertyDocsSection.tsx`, `app/src/sections/ReviewSection.tsx`, `app/src/lib/identityDocument.test.ts`.
+
+
 - **Customer name resolution fix (2026-04-07)**: Webhook sent "Cliente nuevo" because `fireDocFlowNewOrder` used stale `project.customerName` instead of `snapshot.fullName`. Fix: `customer_name: snapshot.fullName || project.customerName || ''`. Success screen showed "¡Todo listo, Cliente!" because frontend project state was never updated after submit. Fix: `onSuccess` in App.tsx now computes name from current formData and calls `setProject(...)` before navigating. 19/19 tests pass. Files: `backend/server.js`, `app/src/App.tsx`.
 - **DNI combined-image extraction fix (2026-04-07)**: When a single photo shows both sides of the DNI, the AI used to return name+address together and `normalizeIdentityExtraction` misclassified it as "back" side. Fix: (1) `dniAutoBatch` prompt now has a "COMBINED IMAGE RULE" — set `side: "front"`, extract only front fields, null out address fields; (2) `normalizeIdentityExtraction` now correctly handles `hasAddressData && hasIdentityCore` → `side = 'front'`; defence layer strips wrong-side fields. 26/26 unit tests pass. File: `backend/server.js`.
 - **PRD v2.1 (2026-04-06) — All 6 issues implemented**:

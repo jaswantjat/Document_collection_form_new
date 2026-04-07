@@ -1,3 +1,50 @@
+## 2026-04-07.17 — Session: DNI Back Side Now Mandatory for DNI Cards
+
+**Phase**: Developer + QA
+
+**Feature/Fix**: When a customer uploads the front photo of a DNI card, the back side is now mandatory. Previously the back was always optional (from 2026-04-07.16 session). The user confirmed the correct rule is: "if there is only one page, it's fine, but if the person has uploaded the front photo, the back photo should be mandatory."
+
+**Rules implemented:**
+- `dni-card` front uploaded (separate photo) → back is **required**
+- `dni-card` combined image (notes contains "combined") → back is **not required** (both sides already in one photo)
+- `nie-certificate` → front only sufficient (single-page document)
+- `nie-card` → front only sufficient
+- Any document with null extraction (still processing) → allowed through
+
+**Document extraction test results (real files):**
+| Document | Result |
+|---|---|
+| DNI frontal (Ana Maria Cueto 50802939X) | ✅ Correct: `dni-card`, side=front |
+| DNI front + back | ✅ Both extracted correctly |
+| DNI combined image (both sides in 1 photo) | ✅ `notes: "combined image"`, side=front, address null |
+| NIE certificado registro UE (Pablo Jules Y7045102-D) | ✅ `nie-certificate` |
+| NIE documento ministerio (Marcellus Z1743921-C) | ✅ `nie-certificate` |
+| NIE trasera (laminated back, "DOCUMENTO NO VÁLIDO") | ✅ **REJECTED** as wrong document |
+| Electricity — Iberdrola PDF page 1 | ✅ All fields extracted |
+| Electricity — Repsol photo | ✅ CUPS, titular, province extracted |
+| Electricity — Naturgy photo | ✅ titular, municipality extracted |
+| Electricity — page 2 only (no main fields) | ✅ Accepted but fields blank (expected) |
+| Electricity — blank page 3 (QR only) | ✅ **REJECTED** as wrong document |
+| IBI — CaixaBank domiciliació | ✅ Cadastral reference, titular, province |
+
+**Changes:**
+1. **`app/src/types/index.ts`**: Added `notes?: string` to `AIExtraction` interface (field was present at runtime but not typed).
+2. **`app/src/lib/identityDocument.ts`**: `isIdentityDocumentComplete` now requires back for `dni-card` unless combined image. Exported `isDNIBackRequired` helper. Updated `getIdentityDocumentPendingLabel` to return 'Falta la trasera' for DNI card front-only.
+3. **`app/src/sections/PropertyDocsSection.tsx`**: Back slot shows amber border + "(obligatorio)" when DNI card detected and back missing. Description updated: "Para DNI sube las dos caras. Para NIE certificado o tarjeta, una foto es suficiente."
+4. **`app/src/sections/ReviewSection.tsx`**: Hint updated to "DNI (dos caras), NIE o pasaporte".
+5. **`app/src/lib/identityDocument.test.ts`**: Updated 2 tests (Test 1, Test 8) to reflect new behavior; added 7 new tests (combined image, null extraction, isDNIBackRequired).
+
+**Tests**: 74/74 pass. TypeScript: 0 errors.
+
+**Files changed:**
+- `app/src/types/index.ts`
+- `app/src/lib/identityDocument.ts`
+- `app/src/sections/PropertyDocsSection.tsx`
+- `app/src/sections/ReviewSection.tsx`
+- `app/src/lib/identityDocument.test.ts`
+
+---
+
 ## 2026-04-07.16 — Session: DNI/NIE Optional-Back Upload
 
 **Phase**: Developer + QA

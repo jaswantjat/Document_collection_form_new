@@ -14,7 +14,7 @@ import type {
   DocumentSlotKey,
   DocumentProcessingState,
 } from '@/types';
-import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
+import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
 import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
@@ -715,6 +715,7 @@ function DNICard({
   const hasAny = hasFront || hasBack;
   const isComplete = isIdentityDocumentComplete({ front, back });
   const pendingLabel = getIdentityDocumentPendingLabel(front, back);
+  const backRequired = isDNIBackRequired(front);
   const isBusy = isPreparing || pendingItems.some(p => p.status !== 'failed');
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
@@ -906,7 +907,7 @@ function DNICard({
       </div>
 
       <p className="text-xs text-gray-500">
-        Sube tu DNI o NIE — una o dos fotos. Con solo la cara principal es suficiente.
+        Para DNI sube las dos caras. Para NIE certificado o tarjeta, una foto es suficiente.
       </p>
 
       {originalPdfs.length > 0 && (
@@ -950,7 +951,7 @@ function DNICard({
           </div>
 
           {/* Back */}
-          <div className={`rounded-xl border overflow-hidden ${hasBack ? 'border-green-200 bg-white' : 'border-dashed border-gray-200 bg-gray-50/60'}`}>
+          <div className={`rounded-xl border overflow-hidden ${hasBack ? 'border-green-200 bg-white' : backRequired ? 'border-dashed border-amber-300 bg-amber-50/40' : 'border-dashed border-gray-200 bg-gray-50/60'}`}>
             {hasBack && back.photo?.preview ? (
               <>
                 <div className="relative">
@@ -974,8 +975,10 @@ function DNICard({
               </>
             ) : (
               <div className="flex flex-col items-center justify-center p-3 min-h-[96px]">
-                <p className="text-[10px] text-gray-400 text-center">Reverso</p>
-                <p className="text-[9px] text-gray-300 text-center mt-1">(opcional)</p>
+                <p className={`text-[10px] text-center ${backRequired ? 'text-amber-600' : 'text-gray-400'}`}>Reverso</p>
+                <p className={`text-[9px] text-center mt-1 ${backRequired ? 'text-amber-500 font-medium' : 'text-gray-300'}`}>
+                  {backRequired ? '(obligatorio)' : '(opcional)'}
+                </p>
               </div>
             )}
           </div>

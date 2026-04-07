@@ -48,6 +48,7 @@ export interface AIExtraction {
   isCorrectDocument: boolean;
   documentTypeDetected: string;
   identityDocumentKind?: 'dni-card' | 'nie-card' | 'nie-certificate';
+  notes?: string;
   needsManualReview: boolean;
   confirmedByUser: boolean;
   manualCorrections?: Record<string, string>;
