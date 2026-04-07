@@ -301,6 +301,13 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
         return;
       }
 
+      // Persist the raw PDF/image files into parent state immediately —
+      // before AI extraction starts. This guarantees they survive: a) a page
+      // reload mid-extraction, b) an extraction failure, c) localStorage
+      // quota limits that prevent the backup from reaching the full payload.
+      // The extraction field is updated (or stays null) once the API responds.
+      onChange({ originalPdfs, extraction: null });
+
       setPageCount(expandedFiles.length);
 
       const base64Pages: string[] = [];
@@ -317,6 +324,8 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
         const msg = res.message || 'No se pudo procesar el contrato.';
         setStatus('failed');
         setErrorMessage(msg);
+        // originalPdfs already committed above — user can retry extraction
+        // without re-uploading the file.
         return;
       }
 
@@ -346,10 +355,14 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
   const storedPdfCount = contract.originalPdfs.length;
 
   return (
-    <div className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
+    <div
+      data-testid="contract-card"
+      data-contract-status={resolvedStatus}
+      className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}
+    >
       <div className="flex items-center justify-between">
         <p className={`font-semibold ${accepted ? 'text-gray-500' : 'text-gray-900'}`}>Contrato Eltex</p>
-        {accepted && <CheckCircle className="w-5 h-5 text-green-500" />}
+        {accepted && <CheckCircle data-testid="contract-accepted-icon" className="w-5 h-5 text-green-500" />}
       </div>
 
       {!accepted && !isBusy && (

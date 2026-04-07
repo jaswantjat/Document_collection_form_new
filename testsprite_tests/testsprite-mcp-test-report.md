@@ -197,15 +197,22 @@
 
 ### 🔴 Critical
 
-1. **URL Routing Mismatch (7 tests blocked)** — The TestSprite agent navigated to path-based URLs (`/property-docs?code=...`, `/review`, `/energy-certificate?code=...`) but the app is a pure SPA using `/?code=ELTXXXXXX` with internal React Router state. This caused blank page renders for the majority of tests. **Fix:** Update `testsprite_tests/tmp/code_summary.yaml` to document that all customer routes are accessed via `/?code=ELTXXXXXX` (not path-based), and add `additionalInstruction` to the test executor clarifying this.
+1. **URL Routing Mismatch (7 tests blocked)** — The TestSprite agent navigated to path-based URLs (`/property-docs?code=...`, `/review`, `/energy-certificate?code=...`) but the app is a pure SPA using `/?code=ELTXXXXXX` with internal React Router state. This caused blank page renders for the majority of tests.
+   - **Fix applied:** Updated `testsprite_tests/tmp/code_summary.yaml` with explicit routing notes: all customer routes are `/?code=ELTXXXXXX` only. Test project URLs for each section documented.
 
-2. **Auto-Save Not Restoring PDF Uploads (TC012 failed)** — After navigating away and returning to the same project, uploaded PDF files were not restored. This could affect real users who close their browser mid-session. **Fix:** Audit the `App.tsx` merge logic for `contract.originalPdfs` in the localStorage/IndexedDB restoration path.
+2. **Auto-Save Not Restoring PDF Uploads (TC012 failed)** — After navigating away and returning, uploaded PDF files were not restored because `ContractCard` only called `onChange` (saving state) on successful AI extraction — meaning if extraction failed or was interrupted, the uploaded file was never committed to form state and therefore never reached the backup.
+   - **Fix applied (`app/src/sections/PropertyDocsSection.tsx`):** `ContractCard.processFiles()` now calls `onChange({ originalPdfs, extraction: null })` immediately after file expansion, before calling the AI extraction API. `originalPdfs` are now always saved to parent state regardless of extraction outcome. Added `data-testid="contract-card"`, `data-contract-status` and `data-testid="contract-accepted-icon"` for test verification.
+   - **Regression tests:** 6 tests in `app/src/lib/bugfix.test.ts` (`BUG-1` suite) — all passing ✅
 
 ### 🟡 Medium
 
-3. **Dashboard File Viewer Race Condition (TC008 failed)** — The "Ver archivo" modal fails to open reliably under automated clicking. Stale element errors and content extraction timeouts suggest async state or rendering issues in the file viewer component. **Fix:** Review the modal's open/close state management. Add explicit loading indicators before the modal content is interactive.
+3. **Dashboard File Viewer Stale Element Race Condition (TC008 failed)** — "Ver archivo" button produced stale element errors and content extraction timeouts. Root cause: parent component re-renders during async loading operations caused `DeferredAssetButtons` to unmount/remount, making the previous DOM reference stale.
+   - **Fix applied (`app/src/pages/Dashboard.tsx`):** `DeferredAssetButtons` is now wrapped in `React.memo` to prevent unnecessary re-mounts from parent re-renders. Stable `useRef` refs are used in the async closure (`loadProjectDetailRef`, `resolveAssetsRef`) to always capture current props without capturing stale closures. Added `data-testid="view-asset-btn"`, `data-testid="download-asset-btn"`, `data-testid="asset-action-buttons"`, `aria-busy` states, and `data-loading` attribute.
+   - **Regression tests:** 4 tests in `app/src/lib/bugfix.test.ts` (`BUG-2` suite) — all passing ✅
 
-4. **Signature Pad Not Automatable (TC011 failed)** — The canvas-based signature component cannot be interacted with via standard click/type browser automation. No mouse-draw interaction was detected by the agent. **Fix:** Add `data-testid` attributes. Consider also providing a developer-mode shortcut that accepts a pre-drawn signature for testing environments.
+4. **Signature Pad Not Automatable (TC011 failed)** — Canvas-based signature pad cannot be interacted with via standard browser automation (no text input, requires raw mouse-draw events).
+   - **Fix applied (`app/src/components/SignaturePad.tsx`):** Added `data-testid="signature-canvas"` and `data-has-signature="true|false"` to the canvas element so tests can detect state. Added `window.__eltexFillTestSignature()` dev-mode hook (stripped in production builds) that programmatically draws a test signature onto the canvas and fires `onSignature` with a valid PNG data URL. Tests can now call `window.__eltexFillTestSignature()` instead of trying to simulate mouse strokes.
+   - **Regression tests:** 5 tests in `app/src/lib/bugfix.test.ts` (`BUG-3` suite) — all passing ✅
 
 5. **No Test Files for Upload Tests (TC003, TC005, TC006 blocked)** — The cloud agent had no image files available to simulate document uploads. **Fix:** Bundle small sample test images (e.g., `test-dni.jpg`, `test-ibi.jpg`) alongside the TestSprite config so the agent can upload them in document upload tests.
 

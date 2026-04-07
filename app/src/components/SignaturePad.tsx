@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { gsap } from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { Eraser, Check, Pen } from 'lucide-react';
@@ -12,9 +12,12 @@ interface SignaturePadProps {
 export const SignaturePad = ({ onSignature, existingSignature, error }: SignaturePadProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const onSignatureRef = useRef(onSignature);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasLocalSignature, setHasLocalSignature] = useState(false);
   const hasSignature = hasLocalSignature || !!existingSignature;
+
+  useEffect(() => { onSignatureRef.current = onSignature; }, [onSignature]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -162,6 +165,57 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
     );
   };
 
+  // Programmatic test-signature helper — available only in development so
+  // automated browser tests can inject a valid signature without needing
+  // canvas mouse-draw events (which most test runners can't produce).
+  // Usage: window.__eltexFillTestSignature()
+  const fillTestSignature = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+
+    // Draw a simple cursive "TEST" shape as the signature
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 60, cy + 10);
+    ctx.bezierCurveTo(cx - 40, cy - 30, cx - 20, cy + 30, cx, cy - 10);
+    ctx.bezierCurveTo(cx + 20, cy - 30, cx + 40, cy + 20, cx + 60, cy);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx - 60, cy + 18);
+    ctx.lineTo(cx + 60, cy + 18);
+    ctx.stroke();
+
+    setHasLocalSignature(true);
+
+    const exportCanvas = document.createElement('canvas');
+    const exportCtx = exportCanvas.getContext('2d');
+    if (!exportCtx) return;
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    exportCtx.drawImage(canvas, 0, 0, rect.width, rect.height);
+    onSignatureRef.current(exportCanvas.toDataURL('image/png'));
+  }, []);
+
+  // Expose the helper on window only in non-production builds
+  useEffect(() => {
+    if (import.meta.env.PROD) return;
+    const win = window as unknown as Record<string, unknown>;
+    win.__eltexFillTestSignature = fillTestSignature;
+    return () => { delete win.__eltexFillTestSignature; };
+  }, [fillTestSignature]);
+
   return (
     <div ref={containerRef} className="w-full">
       {/* Signature Area */}
@@ -182,6 +236,8 @@ export const SignaturePad = ({ onSignature, existingSignature, error }: Signatur
         {/* Canvas */}
         <canvas
           ref={canvasRef}
+          data-testid="signature-canvas"
+          data-has-signature={hasSignature ? 'true' : 'false'}
           className="w-full h-48 cursor-crosshair touch-none block"
           onMouseDown={startDrawing}
           onMouseMove={draw}

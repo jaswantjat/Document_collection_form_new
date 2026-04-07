@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -504,7 +504,7 @@ function getElectricityAssetsFromProject(project: any): DashboardAssetItem[] {
   }));
 }
 
-function DeferredAssetButtons({
+const DeferredAssetButtons = React.memo(function DeferredAssetButtons({
   projectCode,
   loadProjectDetail,
   resolveAssets,
@@ -516,12 +516,18 @@ function DeferredAssetButtons({
   onOpenDetail?: () => void;
 }) {
   const [loading, setLoading] = useState<'view' | 'download' | null>(null);
+  // Keep a stable ref so the async closure captures the latest props even
+  // after a parent re-render, preventing stale-element errors in test automation.
+  const loadProjectDetailRef = useRef(loadProjectDetail);
+  const resolveAssetsRef = useRef(resolveAssets);
+  useEffect(() => { loadProjectDetailRef.current = loadProjectDetail; }, [loadProjectDetail]);
+  useEffect(() => { resolveAssetsRef.current = resolveAssets; }, [resolveAssets]);
 
   const run = async (mode: 'view' | 'download') => {
     setLoading(mode);
     try {
-      const project = await loadProjectDetail(projectCode);
-      const assets = resolveAssets(project);
+      const project = await loadProjectDetailRef.current(projectCode);
+      const assets = resolveAssetsRef.current(project);
 
       if (assets.length === 0) {
         alert('No se encontraron archivos descargables para este documento.');
@@ -549,10 +555,12 @@ function DeferredAssetButtons({
   };
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" data-testid="asset-action-buttons" data-loading={loading ?? 'none'}>
       <button
         type="button"
         disabled={loading !== null}
+        aria-busy={loading === 'view'}
+        data-testid="view-asset-btn"
         onClick={(event) => {
           event.stopPropagation();
           void run('view');
@@ -565,6 +573,8 @@ function DeferredAssetButtons({
       <button
         type="button"
         disabled={loading !== null}
+        aria-busy={loading === 'download'}
+        data-testid="download-asset-btn"
         onClick={(event) => {
           event.stopPropagation();
           void run('download');
@@ -576,7 +586,7 @@ function DeferredAssetButtons({
       </button>
     </div>
   );
-}
+});
 
 function SignedPdfButtons({
   projectCode,
