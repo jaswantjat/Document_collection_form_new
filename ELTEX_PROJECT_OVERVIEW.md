@@ -87,7 +87,7 @@ This app replaces a paper/WhatsApp-based process with a guided digital flow that
 
 | Service | Purpose |
 |---|---|
-| OpenRouter API (Gemini Flash) | OCR: extracts data from DNI, IBI, electricity bill, contracts |
+| OpenRouter API (`google/gemini-3.1-flash-lite-preview`) | OCR: extracts data from DNI, IBI, electricity bill, contracts |
 | DocFlow Webhook | CRM notification on new orders and document updates |
 
 ### Data Storage
@@ -404,14 +404,18 @@ A feature is "done" when:
 | Sprint 8 | Dashboard shortLabels Spanish consistency (`DNI frontal` / `DNI trasera`) |
 | Sprint 8 | Assessor name made mandatory (frontend validation + backend guard) |
 | Sprint 8 | Assessor name added to `new_order` webhook payload |
+| Sprint 9 | EC validation: conditional fields for shutters, air conditioning, and solar panel details |
+| Sprint 9 | Backend `buildDashboardSummary` EC status guard — aligns with frontend (renderedDocument + field completeness check) |
+| Sprint 9 | `cadastralReference` documented as intentionally optional (all other housing fields required) |
+| Sprint 9 | Test suite expanded from 2 → 9 test files, 74 → 227 unit tests |
+| Sprint 9 | `google/gemini-3.1-flash-lite-preview` adopted as default AI model via `OPENROUTER_MODEL` env var |
 
 ### Current Backlog
 
 | Priority | Story | Notes |
 |---|---|---|
-| 🔴 | Verify CRM receives `assessor` field on live orders | Webhook fix deployed — monitor Railway logs |
 | 🟠 | Dashboard: filter projects by assessor name | Useful for multi-agent teams |
-| 🟠 | Dashboard: show assessor column in table | Currently shown in project detail only |
+| 🟠 | Dashboard: show assessor column in project list table | Currently shown in project detail only |
 | 🟡 | Customer email notification on submission | Needs SMTP integration |
 | 🟡 | Autocropper: auto-apply crop result without manual confirmation | Improve UX speed |
 | ⚪ | Multi-tenant / multi-company support | Future if Eltex expands |
@@ -489,9 +493,16 @@ Status: SUCCESS / FAILED (visible in Railway dashboard)
 
 ## 14. Testing
 
-### Unit Tests (Vitest)
+### Unit Tests (Vitest) — 9 files, 227 tests
 - `app/src/lib/identityDocument.test.ts` — DNI/NIE type detection and back-side requirement logic
 - `app/src/lib/dashboardProject.test.ts` — Project summary / data resilience
+- `app/src/lib/energyCertificateValidation.test.ts` — EC field validation, conditional fields (shutters, A/C, solar panels)
+- `app/src/lib/signedDocumentOverlays.test.ts` — PDF signature overlay coordinates
+- `app/src/lib/provinceMapping.test.ts` — Province → region routing logic
+- `app/src/lib/phone.test.ts` — Phone number normalisation and lookup
+- `app/src/lib/photoValidation.test.ts` — Document photo and file validation rules
+- `app/src/lib/api.test.ts` — API client response handling
+- `app/src/lib/bugfix.test.ts` — Regression guards for known fixed bugs
 
 ### E2E Tests (Playwright)
 - Smoke tests — full customer flow from phone entry to success
@@ -513,4 +524,4 @@ Status: SUCCESS / FAILED (visible in Railway dashboard)
 
 ---
 
-*Document generated: April 2026 — Eltex Document Collection Form v1.8*
+*Document updated: April 2026 — Eltex Document Collection Form v1.9*
