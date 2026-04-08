@@ -503,6 +503,76 @@ function DocumentTableCell({
   );
 }
 
+function DNITableCell({
+  frontItem,
+  backItem,
+  projectCode,
+  loadProjectDetail,
+  onOpenDetail,
+}: {
+  frontItem?: DashboardDocumentItem;
+  backItem?: DashboardDocumentItem;
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  onOpenDetail: () => void;
+}) {
+  const hasFront = !!frontItem?.present;
+  const hasBack = !!backItem?.present;
+
+  if (!hasFront && !hasBack) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+        <Clock className="w-3 h-3" />
+        Pendiente
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="space-y-1">
+        {hasFront && (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+              <CheckCircle className="w-2.5 h-2.5" />
+              {hasBack ? 'Frontal' : 'Recibido'}
+            </span>
+            {frontItem?.needsManualReview && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Revisar
+              </span>
+            )}
+          </div>
+        )}
+        {hasBack && (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+              <CheckCircle className="w-2.5 h-2.5" />
+              Trasera
+            </span>
+            {backItem?.needsManualReview && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Revisar
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      <DeferredAssetButtons
+        projectCode={projectCode}
+        loadProjectDetail={loadProjectDetail}
+        resolveAssets={(project) => [
+          ...(hasFront && frontItem ? getDocumentAssetsFromProject(project, frontItem.key) : []),
+          ...(hasBack && backItem ? getDocumentAssetsFromProject(project, backItem.key) : []),
+        ]}
+        onOpenDetail={onOpenDetail}
+      />
+    </div>
+  );
+}
+
 function EcPdfTableButtons({
   projectCode,
   loadProjectDetail,
@@ -1277,16 +1347,9 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <DocumentTableCell
-          item={byKey.get('dniFront') as DashboardDocumentItem}
-          projectCode={project.code}
-          loadProjectDetail={loadProjectDetail}
-          onOpenDetail={() => setShowDetail(true)}
-        />
-      </td>
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <DocumentTableCell
-          item={byKey.get('dniBack') as DashboardDocumentItem}
+        <DNITableCell
+          frontItem={byKey.get('dniFront') as DashboardDocumentItem}
+          backItem={byKey.get('dniBack') as DashboardDocumentItem}
           projectCode={project.code}
           loadProjectDetail={loadProjectDetail}
           onOpenDetail={() => setShowDetail(true)}
@@ -2232,15 +2295,14 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="table-fixed w-[1800px]">
+                  <table className="table-fixed w-[1690px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Project / customer</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[160px]">Product / region</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[220px]">Address</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">DNI front</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">DNI back</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">DNI / NIE</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Signed PDFs</th>
