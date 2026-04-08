@@ -15,7 +15,7 @@ import type {
   DocumentProcessingState,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
-import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, fileToPreview, fileToBase64, compressImageForAI, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
+import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePhotoAssets, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
 interface Props {
@@ -323,8 +323,8 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
 
       const base64Pages: string[] = [];
       for (const { file } of expandedFiles) {
-        const raw = await fileToBase64(file);
-        base64Pages.push(await compressImageForAI(raw));
+        const { aiBase64 } = await preparePhotoAssets(file);
+        base64Pages.push(aiBase64);
       }
 
       const res = base64Pages.length === 1
@@ -501,11 +501,11 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
         }
         URL.revokeObjectURL(tempPreviewUrl);
 
-        const preview = await fileToPreview(file);
+        const { preview, aiBase64 } = await preparePhotoAssets(file);
         preparedPages.push({
           file,
           preview,
-          base64: await compressImageForAI(await fileToBase64(file)),
+          base64: aiBase64,
           width: check.width,
           height: check.height,
         });
@@ -808,19 +808,15 @@ function DNICard({
         }
 
         // Convert to persistent base64 preview and revoke the temp object URL
-        const [preview, raw] = await Promise.all([
-          fileToPreview(file),
-          fileToBase64(file),
-        ]);
+        const { preview, aiBase64 } = await preparePhotoAssets(file);
         URL.revokeObjectURL(tempPreviewUrl);
-        const base64 = await compressImageForAI(raw);
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
 
         return {
           id,
           file,
           preview,
-          base64,
+          base64: aiBase64,
           width: check.width,
           height: check.height,
         };
@@ -1162,12 +1158,10 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
         }
 
         // Convert to persistent base64 preview and revoke the temp object URL
-        const preview = await fileToPreview(file);
+        const { preview, aiBase64 } = await preparePhotoAssets(file);
         URL.revokeObjectURL(tempPreviewUrl);
-        const raw = await fileToBase64(file);
-        const base64 = await compressImageForAI(raw);
         setPendingItems(prev => prev.map(p => p.id === id ? { ...p, preview, status: 'extracting' } : p));
-        return { file, id, preview, base64, width: check.width, height: check.height };
+        return { file, id, preview, base64: aiBase64, width: check.width, height: check.height };
       } catch {
         // Any unexpected error during validation/preview — mark as failed so isBusy resets
         setPendingItems(prev => prev.map(p => p.id === id ? {

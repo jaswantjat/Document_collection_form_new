@@ -1,6 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-const PROJECT_URL = '/?code=ELT20250002&token=1be9964d-a51d-4532-8f7e-647bb7aeb5f3';
+const PROJECT_URL = '/?code=ELT20250002';
+const FOLLOW_UP_URL = '/?code=ELT20250005';
+
+async function openEnergyCertificate(page: Page) {
+  await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+  await page.getByRole('button', { name: /certificado energético/i }).click();
+  await expect(page.locator('h1').first()).toContainText('Certificado energético');
+}
 
 test.describe('Low-network resilience', () => {
   test('E2E-NET-01: mobile form still reaches a usable state under added request latency', async ({ page }) => {
@@ -29,6 +36,31 @@ test.describe('Low-network resilience', () => {
 
     const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
     expect(bodyWidth).toBeLessThanOrEqual(385);
+    expect(jsErrors).toEqual([]);
+  });
+
+  test('E2E-NET-02: follow-up submit still completes under added request latency', async ({ page }) => {
+    const jsErrors: string[] = [];
+    page.on('pageerror', (err) => jsErrors.push(err.message));
+
+    await page.route('**/*', async (route) => {
+      const resourceType = route.request().resourceType();
+      if (resourceType !== 'websocket') {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      }
+      await route.continue();
+    });
+
+    await page.goto(FOLLOW_UP_URL, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+
+    await openEnergyCertificate(page);
+    await page.getByRole('button', { name: /saltar/i }).click();
+
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 30000 });
+    await expect(page.getByText(/hemos recibido tu documentación correctamente/i)).toBeVisible({ timeout: 30000 });
     expect(jsErrors).toEqual([]);
   });
 });

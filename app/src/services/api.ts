@@ -32,6 +32,20 @@ interface ExtractDocumentResponse {
   message?: string;
 }
 
+interface ApiResponseShape {
+  success?: boolean;
+  message?: string;
+  error?: string;
+}
+
+interface UploadAssetDescriptor {
+  fieldName: string;
+  fingerprint: string;
+  append: (fd: globalThis.FormData) => boolean;
+}
+
+const assetFingerprintCache = new Map<string, Map<string, string>>();
+
 function dataUrlToBlob(dataUrl: string): Blob | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return null;
   const arr = dataUrl.split(',');
@@ -66,49 +80,144 @@ function appendDataUrl(fd: globalThis.FormData, fieldName: string, dataUrl: stri
   return true;
 }
 
-function appendStoredPdfs(fd: globalThis.FormData, fieldPrefix: string, pdfs: StoredDocumentFile[] | null | undefined): void {
-  if (!Array.isArray(pdfs)) return;
-  pdfs.forEach((pdf, i) => {
-    if (!pdf?.dataUrl) return;
-    const blob = dataUrlToBlob(pdf.dataUrl);
-    if (!blob) return;
-    const ext = pdf.mimeType === 'application/pdf' ? '.pdf' : '.jpg';
-    fd.append(`${fieldPrefix}_${i}`, blob, pdf.filename || `${fieldPrefix}_${i}${ext}`);
+function appendStoredPdf(fd: globalThis.FormData, fieldName: string, pdf: StoredDocumentFile): boolean {
+  if (!pdf?.dataUrl) return false;
+  const blob = dataUrlToBlob(pdf.dataUrl);
+  if (!blob) return false;
+  const ext = pdf.mimeType === 'application/pdf' ? '.pdf' : '.jpg';
+  fd.append(fieldName, blob, pdf.filename || `${fieldName}${ext}`);
+  return true;
+}
+
+function dataUrlFingerprint(dataUrl: string): string {
+  return `${dataUrl.length}:${dataUrl.slice(0, 48)}:${dataUrl.slice(-48)}`;
+}
+
+function pushPhotoDescriptor(
+  descriptors: UploadAssetDescriptor[],
+  fieldName: string,
+  photo: UploadedPhoto | null | undefined
+): void {
+  if (!photo?.preview) return;
+  descriptors.push({
+    fieldName,
+    fingerprint: `photo:${photo.id}:${photo.timestamp}:${photo.sizeBytes}:${dataUrlFingerprint(photo.preview)}`,
+    append: (fd) => appendPhoto(fd, fieldName, photo),
   });
 }
 
-export async function preUploadAssets(
-  code: string,
-  formData: AppFormData
-): Promise<{ success: boolean; savedKeys?: string[] }> {
-  const fd = new globalThis.FormData();
+function pushDataUrlDescriptor(
+  descriptors: UploadAssetDescriptor[],
+  fieldName: string,
+  dataUrl: string | null | undefined,
+  versionHint: string
+): void {
+  if (!dataUrl) return;
+  descriptors.push({
+    fieldName,
+    fingerprint: `${versionHint}:${dataUrlFingerprint(dataUrl)}`,
+    append: (fd) => appendDataUrl(fd, fieldName, dataUrl),
+  });
+}
 
-  appendPhoto(fd, 'dniFront', formData.dni?.front?.photo);
-  appendPhoto(fd, 'dniBack', formData.dni?.back?.photo);
+function pushStoredPdfDescriptors(
+  descriptors: UploadAssetDescriptor[],
+  fieldPrefix: string,
+  pdfs: StoredDocumentFile[] | null | undefined
+): void {
+  if (!Array.isArray(pdfs)) return;
+  pdfs.forEach((pdf, i) => {
+    if (!pdf?.dataUrl) return;
+    const fieldName = `${fieldPrefix}_${i}`;
+    descriptors.push({
+      fieldName,
+      fingerprint: `pdf:${pdf.id}:${pdf.filename}:${pdf.sizeBytes}:${dataUrlFingerprint(pdf.dataUrl)}`,
+      append: (fd) => appendStoredPdf(fd, fieldName, pdf),
+    });
+  });
+}
+
+function buildAssetUploadDescriptors(formData: AppFormData): UploadAssetDescriptor[] {
+  const descriptors: UploadAssetDescriptor[] = [];
+
+  pushPhotoDescriptor(descriptors, 'dniFront', formData.dni?.front?.photo);
+  pushPhotoDescriptor(descriptors, 'dniBack', formData.dni?.back?.photo);
 
   const ibiPages = formData.ibi?.pages?.length
     ? formData.ibi.pages
     : formData.ibi?.photo
       ? [formData.ibi.photo]
       : [];
-  ibiPages.forEach((page, i) => {
-    if (page) appendPhoto(fd, `ibi_${i}`, page as UploadedPhoto);
-  });
+  ibiPages.forEach((page, i) => pushPhotoDescriptor(descriptors, `ibi_${i}`, page as UploadedPhoto));
 
   (formData.electricityBill?.pages ?? []).forEach((page, i) => {
-    if (page?.photo) appendPhoto(fd, `electricity_${i}`, page.photo);
+    pushPhotoDescriptor(descriptors, `electricity_${i}`, page?.photo);
   });
 
   if (formData.energyCertificate?.renderedDocument?.imageDataUrl) {
-    appendDataUrl(fd, 'energyCert', formData.energyCertificate.renderedDocument.imageDataUrl);
+    const rendered = formData.energyCertificate.renderedDocument;
+    pushDataUrlDescriptor(
+      descriptors,
+      'energyCert',
+      rendered.imageDataUrl,
+      `energy:${rendered.generatedAt}:${rendered.templateVersion}`
+    );
   }
 
-  appendStoredPdfs(fd, 'dniOriginal', formData.dni?.originalPdfs);
-  appendStoredPdfs(fd, 'ibiOriginal', formData.ibi?.originalPdfs);
-  appendStoredPdfs(fd, 'electricityOriginal', formData.electricityBill?.originalPdfs);
+  pushStoredPdfDescriptors(descriptors, 'dniOriginal', formData.dni?.originalPdfs);
+  pushStoredPdfDescriptors(descriptors, 'ibiOriginal', formData.ibi?.originalPdfs);
+  pushStoredPdfDescriptors(descriptors, 'electricityOriginal', formData.electricityBill?.originalPdfs);
 
-  const hasAnyFile = Array.from(fd.entries()).length > 0;
-  if (!hasAnyFile) return { success: true, savedKeys: [] };
+  return descriptors;
+}
+
+function sameAssetKeySet(existing: Iterable<string>, next: Iterable<string>): boolean {
+  const currentKeys = [...existing].sort();
+  const nextKeys = [...next].sort();
+  if (currentKeys.length !== nextKeys.length) return false;
+  return currentKeys.every((key, index) => key === nextKeys[index]);
+}
+
+async function readJsonResponse<T>(res: Response): Promise<T> {
+  try {
+    return await res.json() as T;
+  } catch {
+    throw new Error('Respuesta inválida del servidor.');
+  }
+}
+
+async function readJsonOrThrow<T extends ApiResponseShape>(res: Response, fallbackMessage: string): Promise<T> {
+  const body = await readJsonResponse<T>(res);
+  if (!res.ok || body.success === false) {
+    throw new Error(body.message || body.error || fallbackMessage);
+  }
+  return body;
+}
+
+export async function preUploadAssets(
+  code: string,
+  formData: AppFormData
+): Promise<{ success: boolean; savedKeys?: string[] }> {
+  const descriptors = buildAssetUploadDescriptors(formData);
+  const activeKeys = descriptors.map((descriptor) => descriptor.fieldName);
+  const nextFingerprintMap = new Map(descriptors.map((descriptor) => [descriptor.fieldName, descriptor.fingerprint]));
+  const previousFingerprintMap = assetFingerprintCache.get(code);
+  const changedDescriptors = descriptors.filter((descriptor) => previousFingerprintMap?.get(descriptor.fieldName) !== descriptor.fingerprint);
+  const activeKeysChanged = !sameAssetKeySet(previousFingerprintMap?.keys() ?? [], activeKeys);
+
+  if (changedDescriptors.length === 0 && !activeKeysChanged) {
+    return { success: true, savedKeys: activeKeys };
+  }
+
+  if (descriptors.length === 0 && !previousFingerprintMap) {
+    return { success: true, savedKeys: [] };
+  }
+
+  const fd = new globalThis.FormData();
+  fd.append('activeKeys', JSON.stringify(activeKeys));
+  changedDescriptors.forEach((descriptor) => {
+    descriptor.append(fd);
+  });
 
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/upload-assets`, {
     method: 'POST',
@@ -116,7 +225,15 @@ export async function preUploadAssets(
     body: fd,
     signal: AbortSignal.timeout(30000),
   });
-  return res.json();
+  const body = await readJsonOrThrow<{ success: boolean; savedKeys?: string[] }>(
+    res,
+    'No se pudieron subir los archivos.'
+  );
+
+  if (nextFingerprintMap.size === 0) assetFingerprintCache.delete(code);
+  else assetFingerprintCache.set(code, nextFingerprintMap);
+
+  return body;
 }
 
 function projectHeaders(): HeadersInit {
@@ -131,14 +248,14 @@ export async function fetchProject(
     headers: {},
     signal: options?.signal,
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function lookupByPhone(
   phone: string
 ): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/lookup/phone/${encodeURIComponent(phone)}`);
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function createProject(data: {
@@ -154,7 +271,7 @@ export async function createProject(data: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function dashboardLogin(password: string): Promise<{ success: boolean; token?: string; message?: string }> {
@@ -163,7 +280,7 @@ export async function dashboardLogin(password: string): Promise<{ success: boole
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function dashboardLogout(token: string): Promise<void> {
@@ -177,7 +294,7 @@ export async function fetchDashboard(token: string): Promise<{ success: boolean;
   const res = await fetch(`${API_BASE}/dashboard`, {
     headers: { 'x-dashboard-token': token },
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function fetchDashboardProject(
@@ -187,7 +304,7 @@ export async function fetchDashboardProject(
   const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
     headers: { 'x-dashboard-token': token },
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function saveProgress(
@@ -201,7 +318,7 @@ export async function saveProgress(
     body: JSON.stringify({ formData, source }),
     signal: AbortSignal.timeout(10000),
   });
-  return res.json();
+  return readJsonOrThrow(res, 'No se pudo guardar el progreso.');
 }
 
 export async function submitForm(
@@ -215,7 +332,7 @@ export async function submitForm(
     body: JSON.stringify({ formData, source }),
     signal: AbortSignal.timeout(60000),
   });
-  return res.json();
+  return readJsonOrThrow(res, 'No se pudo enviar la documentación.');
 }
 
 export async function extractDocument(
@@ -231,7 +348,7 @@ export async function extractDocument(
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(90000),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function extractDocumentBatch(
@@ -252,7 +369,7 @@ export async function extractDocumentBatch(
     body: JSON.stringify({ imagesBase64, documentType }),
     signal: AbortSignal.timeout(90000),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function extractDniBatch(
@@ -276,7 +393,7 @@ export async function extractDniBatch(
     body: JSON.stringify({ imagesBase64 }),
     signal: AbortSignal.timeout(90000),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function deleteProject(
@@ -287,7 +404,7 @@ export async function deleteProject(
     method: 'DELETE',
     headers: { 'x-dashboard-token': dashboardToken },
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function adminUpdateFormData(
@@ -300,7 +417,7 @@ export async function adminUpdateFormData(
     headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
     body: JSON.stringify({ formDataPatch }),
   });
-  return res.json();
+  return readJsonResponse(res);
 }
 
 export async function generateImagePDF(imageDataUrl: string, filename?: string): Promise<Blob> {

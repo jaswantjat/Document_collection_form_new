@@ -66,6 +66,11 @@ export interface ExpandedUploadError {
   message: string;
 }
 
+export interface PreparedPhotoAssets {
+  preview: string;
+  aiBase64: string;
+}
+
 export async function expandUploadFiles(files: File[]): Promise<{
   files: ExpandedUploadFile[];
   originalPdfs: StoredDocumentFile[];
@@ -210,14 +215,52 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export async function fileToPreview(file: File): Promise<string> {
+async function renderPreparedPhotoAssets(dataUrl: string): Promise<PreparedPhotoAssets> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { naturalWidth: width, naturalHeight: height } = img;
+      if (width > 1200 || height > 1200) {
+        if (width > height) {
+          height = Math.round((height / width) * 1200);
+          width = 1200;
+        } else {
+          width = Math.round((width / height) * 1200);
+          height = 1200;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve({ preview: dataUrl, aiBase64: dataUrl });
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve({
+        preview: canvas.toDataURL('image/jpeg', 0.80),
+        aiBase64: canvas.toDataURL('image/webp', 0.70),
+      });
+    };
+    img.onerror = () => resolve({ preview: dataUrl, aiBase64: dataUrl });
+    img.src = dataUrl;
+  });
+}
+
+export async function preparePhotoAssets(file: File): Promise<PreparedPhotoAssets> {
   const dataUrl = await fileToBase64(file);
-  if (!file.type.startsWith('image/')) return dataUrl;
-  // Compress preview to max 1200px, 80% JPEG quality.
-  // Full-resolution base64 (2-5 MB) overflows localStorage and bloats server payloads.
-  // 1200px at 80% yields ~50-150 KB — still sharp enough for display and storage.
-  // Kept as JPEG (not WebP) intentionally: stored in localStorage and shown in UI.
-  return compressImageForAI(dataUrl, 1200, 0.80, 'image/jpeg');
+  if (!file.type.startsWith('image/')) {
+    return { preview: dataUrl, aiBase64: dataUrl };
+  }
+  return renderPreparedPhotoAssets(dataUrl);
+}
+
+export async function fileToPreview(file: File): Promise<string> {
+  const prepared = await preparePhotoAssets(file);
+  return prepared.preview;
 }
 
 /**

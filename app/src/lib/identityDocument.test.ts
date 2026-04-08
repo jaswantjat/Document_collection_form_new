@@ -237,7 +237,7 @@ describe('identityDocument', () => {
         confidence: 0.95,
         isCorrectDocument: true,
         documentTypeDetected: 'passport',
-        identityDocumentKind: 'passport' as any,
+        identityDocumentKind: 'passport' as unknown as AIExtraction['identityDocumentKind'],
         needsManualReview: false,
         confirmedByUser: true,
       };
@@ -273,7 +273,7 @@ describe('identityDocument', () => {
 
     it('should return null for invalid kind', () => {
       const extraction = createMockExtraction();
-      extraction.identityDocumentKind = 'invalid-kind' as any;
+      extraction.identityDocumentKind = 'invalid-kind' as unknown as AIExtraction['identityDocumentKind'];
       expect(getIdentityDocumentKind(extraction)).toBeNull();
     });
 

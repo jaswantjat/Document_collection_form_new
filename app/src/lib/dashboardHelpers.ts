@@ -1,4 +1,4 @@
-import type { StoredDocumentFile } from '@/types';
+import type { ProjectData, StoredDocumentFile } from '@/types';
 import type { DashboardAssetItem, DashboardSignedPdfItem } from '@/lib/dashboardProject';
 import { getDashboardProjectSummary } from '@/lib/dashboardProject';
 import { generateImagePDF } from '@/services/api';
@@ -200,7 +200,7 @@ export function downloadCSV(token: string) {
     });
 }
 
-export async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem) {
+export async function buildSignedPdfFactory(project: ProjectData, item: DashboardSignedPdfItem) {
   const stored = getStoredRenderedDocument(project, item.key);
   const overlay =
     stored?.imageDataUrl && stored.templateVersion === SIGNED_DOCUMENT_TEMPLATE_VERSION
@@ -209,7 +209,7 @@ export async function buildSignedPdfFactory(project: any, item: DashboardSignedP
   return () => generateImagePDF(overlay, item.filename);
 }
 
-export async function buildEnergyCertificatePdfFactory(project: any) {
+export async function buildEnergyCertificatePdfFactory(project: ProjectData) {
   const storedDoc = project?.formData?.energyCertificate?.renderedDocument;
   const storedIsValid = storedDoc?.imageDataUrl && storedDoc.templateVersion === ENERGY_CERTIFICATE_TEMPLATE_VERSION;
   const imageDataUrl = storedIsValid

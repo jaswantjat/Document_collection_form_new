@@ -11,6 +11,11 @@ const fs = require('fs');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { PDFDocument, rgb } = require('pdf-lib');
 const AdmZip = require('adm-zip');
+const {
+  deleteAssetFiles,
+  normalizeActiveAssetKeys,
+  pruneManagedAssetFiles,
+} = require('./lib/assetFiles');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -1142,18 +1147,29 @@ app.post('/api/project/:code/upload-assets', requireProject, (req, res, next) =>
 }, (req, res) => {
   const project = req.project;
   const files = req.files || {};
-  const assetFiles = { ...(project.assetFiles || {}) };
+  const activeAssetKeys = normalizeActiveAssetKeys(req.body?.activeKeys);
+  const {
+    assetFiles,
+    removedPaths,
+  } = pruneManagedAssetFiles(project.assetFiles, activeAssetKeys);
   const projectAssetsPath = `/uploads/assets/${project.code}`;
+  const replacedPaths = [];
 
   for (const [fieldName, fileArray] of Object.entries(files)) {
     if (Array.isArray(fileArray) && fileArray.length > 0) {
-      assetFiles[fieldName] = `${projectAssetsPath}/${fileArray[0].filename}`;
+      const nextPath = `${projectAssetsPath}/${fileArray[0].filename}`;
+      const previousPath = assetFiles[fieldName];
+      if (typeof previousPath === 'string' && previousPath && previousPath !== nextPath) {
+        replacedPaths.push(previousPath);
+      }
+      assetFiles[fieldName] = nextPath;
     }
   }
 
   project.assetFiles = assetFiles;
   project.lastActivity = new Date().toISOString();
   saveDB();
+  deleteAssetFiles(DATA_DIR, [...removedPaths, ...replacedPaths]);
 
   res.json({ success: true, savedKeys: Object.keys(assetFiles) });
 });

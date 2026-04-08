@@ -1,9 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-const TOKEN_1 = 'b43df737-e202-40d8-ba45-277dceb9d323';
 const EC04_CODE = 'ELT20250004';
-const EC04_TOKEN = 'ec-test-token-4444';
-const BACKEND = 'http://localhost:3001';
+const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 async function resetEC(request: any, code: string) {
   const res = await request.post(`${BACKEND}/api/test/reset-ec/${code}`);
@@ -12,16 +10,21 @@ async function resetEC(request: any, code: string) {
   }
 }
 
+async function openEnergyCertificateFromReview(page: Page) {
+  await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+  await page.getByRole('button', { name: /certificado energético/i }).click();
+  await expect(page.locator('h1').first()).toHaveText(/certificado energético|vivienda/i);
+}
+
 test.describe('Energy Certificate PRD Tests', () => {
   
   test('EC-01: skip path — can reach and click skip on energy-certificate step', async ({ page, request }) => {
     await resetEC(request, EC04_CODE);
-    // Start from a project that should reach EC section (ELT20250004)
-    await page.goto(`/?code=${EC04_CODE}&token=${EC04_TOKEN}`);
+    // Follow-up users now land on review first, then explicitly open the EC step.
+    await page.goto(`/?code=${EC04_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    const heading = page.locator('h1').first();
-    await expect(heading).toHaveText(/certificado energético|vivienda/i);
+    await openEnergyCertificateFromReview(page);
 
     // Find and click Skip button
     const skipBtn = page.getByRole('button', { name: /saltar|omitir|ahora no/i }).first();
@@ -29,9 +32,8 @@ test.describe('Energy Certificate PRD Tests', () => {
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
     
-    // After skipping, it should go to ReviewSection
-    const nextHeading = page.locator('h1').first();
-    await expect(nextHeading).not.toHaveText(/certificado energético/i);
+    // After skipping with everything else complete, it auto-submits to success.
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 
   test('EC-02: dashboard shows pending status for project with no EC data', async ({ page }) => {
@@ -68,16 +70,15 @@ test.describe('Energy Certificate PRD Tests', () => {
     await expect(loginHeading).toBeVisible();
   });
 
-  test('EC-04: invalid project code renders error ("Enlace no válido")', async ({ page }) => {
+  test('EC-04: invalid project code gracefully returns to the phone entry flow', async ({ page }) => {
     await page.goto('/?code=INVALID_123');
     await page.waitForLoadState('networkidle');
     
-    const errorText = page.getByText(/enlace no válido|error|no encontrado/i);
-    await expect(errorText).toBeVisible();
+    await expect(page.locator('h1').first()).toContainText('Teléfono del cliente');
   });
 
   test.describe('Conditional Field Visibility (COND fixes)', () => {
-    const URL = `/?code=${EC04_CODE}&token=${EC04_TOKEN}`;
+    const URL = `/?code=${EC04_CODE}`;
 
     test.beforeEach(async ({ request }) => {
       await resetEC(request, EC04_CODE);
@@ -121,6 +122,7 @@ test.describe('Energy Certificate PRD Tests', () => {
       await acLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
       await page.getByRole('button', { name: 'Radiadores de Agua' }).click();
       await page.getByRole('button', { name: 'Aluminio' }).click();
+      await page.getByRole('button', { name: 'Monofásica' }).click();
 
       await page.getByRole('button', { name: /siguiente/i }).click();
     }
@@ -128,9 +130,7 @@ test.describe('Energy Certificate PRD Tests', () => {
     test('COND-01 (Housing): shutterWindowCount visibility', async ({ page }) => {
       await page.goto(URL);
       await page.waitForLoadState('networkidle');
-
-      const heading = page.locator('h1').first();
-      await expect(heading).toHaveText(/certificado energético|vivienda/i);
+      await openEnergyCertificateFromReview(page);
 
       // YesNoField renders: <p>label</p> then sibling <div> with <button>Sí</button><button>No</button>
       // Navigate: p element → parent div → buttons
@@ -149,9 +149,7 @@ test.describe('Energy Certificate PRD Tests', () => {
     test('COND-02 (Thermal): airConditioning visibility', async ({ page }) => {
       await page.goto(URL);
       await page.waitForLoadState('networkidle');
-
-      const heading = page.locator('h1').first();
-      await expect(heading).toHaveText(/certificado energético|vivienda/i);
+      await openEnergyCertificateFromReview(page);
 
       await fillAndAdvanceHousingStep(page);
 
@@ -173,9 +171,7 @@ test.describe('Energy Certificate PRD Tests', () => {
     test('COND-03 (Additional): solarPanelDetails visibility', async ({ page }) => {
       await page.goto(URL);
       await page.waitForLoadState('networkidle');
-
-      const heading = page.locator('h1').first();
-      await expect(heading).toHaveText(/certificado energético|vivienda/i);
+      await openEnergyCertificateFromReview(page);
 
       await fillAndAdvanceHousingStep(page);
       await fillAndAdvanceThermalStep(page);

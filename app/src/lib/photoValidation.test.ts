@@ -11,12 +11,13 @@
  *  - expandUploadFiles with non-PDF and error-throwing PDF
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   validatePhoto,
   mergeStoredDocumentFiles,
   createUploadedPhoto,
   expandUploadFiles,
+  preparePhotoAssets,
 } from './photoValidation';
 import type { StoredDocumentFile } from '@/types';
 
@@ -281,6 +282,52 @@ describe('createUploadedPhoto', () => {
     const photo = createUploadedPhoto(file, 'data:image/jpeg;base64,a');
     expect(photo.width).toBeUndefined();
     expect(photo.height).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// preparePhotoAssets — single-read preview + AI payload generation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('preparePhotoAssets', () => {
+  it('returns the original data URL for non-image files', async () => {
+    const pdf = makeFile('doc.pdf', 1024, 'application/pdf');
+    const prepared = await preparePhotoAssets(pdf);
+    expect(prepared.preview).toBe('data:application/pdf;base64,ZmFrZQ==');
+    expect(prepared.aiBase64).toBe('data:application/pdf;base64,ZmFrZQ==');
+  });
+
+  it('generates preview and AI variants from one canvas render for images', async () => {
+    const previousDocument = globalThis.document;
+    const drawImage = vi.fn();
+    const toDataURL = vi.fn((format: string) => (
+      format === 'image/jpeg'
+        ? 'data:image/jpeg;base64,preview'
+        : 'data:image/webp;base64,ai'
+    ));
+
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => ({
+        width: 0,
+        height: 0,
+        getContext: vi.fn().mockReturnValue({ drawImage }),
+        toDataURL,
+      })),
+    } as unknown as Document);
+
+    const image = makeFile('photo.jpg', 1024, 'image/jpeg');
+    const prepared = await preparePhotoAssets(image);
+
+    expect(prepared.preview).toBe('data:image/jpeg;base64,preview');
+    expect(prepared.aiBase64).toBe('data:image/webp;base64,ai');
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(toDataURL).toHaveBeenNthCalledWith(1, 'image/jpeg', 0.8);
+    expect(toDataURL).toHaveBeenNthCalledWith(2, 'image/webp', 0.7);
+
+    if (previousDocument) {
+      vi.stubGlobal('document', previousDocument);
+    } else {
+      Reflect.deleteProperty(globalThis, 'document');
+    }
   });
 });
 

@@ -5,13 +5,14 @@
  * Covers: happy path, network errors, 4xx/5xx responses, timeouts, malformed JSON.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   fetchProject,
   lookupByPhone,
   dashboardLogin,
   fetchDashboard,
   fetchDashboardProject,
+  preUploadAssets,
   saveProgress,
   submitForm,
   extractDocument,
@@ -34,11 +35,6 @@ function mockFetch(body: unknown, status = 200) {
 
 function mockFetchNetworkError(message = 'Network Error') {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(message)));
-}
-
-function mockFetchAborted() {
-  const err = new DOMException('The operation was aborted.', 'AbortError');
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(err));
 }
 
 // AbortSignal.timeout may not exist in Node 20 — stub it
@@ -236,6 +232,11 @@ describe('saveProgress', () => {
     mockFetchNetworkError('Server down');
     await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('Server down');
   });
+
+  it('rejects non-OK HTTP responses instead of treating them as saved', async () => {
+    mockFetch({ success: false, message: 'rate limited' }, 429);
+    await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('rate limited');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,6 +271,89 @@ describe('submitForm', () => {
   it('propagates server error', async () => {
     mockFetchNetworkError('500 Internal Server Error');
     await expect(submitForm('ELT001', formData, 'customer')).rejects.toThrow();
+  });
+
+  it('rejects HTTP failures with the backend message', async () => {
+    mockFetch({ success: false, message: 'submit failed' }, 500);
+    await expect(submitForm('ELT001', formData, 'customer')).rejects.toThrow('submit failed');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// preUploadAssets
+// ─────────────────────────────────────────────────────────────────────────────
+describe('preUploadAssets', () => {
+  const preview = 'data:image/jpeg;base64,ZmFrZQ==';
+
+  function makeFormData() {
+    return {
+      dni: {
+        front: {
+          photo: {
+            id: 'dni-front',
+            preview,
+            timestamp: 1,
+            sizeBytes: 4,
+          },
+          extraction: null,
+        },
+        back: { photo: null, extraction: null },
+        originalPdfs: [],
+      },
+      ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
+      electricityBill: { pages: [], originalPdfs: [] },
+      contract: { originalPdfs: [], extraction: null },
+      representation: {} as Parameters<typeof preUploadAssets>[1]['representation'],
+      energyCertificate: { status: 'not-started' } as Parameters<typeof preUploadAssets>[1]['energyCertificate'],
+      signatures: { customerSignature: null, repSignature: null },
+    } as Parameters<typeof preUploadAssets>[1];
+  }
+
+  it('uploads binary assets once and skips identical re-uploads', async () => {
+    const response = mockFetch({ success: true, savedKeys: ['dniFront'] });
+    const formData = makeFormData();
+
+    await preUploadAssets('ELT-UPLOAD-001', formData);
+    await preUploadAssets('ELT-UPLOAD-001', formData);
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const requestBody = fetchMock.mock.calls[0][1].body as FormData;
+    const entries = Array.from(requestBody.entries());
+    expect(entries.some(([key]) => key === 'dniFront')).toBe(true);
+    expect(entries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['dniFront']));
+    expect(response.json).toHaveBeenCalledTimes(1);
+  });
+
+  it('syncs an empty manifest when assets were removed locally', async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      json: vi.fn()
+        .mockResolvedValueOnce({ success: true, savedKeys: ['dniFront'] })
+        .mockResolvedValueOnce({ success: true, savedKeys: [] }),
+      blob: vi.fn(),
+      text: vi.fn(),
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+    await preUploadAssets('ELT-UPLOAD-002', makeFormData());
+    await preUploadAssets('ELT-UPLOAD-002', {
+      ...makeFormData(),
+      dni: { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] },
+    });
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const requestBody = fetchMock.mock.calls[1][1].body as FormData;
+    const entries = Array.from(requestBody.entries());
+    expect(entries).toEqual([['activeKeys', '[]']]);
+  });
+
+  it('rejects non-OK upload responses', async () => {
+    mockFetch({ success: false, message: 'upload failed' }, 503);
+    await expect(preUploadAssets('ELT-UPLOAD-003', makeFormData())).rejects.toThrow('upload failed');
   });
 });
 

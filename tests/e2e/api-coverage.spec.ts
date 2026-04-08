@@ -1,36 +1,35 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_CODE = 'ELT20250001';
-const VALID_TOKEN = 'b43df737-e202-40d8-ba45-277dceb9d323';
-const BAD_TOKEN = 'invalid-token-0000';
+
+function uniquePhone() {
+  const suffix = Date.now().toString().slice(-8);
+  return `+346${suffix}`;
+}
 
 test.describe('API Coverage', () => {
-  test('API-01: POST /api/project/:code/save with valid payload returns 200', async ({ request }) => {
+  test('API-01: POST /api/project/:code/save succeeds without customer token headers', async ({ request }) => {
     const res = await request.post(`${BASE}/api/project/${VALID_CODE}/save`, {
-      headers: { 'x-project-token': VALID_TOKEN, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       data: { formData: {} },
       timeout: 15000,
     });
     expect(res.status()).toBe(200);
-    const body = await res.json();
-    console.log('[API-01] Response:', JSON.stringify(body).slice(0, 120));
-    expect(body.success).toBe(true);
-    console.log('[API-01] PASS — save with valid token returns 200');
+    await expect(res.json()).resolves.toMatchObject({ success: true });
   });
 
-  test('API-02: POST /api/project/:code/save with invalid token returns 401', async ({ request }) => {
-    const res = await request.post(`${BASE}/api/project/${VALID_CODE}/save`, {
-      headers: { 'x-project-token': BAD_TOKEN, 'Content-Type': 'application/json' },
+  test('API-02: POST /api/project/:code/save returns 404 for an unknown project code', async ({ request }) => {
+    const res = await request.post(`${BASE}/api/project/ELT99999999/save`, {
+      headers: { 'Content-Type': 'application/json' },
       data: { formData: {} },
       timeout: 15000,
     });
-    console.log('[API-02] Status:', res.status());
-    expect([401, 403]).toContain(res.status());
-    console.log('[API-02] PASS — save with wrong token returns 401/403');
+    expect(res.status()).toBe(404);
+    await expect(res.json()).resolves.toMatchObject({ success: false, error: 'PROJECT_NOT_FOUND' });
   });
 
-  test('API-03: GET /api/project/:code/download-zip returns a ZIP file', async ({ request }) => {
+  test('API-03: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {
     const loginRes = await request.post(`${BASE}/api/dashboard/login`, {
       data: { password: 'eltex2025' },
       timeout: 10000,
@@ -39,19 +38,57 @@ test.describe('API Coverage', () => {
     const loginBody = await loginRes.json();
     const dashToken = loginBody.token;
     expect(dashToken).toBeTruthy();
-    console.log('[API-03] Dashboard login OK, token:', dashToken?.slice(0, 8) + '...');
 
     const res = await request.get(`${BASE}/api/project/${VALID_CODE}/download-zip`, {
       headers: { 'x-dashboard-token': dashToken },
       timeout: 30000,
     });
-    console.log('[API-03] Status:', res.status());
     expect(res.status()).toBe(200);
-    const contentType = res.headers()['content-type'] || '';
-    console.log('[API-03] Content-Type:', contentType);
-    expect(contentType).toMatch(/zip|octet-stream/);
-    const body = await res.body();
-    expect(body.length).toBeGreaterThanOrEqual(22);
-    console.log('[API-03] PASS — download-zip returns ZIP of', body.length, 'bytes (22 = valid empty ZIP)');
+    expect(res.headers()['content-type'] || '').toMatch(/zip|octet-stream/);
+    expect((await res.body()).length).toBeGreaterThanOrEqual(22);
+  });
+
+  test('API-04: upload-assets prunes stale asset keys when the active manifest shrinks', async ({ request }) => {
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: 'QA Bot',
+        assessorId: 'QA-BOT',
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+    expect(code).toBeTruthy();
+
+    const firstUpload = await request.post(`${BASE}/api/project/${code}/upload-assets`, {
+      multipart: {
+        activeKeys: JSON.stringify(['dniFront']),
+        dniFront: {
+          name: 'dni-front.jpg',
+          mimeType: 'image/jpeg',
+          buffer: Buffer.from('fake-image'),
+        },
+      },
+      timeout: 15000,
+    });
+    expect(firstUpload.status()).toBe(200);
+
+    const firstProject = await request.get(`${BASE}/api/project/${code}`, { timeout: 15000 });
+    const firstBody = await firstProject.json();
+    expect(firstBody.project.assetFiles.dniFront).toContain(`/uploads/assets/${code}/dniFront`);
+
+    const secondUpload = await request.post(`${BASE}/api/project/${code}/upload-assets`, {
+      multipart: {
+        activeKeys: JSON.stringify([]),
+      },
+      timeout: 15000,
+    });
+    expect(secondUpload.status()).toBe(200);
+
+    const secondProject = await request.get(`${BASE}/api/project/${code}`, { timeout: 15000 });
+    const secondBody = await secondProject.json();
+    expect(secondBody.project.assetFiles.dniFront).toBeUndefined();
   });
 });

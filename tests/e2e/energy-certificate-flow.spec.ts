@@ -1,8 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const EC05_CODE = 'ELT20250005';
-const EC05_TOKEN = 'ec-flow-token-5555';
-const BACKEND = 'http://localhost:3001';
+const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+
+async function openEnergyCertificate(page: Page) {
+  await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+  await page.getByRole('button', { name: /certificado energético/i }).click();
+  await expect(page.locator('h1').first()).toContainText('Certificado energético');
+}
 
 test.describe('Energy Certificate Flow Tests', () => {
   test.beforeEach(async ({ request }) => {
@@ -15,12 +20,10 @@ test.describe('Energy Certificate Flow Tests', () => {
   });
 
   test('E2E-FLOW-01: EC section loads with all steps and skip button', async ({ page }) => {
-    await page.goto(`/?code=${EC05_CODE}&token=${EC05_TOKEN}`);
+    await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
-    
-    // Assert we're on EC section
-    const heading = page.locator('h1').first();
-    await expect(heading).toContainText('Certificado energético');
+
+    await openEnergyCertificate(page);
     
     // Assert step tabs are visible (exact match to avoid matching field labels like "Referencia Catastral de la Vivienda")
     await expect(page.getByText('Vivienda', { exact: true }).first()).toBeVisible();
@@ -37,25 +40,18 @@ test.describe('Energy Certificate Flow Tests', () => {
   });
 
   test('E2E-FLOW-02: EC skip path — clicking Saltar routes to review section', async ({ page }) => {
-    await page.goto(`/?code=${EC05_CODE}&token=${EC05_TOKEN}`);
+    await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
-    
-    // Confirm we're on EC section
-    const heading = page.locator('h1').first();
-    await expect(heading).toContainText('Certificado energético');
-    
+
+    await openEnergyCertificate(page);
+
     // Click skip
     const skipBtn = page.getByRole('button', { name: /saltar/i });
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
-    
-    // After skipping, we should NOT be on EC section
-    const newHeading = page.locator('h1').first();
-    await expect(newHeading).not.toContainText('Certificado energético');
-    
-    // Should be on some next section (review/submit/signing)
-    const headingText = await newHeading.textContent();
-    console.log('[E2E-FLOW-02] After skip, heading:', headingText);
+
+    // After skipping with everything else complete, the flow auto-submits to success.
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 
   test('E2E-FLOW-03: EC resume path — partially filled housing data persists on reload', async ({ page, request }) => {
@@ -63,13 +59,11 @@ test.describe('Energy Certificate Flow Tests', () => {
     const seedRes = await request.post(`${BACKEND}/api/test/reset-ec-partial/${EC05_CODE}`);
     expect(seedRes.ok()).toBeTruthy();
 
-    // Open form — should route to EC section because property docs are done
-    await page.goto(`/?code=${EC05_CODE}&token=${EC05_TOKEN}`);
+    // Open form — should route to review first, then into EC on demand
+    await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    // Should be on EC section
-    const heading = page.locator('h1').first();
-    await expect(heading).toContainText('Certificado energético');
+    await openEnergyCertificate(page);
 
     // The cadastralReference field should show the seeded value from the server
     const cadastralInput = page.getByLabel('Referencia Catastral de la Vivienda');
@@ -81,12 +75,15 @@ test.describe('Energy Certificate Flow Tests', () => {
     const clearRes = await request.post(`${BACKEND}/api/test/reset-property-docs/${EC05_CODE}`);
     expect(clearRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${EC05_CODE}&token=${EC05_TOKEN}`);
+    await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    // Should land on property-docs section (representation done but docs missing)
-    const heading1 = page.locator('h1').first();
-    await expect(heading1).toContainText('Documentos');
+    // Current follow-up logic lands on review first, with the missing docs surfaced as checklist items.
+    await expect(page.locator('h1, h2').first()).toContainText(/Confirma tu documentación|Sube lo que falte y confirma/);
+    const identityCard = page.getByRole('button', { name: /Documento de identidad del titular/i }).first();
+    await expect(identityCard).toBeVisible();
+    await identityCard.click();
+    await expect(page.locator('h1').first()).toContainText('Documentos');
 
     // Clear localStorage while still on the form page (before beforeunload fires)
     await page.evaluate(() => localStorage.clear());
@@ -100,22 +97,17 @@ test.describe('Energy Certificate Flow Tests', () => {
     const restoreRes = await request.post(`${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
     expect(restoreRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${EC05_CODE}&token=${EC05_TOKEN}`);
+    await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    // Should now route to EC section
-    const heading2 = page.locator('h1').first();
-    await expect(heading2).toContainText('Certificado energético');
+    await openEnergyCertificate(page);
 
     // Step 3: skip EC → should route to review section
     const skipBtn = page.getByRole('button', { name: /saltar/i });
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
 
-    // Should be past EC section (on review)
-    const heading3 = page.locator('h1').first();
-    await expect(heading3).not.toContainText('Certificado energético');
-    const finalHeading = await heading3.textContent();
-    console.log('[E2E-FLOW-04] After skip, heading:', finalHeading);
+    // With all required steps resolved, skipping the EC auto-submits to success.
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 });

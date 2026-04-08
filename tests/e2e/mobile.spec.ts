@@ -4,7 +4,7 @@ test.describe('Mobile Viewport', () => {
   test('E2E-MOBILE-01: form is usable on 375×667 (iPhone SE) viewport', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
 
-    await page.goto('/?code=ELT20250002&token=1be9964d-a51d-4532-8f7e-647bb7aeb5f3', {
+    await page.goto('/?code=ELT20250002', {
       waitUntil: 'networkidle',
       timeout: 30000,
     });

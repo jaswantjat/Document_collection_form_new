@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
-import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset, RenderedDocumentKey } from '@/types';
+import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset } from '@/types';
 import { submitForm, preUploadAssets } from '@/services/api';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
@@ -203,16 +203,22 @@ export function ReviewSection({
       }
 
       const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
+      if (!preUploadSuccess) {
+        await preUploadAssets(project.code, renderedFormData);
+        preUploadDone.current = true;
+      }
 
-      const submitPayload = preUploadSuccess
-        ? stripAllBinaryData(renderedFormData)
-        : stripRenderedImages(renderedFormData);
-
+      const submitPayload = stripAllBinaryData(renderedFormData);
       const res = await submitForm(project.code, submitPayload, source);
       if (res.success) onSuccess();
       else setSubmitError(res.message || 'Error al enviar. Inténtalo de nuevo.');
-    } catch {
-      setSubmitError('Sin conexión. Inténtalo de nuevo.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!message || /fetch|network|abort/i.test(message)) {
+        setSubmitError('Sin conexión. Inténtalo de nuevo.');
+      } else {
+        setSubmitError(message);
+      }
     } finally {
       submitInProgress.current = false;
       setSubmitting(false);
@@ -274,39 +280,6 @@ export function ReviewSection({
       if (value instanceof File) return undefined;
       return value;
     })) as FormData;
-  }
-
-  function stripRenderedImages(fd: FormData): FormData {
-    const docs = fd.representation?.renderedDocuments;
-    const strippedRepresentation = docs ? { ...docs } : null;
-    if (strippedRepresentation) {
-      for (const [key, val] of Object.entries(strippedRepresentation) as [RenderedDocumentKey, RenderedDocumentAsset | undefined][]) {
-        if (!val) continue;
-        strippedRepresentation[key] = {
-          generatedAt: val.generatedAt,
-          templateVersion: val.templateVersion,
-        };
-      }
-    }
-
-    const energyDocument = fd.energyCertificate?.renderedDocument
-      ? {
-          imageDataUrl: fd.energyCertificate.renderedDocument.imageDataUrl,
-          generatedAt: fd.energyCertificate.renderedDocument.generatedAt,
-          templateVersion: fd.energyCertificate.renderedDocument.templateVersion,
-        }
-      : null;
-
-    const stripped: NonNullable<FormData['representation']['renderedDocuments']> = {};
-    if (strippedRepresentation) Object.assign(stripped, strippedRepresentation);
-    return {
-      ...fd,
-      representation: { ...fd.representation, renderedDocuments: strippedRepresentation ? stripped : fd.representation.renderedDocuments },
-      energyCertificate: {
-        ...fd.energyCertificate,
-        renderedDocument: energyDocument,
-      },
-    };
   }
 
   if (submitting) {
