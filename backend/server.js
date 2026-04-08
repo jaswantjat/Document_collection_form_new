@@ -967,14 +967,16 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
 
   const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET };
 
+  console.log(`[DocFlow] new_order payload for ${project.code}: customer_name=${JSON.stringify(payload.customer_name)} | first_name=${JSON.stringify(payload.first_name)} | last_name=${JSON.stringify(payload.last_name)} | locale=${JSON.stringify(payload.locale)} | phone=${payload.phone} | contract_date=${payload.contract_date} | docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
+
   try {
-    await fetch(webhookUrl, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5000),
     });
-    console.log(`[DocFlow] new_order sent for ${project.code} (docs: ${docsUploaded.join(', ') || 'none'})`);
+    console.log(`[DocFlow] new_order sent for ${project.code} → HTTP ${res.status}`);
     return true;
   } catch (err) {
     console.error(`[DocFlow] new_order failed for ${project.code}:`, err.message);
@@ -987,11 +989,13 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
   const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
   if (!webhookUrl) return;
 
+  console.log(`[DocFlow] doc_update payload for ${orderCode}: docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
   fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET },
     body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
-  }).catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
+  }).then((res) => console.log(`[DocFlow] doc_update sent for ${orderCode} → HTTP ${res.status}`))
+    .catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
 }
 
 // Auto-save progress (requires access token)
