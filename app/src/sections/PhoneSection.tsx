@@ -154,7 +154,8 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newEmail, setNewEmail] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<Set<'solar' | 'aerothermal'>>(new Set(['solar']));
+  const [selectedProducts, setSelectedProducts] = useState<Set<'solar' | 'aerothermal'>>(new Set());
+  const [productError, setProductError] = useState('');
   const [newAssessor, setNewAssessor] = useState('');
   const numberInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,7 +195,8 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
         setTouched(false);
         setNewEmail('');
         setNewAssessor('');
-        setSelectedProducts(new Set(['solar']));
+        setSelectedProducts(new Set());
+        setProductError('');
         setShowNewForm(true);
       }
     } catch { setError('Sin conexión. Inténtalo de nuevo.'); }
@@ -205,6 +207,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
     setTouched(true);
     const err = getPhoneError(country.code, localNumber);
     if (err) { setError(err); return; }
+    if (selectedProducts.size === 0) { setProductError('Selecciona al menos un producto.'); return; }
     const combined = buildPhone(country.code, localNumber);
     setLoading(true); setError('');
     try {
@@ -304,7 +307,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-700">Producto</p>
+                  <p className="text-sm font-semibold text-gray-700">Producto <span className="text-red-500">*</span></p>
                   <div className="grid grid-cols-2 gap-2">
                     {([
                       { id: 'solar', label: 'Solar', icon: '☀️' },
@@ -315,14 +318,21 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                         <button
                           key={pt.id}
                           type="button"
-                          onClick={() => setSelectedProducts(prev => {
-                            const next = new Set(prev);
-                            if (next.has(pt.id)) { if (next.size > 1) next.delete(pt.id); }
-                            else { next.add(pt.id); }
-                            return next;
-                          })}
+                          onClick={() => {
+                            setProductError('');
+                            setSelectedProducts(prev => {
+                              const next = new Set(prev);
+                              if (next.has(pt.id)) { next.delete(pt.id); }
+                              else { next.add(pt.id); }
+                              return next;
+                            });
+                          }}
                           className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all relative ${
-                            active ? 'border-eltex-blue bg-eltex-blue text-white' : 'border-gray-200 bg-white text-gray-600'
+                            active
+                              ? 'border-eltex-blue bg-eltex-blue text-white'
+                              : productError
+                                ? 'border-red-300 bg-white text-gray-600'
+                                : 'border-gray-200 bg-white text-gray-600'
                           }`}
                         >
                           <span className="block text-xl mb-0.5">{pt.icon}</span>
@@ -334,8 +344,14 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                       );
                     })}
                   </div>
+                  {selectedProducts.size === 0 && (
+                    <p className="text-xs text-gray-400 text-center">Selecciona al menos un producto</p>
+                  )}
                   {selectedProducts.size === 2 && (
                     <p className="text-xs text-eltex-blue font-medium text-center">Combo Solar + Aerotermia seleccionado</p>
+                  )}
+                  {productError && (
+                    <p className="text-sm text-red-500">{productError}</p>
                   )}
                 </div>
 

@@ -495,8 +495,83 @@ function FormApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, followUpDocumentFlow]);
 
-  const handlePhoneConfirmed = (_phone: string, foundProject: ProjectData) => {
-    const normalizedProject = normalizeLoadedProject(foundProject);
+  const handlePhoneConfirmed = async (_phone: string, foundProject: ProjectData) => {
+    let normalizedProject = normalizeLoadedProject(foundProject);
+
+    // Merge any local backup so that photos the user uploaded earlier are
+    // restored immediately — the URL-based load path does this but the phone
+    // path previously skipped it, causing uploads to disappear on return.
+    const code = foundProject.code;
+    const serverTs = normalizedProject.lastActivity
+      ? new Date(normalizedProject.lastActivity).getTime()
+      : 0;
+
+    const localBackup = readLocalBackup(code);
+    const idbBackup = localBackup ? null : await readIndexedDBBackup(code);
+    const bestBackup = localBackup ?? idbBackup;
+
+    if (bestBackup) {
+      const backupFd = normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]);
+      const projectCreatedAt = normalizedProject.createdAt
+        ? new Date(normalizedProject.createdAt).getTime()
+        : 0;
+      const backupIsStale = projectCreatedAt > 0 && bestBackup.savedAt < projectCreatedAt - 1000;
+      if (backupIsStale) {
+        clearLocalBackup(code);
+      } else if (bestBackup.savedAt > serverTs + 500) {
+        normalizedProject = { ...normalizedProject, formData: backupFd };
+      } else {
+        const serverFd = normalizedProject.formData;
+        const hasPreview = (p: { preview?: string } | null | undefined) => !!p?.preview;
+        const hasDataUrl = (f: { dataUrl?: string } | null | undefined) => !!f?.dataUrl;
+        normalizedProject = {
+          ...normalizedProject,
+          formData: normalizeFormData({
+            ...serverFd,
+            dni: {
+              ...serverFd?.dni,
+              front: {
+                ...serverFd?.dni?.front,
+                photo: hasPreview(backupFd.dni?.front?.photo) ? backupFd.dni.front.photo : serverFd?.dni?.front?.photo ?? null,
+                extraction: serverFd?.dni?.front?.extraction ?? null,
+              },
+              back: {
+                ...serverFd?.dni?.back,
+                photo: hasPreview(backupFd.dni?.back?.photo) ? backupFd.dni.back.photo : serverFd?.dni?.back?.photo ?? null,
+                extraction: serverFd?.dni?.back?.extraction ?? null,
+              },
+              originalPdfs: backupFd.dni?.originalPdfs?.some(hasDataUrl) ? backupFd.dni.originalPdfs : serverFd?.dni?.originalPdfs ?? [],
+            },
+            ibi: {
+              ...serverFd?.ibi,
+              photo: hasPreview(backupFd.ibi?.photo) ? backupFd.ibi.photo : serverFd?.ibi?.photo ?? null,
+              pages: backupFd.ibi?.pages?.some(hasPreview) ? backupFd.ibi.pages : serverFd?.ibi?.pages ?? [],
+              originalPdfs: backupFd.ibi?.originalPdfs?.some(hasDataUrl) ? backupFd.ibi.originalPdfs : serverFd?.ibi?.originalPdfs ?? [],
+              extraction: serverFd?.ibi?.extraction ?? null,
+            },
+            electricityBill: {
+              ...serverFd?.electricityBill,
+              pages: backupFd.electricityBill?.pages?.some((p) => hasPreview(p?.photo)) ? backupFd.electricityBill.pages : serverFd?.electricityBill?.pages ?? [],
+              originalPdfs: backupFd.electricityBill?.originalPdfs?.some(hasDataUrl) ? backupFd.electricityBill.originalPdfs : serverFd?.electricityBill?.originalPdfs ?? [],
+            },
+            contract: {
+              ...serverFd?.contract,
+              originalPdfs: backupFd.contract?.originalPdfs?.some(hasDataUrl) ? backupFd.contract.originalPdfs : serverFd?.contract?.originalPdfs ?? [],
+              extraction: serverFd?.contract?.extraction ?? null,
+            },
+            energyCertificate: {
+              ...serverFd?.energyCertificate,
+              status: serverFd?.energyCertificate?.status ?? 'not-started',
+              renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
+                ? backupFd.energyCertificate.renderedDocument
+                : serverFd?.energyCertificate?.renderedDocument ?? null,
+              currentStepIndex: backupFd.energyCertificate?.currentStepIndex ?? serverFd?.energyCertificate?.currentStepIndex,
+            } as import('@/types').EnergyCertificateData,
+          } as import('@/types').FormData),
+        };
+      }
+    }
+
     setProject(normalizedProject);
     navigate(buildProjectUrl(foundProject.code), { replace: true });
     goTo(getInitialSection(normalizedProject, foundProject.code));
