@@ -944,6 +944,22 @@ function computeRequiredDocs(productType) {
   return docs;
 }
 
+// Derive a BCP-47 language tag from a phone number's country prefix.
+// Used as a fallback when no browser-language is available (e.g. assessor-submitted forms).
+function localeFromPhone(phone) {
+  if (!phone) return null;
+  const e164 = String(phone).replace(/[\s\-().]/g, '');
+  if (e164.startsWith('+34') || e164.startsWith('0034')) return 'es';   // Spain
+  if (e164.startsWith('+351') || e164.startsWith('00351')) return 'pt'; // Portugal
+  if (e164.startsWith('+33') || e164.startsWith('0033')) return 'fr';   // France
+  if (e164.startsWith('+44') || e164.startsWith('0044')) return 'en';   // UK
+  if (e164.startsWith('+49') || e164.startsWith('0049')) return 'de';   // Germany
+  if (e164.startsWith('+39') || e164.startsWith('0039')) return 'it';   // Italy
+  if (e164.startsWith('+32') || e164.startsWith('0032')) return 'fr';   // Belgium
+  if (e164.startsWith('+31') || e164.startsWith('0031')) return 'nl';   // Netherlands
+  return null;
+}
+
 // Fires new_order webhook to DocFlow. Returns true on success, false on failure.
 // Awaitable — callers must await this to guarantee the row exists before any follow-up calls.
 // On first submission, docs_uploaded is included so no separate doc_update is needed.
@@ -959,7 +975,7 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
     first_name: snapshot.firstName || null,
     last_name: snapshot.lastName || null,
     phone: project.phone || '',
-    locale: (project.customerLanguage || project.formData?.browserLanguage || '').split('-')[0] || null,
+    locale: (project.customerLanguage || '').split('-')[0] || localeFromPhone(project.phone) || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
     docs_required: computeRequiredDocs(project.productType),
     docs_uploaded: docsUploaded,
@@ -1001,7 +1017,7 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
 // Auto-save progress (requires access token)
 app.post('/api/project/:code/save', requireProject, (req, res) => {
   const project = req.project;
-  const { formData } = req.body;
+  const { formData, source } = req.body;
   if (!formData || typeof formData !== 'object') {
     return res.status(400).json({ success: false, message: 'formData inválido.' });
   }
@@ -1014,7 +1030,12 @@ app.post('/api/project/:code/save', requireProject, (req, res) => {
   const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
   const resolvedName = contractName || dniName || ibiTitular || ebTitular;
   if (resolvedName) project.customerName = resolvedName;
-  if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
+  // Only record the browser language when the CUSTOMER is using the form.
+  // If an assessor submits from their English-browser machine, their locale must not
+  // overwrite the customer's language and corrupt the webhook locale field.
+  if (formData?.browserLanguage && source !== 'assessor') {
+    project.customerLanguage = formData.browserLanguage;
+  }
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);
@@ -1050,7 +1071,12 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
   const resolvedName = contractName || dniName || ibiTitular || ebTitular;
   if (resolvedName) project.customerName = resolvedName;
-  if (formData?.browserLanguage) project.customerLanguage = formData.browserLanguage;
+  // Only record the browser language when the CUSTOMER is using the form.
+  // If an assessor submits from their English-browser machine, their locale must not
+  // overwrite the customer's language and corrupt the webhook locale field.
+  if (formData?.browserLanguage && source !== 'assessor') {
+    project.customerLanguage = formData.browserLanguage;
+  }
 
   // Check if Catalonia PDFs can be generated
   const pdfStatus = checkCataloniaPDFs(formData);

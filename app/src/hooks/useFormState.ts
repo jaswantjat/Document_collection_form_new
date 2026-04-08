@@ -290,7 +290,10 @@ export const useFormState = (
   projectCode: string | null,
   productType: ProductType,
   savedFormData?: FormData | null,
-  options?: { preserveRepresentationSignaturesOnDocumentChange?: boolean }
+  options?: {
+    preserveRepresentationSignaturesOnDocumentChange?: boolean;
+    source?: 'customer' | 'assessor';
+  }
 ) => {
   const preserveRepresentationSignatures =
     options?.preserveRepresentationSignaturesOnDocumentChange ?? false;
@@ -340,7 +343,7 @@ export const useFormState = (
       // when the user navigates sections without editing anything.
       const snapshot = JSON.stringify(cleanData);
       if (snapshot === lastSavedPayload.current) return;
-      saveProgress(projectCode, cleanData).then(() => {
+      saveProgress(projectCode, cleanData, options?.source).then(() => {
         lastSavedPayload.current = snapshot;
         if (consecutiveSaveFailures.current > 0) {
           consecutiveSaveFailures.current = 0;

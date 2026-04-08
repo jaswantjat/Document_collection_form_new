@@ -435,13 +435,13 @@ function FormApp() {
     activeProject?.code ?? null,
     activeProject?.productType ?? 'solar',
     activeProject?.formData ?? null,
-    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow }
+    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow, source }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
-  useBeforeUnloadSave(activeProject?.code ?? null, formData);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData, source);
 
   // Pre-warm lazy section chunks during idle time to eliminate loading spinners
   useEffect(() => { preloadSections(); }, []);

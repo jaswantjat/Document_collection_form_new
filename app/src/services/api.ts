@@ -192,12 +192,13 @@ export async function fetchDashboardProject(
 
 export async function saveProgress(
   code: string,
-  formData: AppFormData
+  formData: AppFormData,
+  source?: 'customer' | 'assessor'
 ): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/save`, {
     method: 'POST',
     headers: projectHeaders(),
-    body: JSON.stringify({ formData }),
+    body: JSON.stringify({ formData, source }),
     signal: AbortSignal.timeout(10000),
   });
   return res.json();

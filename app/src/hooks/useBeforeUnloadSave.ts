@@ -5,7 +5,8 @@ const KEEPALIVE_LIMIT_BYTES = 60 * 1024; // 64KB browser limit, use 60KB to be s
 
 function buildSavePayload(
   projectCode: string,
-  formData: unknown
+  formData: unknown,
+  source?: 'customer' | 'assessor'
 ): { url: string; body: string } | null {
   // Strip the same binary/large fields as the regular auto-save so the payload
   // stays small enough to fit within the 60 KB keepalive limit.
@@ -17,7 +18,7 @@ function buildSavePayload(
     return value;
   }));
 
-  const body = JSON.stringify({ formData: cleanData });
+  const body = JSON.stringify({ formData: cleanData, source });
 
   // Skip if payload exceeds keepalive limit — localStorage backup will handle recovery.
   // Never send a partially stripped payload that could corrupt photo data on the server.
@@ -33,7 +34,8 @@ function buildSavePayload(
 
 export function useBeforeUnloadSave(
   projectCode: string | null,
-  formData: unknown
+  formData: unknown,
+  source?: 'customer' | 'assessor'
 ): void {
   const formDataRef = useRef(formData);
 
@@ -45,7 +47,7 @@ export function useBeforeUnloadSave(
     if (!projectCode) return;
 
     const handleBeforeUnload = () => {
-      const payload = buildSavePayload(projectCode, formDataRef.current);
+      const payload = buildSavePayload(projectCode, formDataRef.current, source);
       if (!payload) return; // Too large — localStorage backup covers this case
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
