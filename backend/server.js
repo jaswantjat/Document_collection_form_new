@@ -853,6 +853,7 @@ app.post('/api/project/create', (req, res) => {
   const { phone, customerName, email, productType, assessor, assessorId } = req.body;
 
   if (!phone) return res.status(400).json({ success: false, message: 'El número de teléfono es obligatorio.' });
+  if (!assessor || !assessor.trim()) return res.status(400).json({ success: false, message: 'El nombre del asesor es obligatorio.' });
 
   const normalizedPhone = normalizePhone(phone);
 
@@ -870,8 +871,8 @@ app.post('/api/project/create', (req, res) => {
     phone: normalizedPhone,
     email: email || '',
     productType: productType || 'solar',
-    assessor: assessor || 'SSR',
-    assessorId: assessorId || 'SSR',
+    assessor: assessor.trim(),
+    assessorId: assessorId ? assessorId.trim() : assessor.trim(),
     formData: null,
     submissions: [],
     lastActivity: null,
@@ -988,13 +989,14 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
     locale: localeFromPhone(project.phone) || 'es',
     product_type: project.productType || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
+    assessor: project.assessor || null,
     docs_required: computeRequiredDocs(project.productType),
     docs_uploaded: docsUploaded,
   };
 
   const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET };
 
-  console.log(`[DocFlow] new_order payload for ${project.code}: customer_name=${JSON.stringify(payload.customer_name)} | first_name=${JSON.stringify(payload.first_name)} | last_name=${JSON.stringify(payload.last_name)} | locale=${JSON.stringify(payload.locale)} | product_type=${JSON.stringify(payload.product_type)} | phone=${payload.phone} | contract_date=${payload.contract_date} | docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
+  console.log(`[DocFlow] new_order payload for ${project.code}: customer_name=${JSON.stringify(payload.customer_name)} | first_name=${JSON.stringify(payload.first_name)} | last_name=${JSON.stringify(payload.last_name)} | locale=${JSON.stringify(payload.locale)} | product_type=${JSON.stringify(payload.product_type)} | phone=${payload.phone} | contract_date=${payload.contract_date} | assessor=${JSON.stringify(payload.assessor)} | docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
 
   try {
     const res = await fetch(webhookUrl, {

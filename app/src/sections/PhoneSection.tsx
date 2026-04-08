@@ -157,6 +157,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
   const [selectedProducts, setSelectedProducts] = useState<Set<'solar' | 'aerothermal'>>(new Set());
   const [productError, setProductError] = useState('');
   const [newAssessor, setNewAssessor] = useState('');
+  const [assessorError, setAssessorError] = useState('');
   const numberInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { numberInputRef.current?.focus(); }, []);
@@ -195,6 +196,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
         setTouched(false);
         setNewEmail('');
         setNewAssessor('');
+        setAssessorError('');
         setSelectedProducts(new Set());
         setProductError('');
         setShowNewForm(true);
@@ -208,6 +210,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
     const err = getPhoneError(country.code, localNumber);
     if (err) { setError(err); return; }
     if (selectedProducts.size === 0) { setProductError('Selecciona al menos un producto.'); return; }
+    if (!newAssessor.trim()) { setAssessorError('El nombre del asesor es obligatorio.'); return; }
     const combined = buildPhone(country.code, localNumber);
     setLoading(true); setError('');
     try {
@@ -218,7 +221,7 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
         phone: combined,
         email: newEmail.trim() || undefined,
         productType,
-        assessor: newAssessor.trim() || undefined,
+        assessor: newAssessor.trim(),
       });
       if (res.success && res.project) { onPhoneConfirmed(combined, res.project); }
       else { setError(res.message || 'No se pudo crear el expediente.'); }
@@ -356,15 +359,16 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="text-sm font-semibold text-gray-700">Tu nombre (asesor)</p>
+                  <p className="text-sm font-semibold text-gray-700">Tu nombre (asesor) <span className="text-red-500">*</span></p>
                   <input
                     type="text"
                     value={newAssessor}
-                    onChange={e => setNewAssessor(e.target.value)}
+                    onChange={e => { setNewAssessor(e.target.value); setAssessorError(''); }}
                     placeholder="Nombre completo"
-                    className="form-input"
+                    className={`form-input ${assessorError ? 'error' : ''}`}
                     autoFocus
                   />
+                  {assessorError && <p className="text-sm text-red-500">{assessorError}</p>}
                 </div>
 
                 <div className="space-y-1.5">
