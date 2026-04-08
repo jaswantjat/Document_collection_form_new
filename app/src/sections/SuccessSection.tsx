@@ -25,7 +25,7 @@ export function SuccessSection({ project }: Props) {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-6">
+    <div data-testid="success-section" className="min-h-screen flex items-center justify-center bg-white p-6">
       <div ref={containerRef} className="w-full max-w-xs mx-auto flex flex-col items-center text-center gap-6">
 
         <div data-animate>

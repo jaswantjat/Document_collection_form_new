@@ -1365,6 +1365,7 @@ function ProjectDetailModal({
             {project && (
               <button
                 type="button"
+                data-testid="download-zip-btn"
                 onClick={async () => {
                   try {
                     await downloadProjectZip(project, token);
@@ -2436,6 +2437,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             </button>
             <button
               type="button"
+              data-testid="export-csv-btn"
               onClick={() => downloadCSV(token)}
               className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold px-3 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
             >
@@ -2444,6 +2446,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             </button>
             <button
               type="button"
+              data-testid="logout-btn"
               onClick={() => void handleLogout()}
               className="flex items-center gap-1.5 text-xs text-gray-500 font-medium px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
