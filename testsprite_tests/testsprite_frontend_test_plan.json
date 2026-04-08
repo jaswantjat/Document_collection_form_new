@@ -1,8 +1,70 @@
 [
   {
     "id": "TC001",
-    "title": "Lookup phone number and open existing project",
-    "description": "Entering a valid mobile number should redirect the customer to the project URL with a code and resume the form at the current section.",
+    "title": "Complete required document uploads and proceed to province selection",
+    "description": "Verifies a customer can upload all required property documents, review extracted fields, and continue to the province selection step.",
+    "category": "Property Document Upload",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250003"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image for the DNI/NIE front document"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image for the DNI/NIE back document"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image or PDF for the IBI document"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image for the electricity bill document"
+      },
+      {
+        "type": "action",
+        "description": "Click property-docs-continue-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the province selection step is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Assessor can log in and see project list",
+    "description": "Verifies an assessor can authenticate to the dashboard with the correct password and sees the list of submitted projects.",
+    "category": "Admin Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard displays a list of projects"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Start session by phone and route into the project form",
+    "description": "Verifies a customer can enter a valid Spanish mobile number and is redirected into an active project session with the correct form section displayed.",
     "category": "Phone Number Entry",
     "steps": [
       {
@@ -11,27 +73,23 @@
       },
       {
         "type": "action",
-        "description": "Fill 600000001 into the phone number field"
+        "description": "Fill +34612345678 into the phone number field"
       },
       {
         "type": "action",
-        "description": "Submit the phone lookup form"
+        "description": "Submit the phone lookup"
       },
       {
         "type": "assertion",
-        "description": "Verify the customer lands on a project form URL with a code in the query string"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the current form section is displayed"
+        "description": "Verify the user is redirected into a project session and a form section is displayed"
       }
     ],
     "priority": "High"
   },
   {
-    "id": "TC002",
-    "title": "Submit project from review when submission is available",
-    "description": "This test verifies a customer can submit from the review step and see the success confirmation.",
+    "id": "TC004",
+    "title": "Submit from review and see success confirmation",
+    "description": "Verifies a customer can submit a completed review and sees the success confirmation section.",
     "category": "Review and Submit",
     "steps": [
       {
@@ -44,127 +102,44 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the success-section confirming submission is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC003",
-    "title": "Log in and view submitted project list",
-    "description": "Verifies an assessor can log in to the dashboard and see a list of submitted projects.",
-    "category": "Admin Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify a list of submitted projects is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC004",
-    "title": "Open project detail modal from project list",
-    "description": "Verifies an assessor can open a project’s detail modal from the dashboard project list.",
-    "category": "Admin Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to view a project expediente from the project list"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the project detail modal is visible"
+        "description": "Verify the success-section is displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC005",
-    "title": "Navigate from review to fix an incomplete item and return to review",
-    "description": "This test verifies a customer can open an incomplete checklist item to fix it and return to the review checklist afterward.",
-    "category": "Review and Submit",
+    "title": "Select Cataluña and proceed to representation",
+    "description": "Verifies a customer can choose Cataluña from the province list and continue to the representation step.",
+    "category": "Province Selection",
     "steps": [
       {
         "type": "action",
-        "description": "Navigate to /?code=ELT20250001"
+        "description": "Navigate to /?code=ELT20250002"
       },
       {
         "type": "action",
-        "description": "Click an incomplete checklist item to navigate to its related step"
+        "description": "Click select-province-btn"
       },
       {
         "type": "action",
-        "description": "Click the continue action on that step to return to review"
+        "description": "Click province-btn-cataluna"
+      },
+      {
+        "type": "action",
+        "description": "Click province-continue-btn"
       },
       {
         "type": "assertion",
-        "description": "Verify the user is back on the review checklist step"
+        "description": "Verify the representation step is displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC006",
-    "title": "Inspect uploaded documents and extracted data in project detail",
-    "description": "Verifies the project detail modal displays uploaded document previews and extracted data for the selected project.",
-    "category": "Admin Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to view a project expediente from the project list"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify uploaded document previews are displayed in the project detail modal"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify extracted project data is displayed in the project detail modal"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC007",
-    "title": "Apply required signatures and advance to next step",
-    "description": "This test verifies a customer can apply the required region-specific signatures and the app advances to the next step in the same project.",
+    "title": "Apply signatures and continue to next step",
+    "description": "Verifies a customer can inject a test signature, apply required signatures to legal PDFs, and successfully proceed to the next step.",
     "category": "Legal Document Signing (Representation)",
     "steps": [
       {
@@ -173,7 +148,7 @@
       },
       {
         "type": "action",
-        "description": "Call window.__eltexFillTestSignature()"
+        "description": "Call window.__eltexFillTestSignature() in the browser console context"
       },
       {
         "type": "action",
@@ -181,15 +156,81 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the user advances past the representation step to the next step of the form"
+        "description": "Verify the user proceeds past the representation step to the next section"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Require DNI back before allowing continuation",
+    "description": "Verifies the form blocks progress when only the DNI front is uploaded and allows progress after the DNI back is uploaded.",
+    "category": "Property Document Upload",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250003"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image for the DNI/NIE front document"
+      },
+      {
+        "type": "action",
+        "description": "Click property-docs-continue-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible indicating the DNI/NIE back is required"
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image for the DNI/NIE back document"
+      },
+      {
+        "type": "action",
+        "description": "Click property-docs-continue-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the province selection step is displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC008",
-    "title": "Download full project ZIP from project detail",
-    "description": "Verifies an assessor can initiate downloading the full project ZIP from the project detail modal header.",
+    "title": "Review checklist item navigation returns to review after fix",
+    "description": "Verifies a customer can open a checklist item from review, complete the required action, and return to review able to submit.",
+    "category": "Review and Submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250005"
+      },
+      {
+        "type": "action",
+        "description": "Click an incomplete checklist item to navigate to its related step"
+      },
+      {
+        "type": "action",
+        "description": "Complete the required fields or actions for that step"
+      },
+      {
+        "type": "action",
+        "description": "Proceed forward to return to the review step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the review-submit action is available to submit"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Assessor can open a project detail modal from the list",
+    "description": "Verifies an assessor can open a project’s detail modal from the dashboard list and see project details.",
     "category": "Admin Dashboard",
     "steps": [
       {
@@ -198,7 +239,7 @@
       },
       {
         "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+        "description": "Fill eltex2025 into the password field"
       },
       {
         "type": "action",
@@ -206,23 +247,40 @@
       },
       {
         "type": "action",
-        "description": "Click the control to view a project expediente from the project list"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to download the full project ZIP from the modal header"
+        "description": "Click ver-expediente-btn for a project"
       },
       {
         "type": "assertion",
-        "description": "Verify the browser begins a file download"
+        "description": "Verify the project detail modal is displayed"
       }
     ],
     "priority": "High"
   },
   {
-    "id": "TC009",
-    "title": "Complete the full 4-step energy certificate survey and reach review",
-    "description": "This test verifies a customer can complete all four survey steps and confirm to advance to the review step.",
+    "id": "TC010",
+    "title": "Skip energy certificate survey and reach review",
+    "description": "Verifies a customer can skip the energy certificate survey and is taken to the review step.",
+    "category": "Energy Certificate Survey",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250004"
+      },
+      {
+        "type": "action",
+        "description": "Click skip-energy-certificate-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user proceeds to the review step"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Complete 4-step energy certificate survey and reach review",
+    "description": "Verifies a customer can complete all four survey steps and confirm to reach the review step.",
     "category": "Energy Certificate Survey",
     "steps": [
       {
@@ -263,53 +321,73 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the user lands on the review step for the project"
+        "description": "Verify the user proceeds to the review step"
       }
     ],
     "priority": "High"
-  },
-  {
-    "id": "TC010",
-    "title": "Skip energy certificate survey and reach review",
-    "description": "This test verifies a customer can skip the energy certificate survey and is taken directly to the review step.",
-    "category": "Energy Certificate Survey",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /?code=ELT20250004"
-      },
-      {
-        "type": "action",
-        "description": "Click skip-energy-certificate-btn"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user lands on the review step for the project"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC011",
-    "title": "Attempt submission when checklist is incomplete blocks submission",
-    "description": "This test verifies the submit action is unavailable when required checklist items are incomplete and the user cannot submit.",
-    "category": "Review and Submit",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /?code=ELT20250001"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify review-submit-btn is not visible or is disabled"
-      }
-    ],
-    "priority": "Medium"
   },
   {
     "id": "TC012",
-    "title": "Defer signing and continue without signatures",
-    "description": "This test verifies a customer can defer signing and proceed to the next step without applying signatures.",
+    "title": "Show not-found error for unrecognized phone number",
+    "description": "Verifies that submitting an unrecognized phone number shows a user-facing error and does not start a project session.",
+    "category": "Phone Number Entry",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Fill +34600000000 into the phone number field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the phone lookup"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a phone lookup not-found error is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Assessor can view project assets and extracted data in the modal",
+    "description": "Verifies an assessor can inspect a project in the detail modal and see uploaded assets and extracted data displayed.",
+    "category": "Admin Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click ver-expediente-btn for a project"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify uploaded project assets are displayed in the modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify extracted data is displayed in the modal"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Defer signing and continue",
+    "description": "Verifies a customer can defer legal signing and still proceed to the next step without applying signatures.",
     "category": "Legal Document Signing (Representation)",
     "steps": [
       {
@@ -322,81 +400,36 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the user advances past the representation step to the next step of the form"
+        "description": "Verify the user proceeds past the representation step to the next section"
       }
     ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC013",
-    "title": "Open an individual asset in a new tab from project detail",
-    "description": "Verifies an assessor can open an individual uploaded asset from the project detail modal for viewing.",
-    "category": "Admin Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to view a project expediente from the project list"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to view an individual asset from the asset actions area"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify an asset viewer opens for the selected file"
-      }
-    ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC014",
-    "title": "Download an individual asset from project detail",
-    "description": "Verifies an assessor can initiate downloading a single uploaded asset from the project detail modal.",
-    "category": "Admin Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to view a project expediente from the project list"
-      },
-      {
-        "type": "action",
-        "description": "Click the control to download an individual asset from the asset actions area"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the browser begins a file download"
-      }
-    ],
-    "priority": "Medium"
+    "priority": "High"
   },
   {
     "id": "TC015",
-    "title": "Use back navigation within the energy certificate survey",
-    "description": "This test verifies a customer can move forward and then back within the survey without leaving the energy certificate section.",
+    "title": "Navigate back from province selection to property documents",
+    "description": "Verifies the back control in province selection returns the customer to the property documents step.",
+    "category": "Province Selection",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250002"
+      },
+      {
+        "type": "action",
+        "description": "Click province-back-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the property documents step is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Back and next navigation works within the survey",
+    "description": "Verifies a customer can move forward and backward between energy certificate steps without leaving the survey.",
     "category": "Energy Certificate Survey",
     "steps": [
       {
@@ -417,69 +450,15 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the survey shows the step 1 form again"
+        "description": "Verify the survey returns to step 1"
       }
     ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC016",
-    "title": "Continue is disabled until a signature is present",
-    "description": "This test verifies the customer cannot proceed with signing until a signature is added and the continue action is enabled.",
-    "category": "Legal Document Signing (Representation)",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /?code=ELT20250001"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify representation-continue-btn is disabled"
-      },
-      {
-        "type": "action",
-        "description": "Call window.__eltexFillTestSignature()"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify representation-continue-btn is enabled"
-      }
-    ],
-    "priority": "Medium"
+    "priority": "High"
   },
   {
     "id": "TC017",
-    "title": "Block phone lookup with invalid phone format",
-    "description": "Entering an invalid phone format should prevent lookup submission and show a phone validation error.",
-    "category": "Phone Number Entry",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /"
-      },
-      {
-        "type": "action",
-        "description": "Fill 123 into the phone number field"
-      },
-      {
-        "type": "action",
-        "description": "Submit the phone lookup form"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify a phone number validation error is visible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user is not redirected to a project form"
-      }
-    ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC018",
-    "title": "Navigate back from representation to the previous section",
-    "description": "This test verifies a customer can go back from the representation step to the previous step in the multi-step flow.",
+    "title": "Back navigation returns to previous step from representation",
+    "description": "Verifies a customer can navigate back from the representation step to the prior section without breaking the flow.",
     "category": "Legal Document Signing (Representation)",
     "steps": [
       {
@@ -492,15 +471,57 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the user lands on the previous step of the form"
+        "description": "Verify the user lands on the previous section in the flow"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Submit is gated until all required review items are complete",
+    "description": "Verifies the review step blocks submission when required items are incomplete and allows submission once all are completed.",
+    "category": "Review and Submit",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250005"
+      },
+      {
+        "type": "action",
+        "description": "Click an incomplete checklist item to navigate to its related step"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the review-submit action is not available while required items are incomplete"
       }
     ],
     "priority": "Medium"
   },
   {
     "id": "TC019",
-    "title": "Log out and return to dashboard login screen",
-    "description": "Verifies an assessor can log out from the dashboard and is returned to the login screen.",
+    "title": "Signing is required to enable continue when not deferring",
+    "description": "Verifies the continue action is blocked until a signature is provided when the user chooses to apply signatures.",
+    "category": "Legal Document Signing (Representation)",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250001"
+      },
+      {
+        "type": "action",
+        "description": "Click representation-continue-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the representation step and cannot proceed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC020",
+    "title": "Assessor can export the project list as CSV",
+    "description": "Verifies an assessor can export the dashboard project list as a CSV from the dashboard UI.",
     "category": "Admin Dashboard",
     "steps": [
       {
@@ -509,7 +530,7 @@
       },
       {
         "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+        "description": "Fill eltex2025 into the password field"
       },
       {
         "type": "action",
@@ -517,7 +538,36 @@
       },
       {
         "type": "action",
-        "description": "Click the control to log out"
+        "description": "Click the export CSV action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a CSV export is initiated"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC021",
+    "title": "Assessor can log out and return to dashboard login screen",
+    "description": "Verifies an authenticated assessor can end the dashboard session and is returned to the login screen.",
+    "category": "Admin Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill eltex2025 into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the logout action"
       },
       {
         "type": "assertion",
@@ -527,38 +577,83 @@
     "priority": "Medium"
   },
   {
-    "id": "TC020",
-    "title": "Show not-found error for unknown phone number",
-    "description": "Entering an unknown mobile number should keep the customer on the phone entry screen and show a not-found error.",
-    "category": "Phone Number Entry",
+    "id": "TC022",
+    "title": "Continue remains enabled after applying signatures once",
+    "description": "Verifies that after applying a test signature, the representation step reflects a completed state that allows continuing again without re-signing.",
+    "category": "Legal Document Signing (Representation)",
     "steps": [
       {
         "type": "action",
-        "description": "Navigate to /"
+        "description": "Navigate to /?code=ELT20250001"
       },
       {
         "type": "action",
-        "description": "Fill 600000099 into the phone number field"
+        "description": "Call window.__eltexFillTestSignature() in the browser console context"
       },
       {
         "type": "action",
-        "description": "Submit the phone lookup form"
+        "description": "Click representation-continue-btn"
+      },
+      {
+        "type": "action",
+        "description": "Click the control to return to the representation step from the next section"
       },
       {
         "type": "assertion",
-        "description": "Verify a phone number not found error is visible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the phone entry form remains displayed"
+        "description": "Verify the representation step indicates signing is completed and the user can proceed"
       }
     ],
-    "priority": "Low"
+    "priority": "Medium"
   },
   {
-    "id": "TC021",
-    "title": "Export project list as CSV",
-    "description": "Verifies an assessor can export the dashboard project list as a CSV file.",
+    "id": "TC023",
+    "title": "Cannot confirm survey with missing required fields on final step",
+    "description": "Verifies the survey prevents confirmation when required fields are incomplete on the final step.",
+    "category": "Energy Certificate Survey",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /?code=ELT20250004"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid housing data into the step 1 fields"
+      },
+      {
+        "type": "action",
+        "description": "Click energy-cert-next-btn"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid openings data into the step 2 fields"
+      },
+      {
+        "type": "action",
+        "description": "Click energy-cert-next-btn"
+      },
+      {
+        "type": "action",
+        "description": "Fill valid thermal systems data into the step 3 fields"
+      },
+      {
+        "type": "action",
+        "description": "Click energy-cert-next-btn"
+      },
+      {
+        "type": "action",
+        "description": "Click energy-cert-confirm-btn"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible and the user remains on the final survey step"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC024",
+    "title": "Assessor can open an asset preview from the project modal",
+    "description": "Verifies an assessor can use the view action for an asset from the project modal and an asset preview view is opened.",
     "category": "Admin Dashboard",
     "steps": [
       {
@@ -567,7 +662,7 @@
       },
       {
         "type": "action",
-        "description": "Fill {{LOGIN_PASSWORD}} into the password field"
+        "description": "Fill eltex2025 into the password field"
       },
       {
         "type": "action",
@@ -575,13 +670,17 @@
       },
       {
         "type": "action",
-        "description": "Click the control to export the project list as CSV"
+        "description": "Click ver-expediente-btn for a project"
+      },
+      {
+        "type": "action",
+        "description": "Click view-asset-btn for an asset"
       },
       {
         "type": "assertion",
-        "description": "Verify the browser begins a file download"
+        "description": "Verify an asset preview is displayed"
       }
     ],
-    "priority": "Low"
+    "priority": "Medium"
   }
 ]
