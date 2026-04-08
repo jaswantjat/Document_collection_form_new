@@ -3,9 +3,9 @@ import { pdfToImageFiles } from '@/lib/pdfToImages';
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 // Laplacian variance threshold — below this = blurry and rejected.
-// Raised to 150 to better match government portal quality requirements.
-// Most sharp phone photos score 400+; blurry ones score below 100.
-const BLUR_THRESHOLD = 150;
+// Most sharp phone photos score 400+; genuinely unreadable blurry photos score below 80.
+// The old value of 150 was too aggressive and rejected mildly blurry but still readable photos.
+const BLUR_THRESHOLD = 80;
 
 export async function validatePhoto(file: File, options?: { skipBlurCheck?: boolean }): Promise<PhotoValidationResult> {
   if (file.size > MAX_SIZE_BYTES) {

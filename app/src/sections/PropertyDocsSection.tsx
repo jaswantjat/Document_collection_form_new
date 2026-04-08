@@ -109,7 +109,7 @@ const BLUR_TIPS = [
   '📏 Sitúate a 20–30 cm del documento',
 ];
 
-function BlurWarningCard({ preview, onRetry }: { preview: string | null; onRetry: () => void }) {
+function BlurWarningCard({ preview, onRetry, onForce }: { preview: string | null; onRetry: () => void; onForce?: () => void }) {
   return (
     <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden">
       {preview && (
@@ -140,14 +140,25 @@ function BlurWarningCard({ preview, onRetry }: { preview: string | null; onRetry
             <li key={tip} className="text-xs text-amber-800">{tip}</li>
           ))}
         </ul>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors"
-        >
-          <Camera className="w-4 h-4" />
-          Volver a fotografiar
-        </button>
+        <div className={onForce ? 'flex gap-2' : ''}>
+          {onForce && (
+            <button
+              type="button"
+              onClick={onForce}
+              className="flex-1 flex items-center justify-center py-2.5 bg-white border border-amber-300 text-amber-700 text-sm font-medium rounded-lg transition-colors hover:bg-amber-50"
+            >
+              Usar igualmente
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRetry}
+            className={`${onForce ? 'flex-1' : 'w-full'} flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors`}
+          >
+            <Camera className="w-4 h-4" />
+            Volver a fotografiar
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -733,7 +744,8 @@ function DNICard({
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
 
-  const processFiles = useCallback(async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[], opts?: { forceSkipBlur?: boolean }) => {
+    const forceSkipBlur = opts?.forceSkipBlur ?? false;
     setIsPreparing(true);
     const { files: expandedFiles, originalPdfs: uploadedOriginalPdfs, errors } = await expandUploadFiles(files).finally(() => setIsPreparing(false));
     if (errors.length > 0) {
@@ -755,15 +767,20 @@ function DNICard({
     // page is much wider than it is tall, or much taller than wide — this indicates
     // both DNI sides were scanned on a single page. Split those into two halves
     // so each side can be extracted independently.
+    // forceSkipBlur: used when the user clicks "Usar igualmente" on a blurry camera photo —
+    // bypasses the blur check for that specific file while preserving PDF split logic.
     const splitFiles: { file: File; skipBlurCheck: boolean }[] = [];
     for (const entry of expandedFiles) {
       if (entry.skipBlurCheck) {
+        // PDF page — split if combined, always skip blur (digital PDFs are sharp)
         const halves = await splitDocumentImageIfNeeded(entry.file, entry.file.name);
         for (const half of halves) {
           splitFiles.push({ file: half, skipBlurCheck: true });
         }
       } else {
-        splitFiles.push(entry);
+        // Camera photo — never split by aspect ratio (camera dimensions ≠ document layout),
+        // but respect forceSkipBlur if user explicitly chose to proceed despite blur warning.
+        splitFiles.push({ file: entry.file, skipBlurCheck: forceSkipBlur });
       }
     }
 
@@ -1016,6 +1033,7 @@ function DNICard({
               <BlurWarningCard
                 preview={item.preview}
                 onRetry={() => dismissError(item.id)}
+                onForce={() => { dismissError(item.id); processFiles([item.file], { forceSkipBlur: true }); }}
               />
               <button
                 type="button"
@@ -1314,6 +1332,7 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
               <BlurWarningCard
                 preview={item.preview}
                 onRetry={() => dismissError(item.id)}
+                onForce={() => { dismissError(item.id); processFiles([item.file], [], true); }}
               />
               <button
                 type="button"

@@ -1830,6 +1830,13 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
 
 Image quality check — ONLY reject (isReadable: false) if the image is SO BAD that you genuinely cannot read the key fields. Examples of rejection: completely blurred out, extremely dark/black image, document fully cut off. Normal phone photos with minor imperfections (slight angle, mild glare on edges, small shadows) are FINE — accept and extract. When in doubt, ACCEPT and extract what you can.
 
+COMBINED IMAGE RULE — READ CAREFULLY: If a single image shows BOTH sides of the document at the same time (both sides laid out in one photo or scan), apply ALL of these rules:
+1. Set side: "front" — the identity number and personal data take priority.
+2. Extract ONLY the front-side fields: fullName, firstName, lastName, dniNumber, dateOfBirth, expiryDate, sex, nationality.
+3. Set address, municipality, province, placeOfBirth to null — these are back-side fields. Do NOT read them from the back even if visible. Keep them null.
+4. Add "combined image" to the notes field.
+This prevents data from two different sides being mixed into one result.
+
 Your PRIMARY goal is to extract a person's identity number from whatever document is shown. Accepted documents include:
 - Spanish DNI plastic card
 - Spanish NIE green card / EU citizen registration card
