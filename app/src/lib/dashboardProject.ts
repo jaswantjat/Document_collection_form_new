@@ -213,7 +213,7 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
     {
       key: 'dniFront',
       label: 'DNI frontal',
-      shortLabel: 'DNI front',
+      shortLabel: 'DNI frontal',
       present: Boolean(formData?.dni?.front?.photo?.preview),
       dataUrl: formData?.dni?.front?.photo?.preview || null,
       mimeType: getMimeType(formData?.dni?.front?.photo?.preview),
@@ -223,7 +223,7 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
     {
       key: 'dniBack',
       label: 'DNI trasera',
-      shortLabel: 'DNI back',
+      shortLabel: 'DNI trasera',
       present: Boolean(formData?.dni?.back?.photo?.preview),
       dataUrl: formData?.dni?.back?.photo?.preview || null,
       mimeType: getMimeType(formData?.dni?.back?.photo?.preview),

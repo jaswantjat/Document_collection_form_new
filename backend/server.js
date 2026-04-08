@@ -656,7 +656,7 @@ function buildDashboardSummary(project) {
     {
       key: 'dniFront',
       label: 'DNI frontal',
-      shortLabel: 'DNI front',
+      shortLabel: 'DNI frontal',
       present: !!formData?.dni?.front?.photo?.preview || !!project.assetFiles?.dniFront,
       dataUrl: null,
       mimeType: null,
@@ -666,7 +666,7 @@ function buildDashboardSummary(project) {
     {
       key: 'dniBack',
       label: 'DNI trasera',
-      shortLabel: 'DNI back',
+      shortLabel: 'DNI trasera',
       present: !!formData?.dni?.back?.photo?.preview || !!project.assetFiles?.dniBack,
       dataUrl: null,
       mimeType: null,
