@@ -200,7 +200,7 @@ export function downloadCSV(token: string) {
     });
 }
 
-export async function buildSignedPdfFactory(project: unknown, item: DashboardSignedPdfItem) {
+export async function buildSignedPdfFactory(project: any, item: DashboardSignedPdfItem) {
   const stored = getStoredRenderedDocument(project, item.key);
   const overlay =
     stored?.imageDataUrl && stored.templateVersion === SIGNED_DOCUMENT_TEMPLATE_VERSION
@@ -209,7 +209,7 @@ export async function buildSignedPdfFactory(project: unknown, item: DashboardSig
   return () => generateImagePDF(overlay, item.filename);
 }
 
-export async function buildEnergyCertificatePdfFactory(project: { code: string; formData?: { energyCertificate?: { renderedDocument?: { imageDataUrl?: string; templateVersion?: string } } } }) {
+export async function buildEnergyCertificatePdfFactory(project: any) {
   const storedDoc = project?.formData?.energyCertificate?.renderedDocument;
   const storedIsValid = storedDoc?.imageDataUrl && storedDoc.templateVersion === ENERGY_CERTIFICATE_TEMPLATE_VERSION;
   const imageDataUrl = storedIsValid
