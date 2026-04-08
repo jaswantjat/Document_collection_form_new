@@ -953,7 +953,9 @@ function computeRequiredDocs(productType) {
 }
 
 // Derive a BCP-47 language tag from a phone number's country prefix.
-// Used as a fallback when no browser-language is available (e.g. assessor-submitted forms).
+// Phone-derived locale is the primary source because it reliably identifies the customer's
+// market (e.g. +34 → Spain → 'es'), regardless of their browser language setting.
+// Browser language is the fallback when the phone prefix is not mapped.
 function localeFromPhone(phone) {
   if (!phone) return null;
   const e164 = String(phone).replace(/[\s\-().]/g, '');
