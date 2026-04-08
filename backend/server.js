@@ -493,13 +493,21 @@ function getProjectSnapshot(formData) {
   let firstName = dniFront.firstName || null;
   let lastName = dniFront.lastName || null;
 
-  // Derive firstName/lastName if DNI is missing
-  if (!firstName && fullName) {
-    const parts = fullName.trim().split(/\s+/);
+  // Fill whichever structured name parts are still missing by splitting the best available fullName.
+  // The old condition (!firstName) was too narrow: if DNI gave firstName but not lastName (partial
+  // OCR) the last_name field would be sent as null even though fullName has the full string.
+  if ((!firstName || !lastName) && fullName) {
+    const parts = fullName.trim().split(/\s+/).filter(Boolean);
     if (parts.length > 0) {
-      firstName = parts[0];
-      if (parts.length > 1) {
-        lastName = parts.slice(1).join(' ');
+      if (!firstName) {
+        firstName = parts[0];
+      }
+      if (!lastName && parts.length > 1) {
+        // Skip as many leading tokens as the firstName contains (handles compound given names
+        // like "Juan Carlos" where firstName comes from DNI as "Juan Carlos" — 2 words).
+        const fnWords = firstName ? firstName.trim().split(/\s+/).length : 1;
+        const remaining = parts.slice(fnWords).join(' ');
+        if (remaining) lastName = remaining;
       }
     }
   }
