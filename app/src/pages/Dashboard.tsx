@@ -30,7 +30,7 @@ import {
   Zap,
   Scissors,
 } from 'lucide-react';
-import { dashboardLogout, deleteProject, fetchDashboard, fetchDashboardProject, generateImagePDF, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
+import { dashboardLogout, deleteProject, fetchDashboard, fetchDashboardProject, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
 import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
@@ -40,11 +40,20 @@ import {
   type DashboardProjectSummary,
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
-import { getStoredRenderedDocument, renderSignedDocumentOverlay, SIGNED_DOCUMENT_TEMPLATE_VERSION } from '@/lib/signedDocumentOverlays';
-import { renderEnergyCertificateOverlay, ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '@/lib/energyCertificateDocument';
-import { pdfToImageFiles } from '@/lib/pdfToImages';
 import type { StoredDocumentFile } from '@/types';
-import { compressImageForAI, createStoredDocumentFile, fileToBase64, mergeStoredDocumentFiles } from '@/lib/photoValidation';
+import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
+import {
+  formatDate, locationLabel, languageLabel,
+  extensionFromMimeType, sanitizeFilename,
+  downloadBlob, buildProjectUrl,
+  downloadDataUrlAsset, openDataUrlInNewTab,
+  type PreparedAdminPage, type PreparedAdminUpload,
+  getIbiPages, prepareAdminUploadPages,
+  viewPDFInNewTab, downloadCSV,
+  buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
+  downloadProjectZip, assetFromPreview,
+  getDocumentAssetsFromProject, getElectricityAssetsFromProject,
+} from '@/lib/dashboardHelpers';
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
