@@ -985,7 +985,7 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
     first_name: snapshot.firstName || null,
     last_name: snapshot.lastName || null,
     phone: project.phone || '',
-    locale: localeFromPhone(project.phone) || (project.customerLanguage || '').split('-')[0] || null,
+    locale: localeFromPhone(project.phone) || 'es',
     product_type: project.productType || null,
     contract_date: (project.createdAt || new Date().toISOString()).slice(0, 10),
     docs_required: computeRequiredDocs(project.productType),
