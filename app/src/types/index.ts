@@ -86,10 +86,24 @@ export interface DocumentProcessingState {
   pendingPreview?: string | null;
 }
 
+export type DocumentIssueCode =
+  | 'manual-review'
+  | 'temporary-error'
+  | 'unreadable'
+  | 'wrong-document'
+  | 'wrong-side';
+
+export interface DocumentIssue {
+  code: DocumentIssueCode;
+  message: string;
+  updatedAt: string;
+}
+
 export interface DNIData {
   front: DocSlot;
   back: DocSlot;
   originalPdfs: StoredDocumentFile[];
+  issue?: DocumentIssue | null;
 }
 
 export interface IBIData {
@@ -97,6 +111,7 @@ export interface IBIData {
   pages: UploadedPhoto[];
   originalPdfs: StoredDocumentFile[];
   extraction: AIExtraction | null;
+  issue?: DocumentIssue | null;
 }
 
 export interface ElectricityBillData {
@@ -104,6 +119,7 @@ export interface ElectricityBillData {
   originalPdfs: StoredDocumentFile[];
   front?: DocSlot;
   back?: DocSlot;
+  issue?: DocumentIssue | null;
 }
 
 export type LocationRegion = 'cataluna' | 'madrid' | 'valencia' | 'other';
@@ -207,6 +223,7 @@ export interface EnergyCertificateData {
 export interface ContractData {
   originalPdfs: StoredDocumentFile[];
   extraction: AIExtraction | null;
+  issue?: DocumentIssue | null;
 }
 
 export interface FormData {

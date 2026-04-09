@@ -255,27 +255,28 @@ describe('submitForm', () => {
 
   it('returns submissionId on success', async () => {
     mockFetch({ success: true, submissionId: 'sub-123' });
-    const result = await submitForm('ELT001', formData, 'customer');
+    const result = await submitForm('ELT001', formData, 'customer', 'attempt-1');
     expect(result.success).toBe(true);
     expect(result.submissionId).toBe('sub-123');
   });
 
-  it('includes source in the JSON body', async () => {
+  it('includes source and attemptId in the JSON body', async () => {
     mockFetch({ success: true });
-    await submitForm('ELT001', formData, 'assessor');
+    await submitForm('ELT001', formData, 'assessor', 'attempt-2');
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.source).toBe('assessor');
+    expect(body.attemptId).toBe('attempt-2');
   });
 
   it('propagates server error', async () => {
     mockFetchNetworkError('500 Internal Server Error');
-    await expect(submitForm('ELT001', formData, 'customer')).rejects.toThrow();
+    await expect(submitForm('ELT001', formData, 'customer', 'attempt-3')).rejects.toThrow();
   });
 
   it('rejects HTTP failures with the backend message', async () => {
     mockFetch({ success: false, message: 'submit failed' }, 500);
-    await expect(submitForm('ELT001', formData, 'customer')).rejects.toThrow('submit failed');
+    await expect(submitForm('ELT001', formData, 'customer', 'attempt-4')).rejects.toThrow('submit failed');
   });
 });
 

@@ -16,6 +16,19 @@ const {
   normalizeActiveAssetKeys,
   pruneManagedAssetFiles,
 } = require('./lib/assetFiles');
+const {
+  beginSubmissionAttempt,
+  completeSubmissionAttempt,
+  failSubmissionAttempt,
+} = require('./lib/submissionAttempts');
+const {
+  DEFAULT_TEST_CODES,
+  RESETTABLE_TEST_CODES,
+  buildBaseFlowFormData,
+  ensureDefaultTestProjects,
+  ensureResettableTestProject,
+  getDefaultProjects,
+} = require('./lib/testProjects');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -129,35 +142,24 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Build a base formData with representation done (location: 'other') for flow tests
-function buildBaseFlowFormData() {
-  return {
-    dni: { front: { photo: 'data:image/jpeg;base64,/9j/TEST_FRONT', extraction: null }, back: { photo: 'data:image/jpeg;base64,/9j/TEST_BACK', extraction: null }, originalPdfs: [] },
-    ibi: { photo: 'data:image/jpeg;base64,/9j/TEST_IBI', pages: [], originalPdfs: [], extraction: null },
-    electricityBill: { pages: [{ photo: 'data:image/jpeg;base64,/9j/TEST_BILL', extraction: null }], originalPdfs: [] },
-    contract: null,
-    location: 'other',
-    representation: { location: 'other', isCompany: false, companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '', postalCode: '', ivaPropertyAddress: '', ivaCertificateSignature: null, representacioSignature: null, generalitatRole: 'titular', generalitatSignature: null, poderRepresentacioSignature: null, ivaCertificateEsSignature: null, renderedDocuments: {} },
-    signatures: {},
-    energyCertificate: {
-      status: 'not-started',
-      housing: { cadastralReference: '', habitableAreaM2: '', floorCount: '', averageFloorHeight: null, bedroomCount: '', doorsByOrientation: { north: '', east: '', south: '', west: '' }, windowsByOrientation: { north: '', east: '', south: '', west: '' }, windowFrameMaterial: null, doorMaterial: '', windowGlassType: null, hasShutters: null, shutterWindowCount: '' },
-      thermal: { thermalInstallationType: null, boilerFuelType: null, equipmentDetails: '', hasAirConditioning: null, airConditioningType: null, airConditioningDetails: '', heatingEmitterType: null, radiatorMaterial: null },
-      additional: { soldProduct: null, isExistingCustomer: null, hasSolarPanels: null, solarPanelDetails: '' },
-      customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
-    }
-  };
+function resolveResettableTestProject(code) {
+  const project = ensureResettableTestProject(database, code, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+  });
+  if (project && !database.projects[code].formData) {
+    database.projects[code].formData = buildBaseFlowFormData();
+  }
+  return project;
 }
 
 // Test-only: reset EC state for a test project (dev only)
 app.post('/api/test/reset-ec/:code', (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
-  const testCodes = ['ELT20250004', 'ELT20250005'];
   const code = req.params.code;
-  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = database.projects[code];
+  if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = resolveResettableTestProject(code);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (!project.formData) project.formData = buildBaseFlowFormData();
   project.formData.energyCertificate = {
     status: 'not-started',
     housing: {
@@ -184,12 +186,10 @@ app.post('/api/test/reset-ec/:code', (req, res) => {
 // Test-only: reset EC with partial housing data (simulates in-progress state for FLOW-03)
 app.post('/api/test/reset-ec-partial/:code', (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
-  const testCodes = ['ELT20250004', 'ELT20250005'];
   const code = req.params.code;
-  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = database.projects[code];
+  if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = resolveResettableTestProject(code);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (!project.formData) project.formData = buildBaseFlowFormData();
   project.formData.energyCertificate = {
     status: 'not-started',
     housing: {
@@ -220,10 +220,9 @@ app.post('/api/test/reset-ec-partial/:code', (req, res) => {
 // Test-only: restore full base flow state (property docs done, EC not-started) for FLOW-04 step 2
 app.post('/api/test/restore-base-flow/:code', (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
-  const testCodes = ['ELT20250004', 'ELT20250005'];
   const code = req.params.code;
-  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = database.projects[code];
+  if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = resolveResettableTestProject(code);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   project.formData = buildBaseFlowFormData();
   saveDB();
@@ -233,12 +232,10 @@ app.post('/api/test/restore-base-flow/:code', (req, res) => {
 // Test-only: clear property docs so the form starts at property-docs step (for FLOW-04)
 app.post('/api/test/reset-property-docs/:code', (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
-  const testCodes = ['ELT20250004', 'ELT20250005'];
   const code = req.params.code;
-  if (!testCodes.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = database.projects[code];
+  if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
+  const project = resolveResettableTestProject(code);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (!project.formData) project.formData = buildBaseFlowFormData();
   project.formData.dni = { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] };
   project.formData.ibi = { photo: null, pages: [], originalPdfs: [], extraction: null };
   project.formData.electricityBill = { pages: [], originalPdfs: [] };
@@ -269,12 +266,25 @@ function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const changed = ensureDefaultTestProjects(parsed, {
+        isProduction,
+        seedSampleData: process.env.SEED_SAMPLE_DATA,
+      });
+      if (changed) {
+        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf8');
+      }
+      return parsed;
     }
   } catch (e) {
     console.error('Error loading DB, starting fresh:', e.message);
   }
-  return { projects: getDefaultProjects() };
+  return {
+    projects: getDefaultProjects({
+      isProduction,
+      seedSampleData: process.env.SEED_SAMPLE_DATA,
+    }),
+  };
 }
 
 let _saveDBWriting = false;
@@ -294,82 +304,6 @@ function saveDB() {
     });
   }
   setImmediate(doWrite);
-}
-
-function getDefaultProjects() {
-  if (isProduction && process.env.SEED_SAMPLE_DATA !== 'true') {
-    return {};
-  }
-
-  return {
-    'ELT20250001': {
-      code: 'ELT20250001',
-      customerName: 'María García López',
-      phone: '+34612345678',
-      email: 'maria.garcia@email.com',
-      productType: 'solar',
-      assessor: 'Carlos Ruiz',
-      assessorId: 'ASR001',
-      formData: null,
-      submissions: [],
-      lastActivity: null,
-      createdAt: '2025-03-15T10:00:00Z'
-    },
-    'ELT20250002': {
-      code: 'ELT20250002',
-      customerName: 'Juan Pérez Martínez',
-      phone: '+34623456789',
-      email: 'juan.perez@email.com',
-      productType: 'aerothermal',
-      assessor: 'Ana López',
-      assessorId: 'ASR002',
-      formData: null,
-      submissions: [],
-      lastActivity: null,
-      createdAt: '2025-03-18T14:30:00Z'
-    },
-    'ELT20250003': {
-      code: 'ELT20250003',
-      customerName: 'Laura Fernández Ruiz',
-      phone: '+34655443322',
-      email: 'laura.fernandez@email.com',
-      productType: 'solar',
-      assessor: 'Pedro Sánchez',
-      assessorId: 'ASR003',
-      formData: null,
-      submissions: [],
-      lastActivity: null,
-      createdAt: '2025-03-20T09:15:00Z'
-    },
-    'ELT20250004': {
-      code: 'ELT20250004',
-      customerName: 'Test EC Usuario',
-      phone: '+34666000004',
-      email: 'test.ec@eltex.es',
-      productType: 'solar',
-      assessor: 'Test Assessor',
-      assessorId: 'ASR004',
-      accessToken: 'ec-test-token-4444',
-      formData: null,
-      submissions: [],
-      lastActivity: null,
-      createdAt: '2026-04-02T10:00:00Z'
-    },
-    'ELT20250005': {
-      code: 'ELT20250005',
-      customerName: 'Test EC Flow Usuario',
-      phone: '+34666000005',
-      email: 'test.ec.flow@eltex.es',
-      productType: 'solar',
-      assessor: 'Test Assessor',
-      assessorId: 'ASR005',
-      accessToken: 'ec-flow-token-5555',
-      formData: null,
-      submissions: [],
-      lastActivity: null,
-      createdAt: '2026-04-02T10:00:00Z'
-    }
-  };
 }
 
 const database = loadDB();
@@ -448,6 +382,18 @@ function normalizePhone(p) {
   if (/^\d{9}$/.test(clean) && /^[6-9]/.test(clean)) return '+34' + clean;
   // Already in +CC…  format or other — return as-is
   return clean;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getTestSubmitDelayMs(req) {
+  if (isProduction) return 0;
+  const rawValue = req.get('x-test-submit-delay-ms');
+  const delayMs = Number(rawValue);
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return 0;
+  return Math.min(delayMs, 5000);
 }
 
 function getEffectiveLocation(formData) {
@@ -1066,71 +1012,94 @@ app.post('/api/project/:code/save', requireProject, (req, res) => {
 // Final submit (requires access token)
 app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   const project = req.project;
-  const { formData, source } = req.body;
+  const { formData, source, attemptId } = req.body;
   if (!formData || typeof formData !== 'object') {
     return res.status(400).json({ success: false, message: 'formData inválido.' });
   }
-  const submission = {
-    id: uuidv4(),
-    timestamp: new Date().toISOString(),
-    source: source || 'customer',
-    ipAddress: req.ip,
-    formData
-  };
-  // Capture existing formData BEFORE overwriting — used as DNI fallback in extractCompletedDocKeys
-  const existingFormData = project.formData || null;
-  project.submissions.push(submission);
-  project.formData = formData;
-  project.lastActivity = new Date().toISOString();
-  // Update customer name: contract → DNI → IBI titular → electricity titular
-  const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
-  const contractName = formData?.contract?.extraction?.extractedData?.fullName;
-  const ibiTitular = formData?.ibi?.extraction?.extractedData?.titular ?? null;
-  const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
-  const resolvedName = contractName || dniName || ibiTitular || ebTitular;
-  if (resolvedName) project.customerName = resolvedName;
-  // Only record the browser language when the CUSTOMER is using the form.
-  // If an assessor submits from their English-browser machine, their locale must not
-  // overwrite the customer's language and corrupt the webhook locale field.
-  if (formData?.browserLanguage && source !== 'assessor') {
-    project.customerLanguage = formData.browserLanguage;
+  if (typeof attemptId !== 'string' || !attemptId.trim()) {
+    return res.status(400).json({ success: false, message: 'attemptId obligatorio.' });
   }
 
-  // Check if Catalonia PDFs can be generated
-  const pdfStatus = checkCataloniaPDFs(formData);
-  project.cataloniaPDFs = pdfStatus;
+  const normalizedAttemptId = attemptId.trim();
+  const attemptState = beginSubmissionAttempt(project, normalizedAttemptId, source || 'customer');
+  if (attemptState.status === 'completed') {
+    const existingSubmissionId = attemptState.submission?.id || attemptState.submissionId;
+    return res.json({
+      success: true,
+      message: 'Documentación enviada correctamente.',
+      submissionId: existingSubmissionId,
+      cataloniaPDFs: project.cataloniaPDFs || checkCataloniaPDFs(project.formData || formData),
+    });
+  }
+  if (attemptState.status === 'processing') {
+    return res.status(409).json({
+      success: false,
+      message: 'El envío ya está en curso. Inténtalo de nuevo en unos segundos.',
+    });
+  }
 
-  saveDB();
-  res.json({ success: true, message: 'Documentación enviada correctamente.', submissionId: submission.id, cataloniaPDFs: pdfStatus });
+  try {
+    const submission = {
+      id: uuidv4(),
+      attemptId: normalizedAttemptId,
+      timestamp: new Date().toISOString(),
+      source: source || 'customer',
+      ipAddress: req.ip,
+      formData,
+    };
 
-  // DocFlow webhook sequence (after response is sent — does not block the customer).
-  //
-  // First submission: fire new_order (with docs_uploaded included in payload).
-  //   doc_update is intentionally skipped — new_order already carries all doc info.
-  //   This eliminates the race condition where doc_update would arrive at n8n before
-  //   the new_order insert completed in Baserow.
-  //
-  // Subsequent submissions: fire doc_update only. new_order is never re-sent.
-  //
-  // Failure handling: if new_order fails, docflowNewOrderSent is rolled back so the
-  //   next submission retries new_order (and again skips doc_update until it succeeds).
-  const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
-  console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
+    // Capture existing formData BEFORE overwriting — used as DNI fallback in extractCompletedDocKeys
+    const existingFormData = project.formData || null;
+    project.submissions.push(submission);
+    project.formData = formData;
+    project.lastActivity = new Date().toISOString();
 
-  if (!project.docflowNewOrderSent) {
-    project.docflowNewOrderSent = true;
-    saveDB();
-    const ok = await fireDocFlowNewOrder(project, docsUploaded);
-    if (!ok) {
-      // new_order failed — roll back flag so next submit retries.
-      // doc_update is also suppressed this submission (no point updating a row that doesn't exist yet).
-      project.docflowNewOrderSent = false;
-      saveDB();
+    const dniName = formData?.dni?.front?.extraction?.extractedData?.fullName;
+    const contractName = formData?.contract?.extraction?.extractedData?.fullName;
+    const ibiTitular = formData?.ibi?.extraction?.extractedData?.titular ?? null;
+    const ebTitular = formData?.electricityBill?.pages?.[0]?.extraction?.extractedData?.titular ?? null;
+    const resolvedName = contractName || dniName || ibiTitular || ebTitular;
+    if (resolvedName) project.customerName = resolvedName;
+    if (formData?.browserLanguage && source !== 'assessor') {
+      project.customerLanguage = formData.browserLanguage;
     }
-    // doc_update intentionally skipped on first submit — new_order payload contains docs_uploaded.
-  } else {
-    // Subsequent submissions: only doc_update fires.
-    fireDocFlowDocUpdate(project.code, docsUploaded);
+
+    const pdfStatus = checkCataloniaPDFs(formData);
+    project.cataloniaPDFs = pdfStatus;
+    completeSubmissionAttempt(project, normalizedAttemptId, submission);
+
+    saveDB();
+
+    const testDelayMs = getTestSubmitDelayMs(req);
+    if (testDelayMs > 0) {
+      await sleep(testDelayMs);
+    }
+
+    res.json({
+      success: true,
+      message: 'Documentación enviada correctamente.',
+      submissionId: submission.id,
+      cataloniaPDFs: pdfStatus,
+    });
+
+    // DocFlow webhook sequence (after response is sent — does not block the customer).
+    const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
+    console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
+
+    if (!project.docflowNewOrderSent) {
+      project.docflowNewOrderSent = true;
+      saveDB();
+      const ok = await fireDocFlowNewOrder(project, docsUploaded);
+      if (!ok) {
+        project.docflowNewOrderSent = false;
+        saveDB();
+      }
+    } else {
+      fireDocFlowDocUpdate(project.code, docsUploaded);
+    }
+  } catch (error) {
+    failSubmissionAttempt(project, normalizedAttemptId);
+    throw error;
   }
 });
 
@@ -2893,8 +2862,7 @@ app.listen(PORT, () => {
   } else {
     console.log('🔧 Development mode: proxying to Vite on port 5000');
   }
-  const testCodes = ['ELT20250001', 'ELT20250002', 'ELT20250003', 'ELT20250004', 'ELT20250005'];
-  const availableTestProjects = testCodes
+  const availableTestProjects = DEFAULT_TEST_CODES
     .map((code) => database.projects[code])
     .filter(Boolean);
 

@@ -15,6 +15,7 @@ import type {
   DocumentProcessingState,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
+import { createDocumentIssue } from '@/lib/documentIssues';
 import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePhotoAssets, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
@@ -32,10 +33,13 @@ interface Props {
   onDNIFrontExtractionChange: (extraction: AIExtraction | null) => void;
   onDNIBackPhotoChange: (photo: UploadedPhoto | null) => void;
   onDNIBackExtractionChange: (extraction: AIExtraction | null) => void;
+  onDNIIssueChange: (issue: DNIData['issue']) => void;
   onDNIOriginalPdfsMerge: (pdfs: StoredDocumentFile[]) => void;
   onIBIDocumentChange: (pages: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
-  onAddElectricityPages: (photos: UploadedPhoto[], extraction: AIExtraction, originalPdfs: StoredDocumentFile[]) => void;
+  onIBIIssueChange: (issue: IBIData['issue']) => void;
+  onAddElectricityPages: (photos: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
   onRemoveElectricityPage: (index: number) => void;
+  onElectricityIssueChange: (issue: ElectricityBillData['issue']) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
   onContractChange: (contract: ContractData) => void;
   scrollToDoc?: string;
@@ -50,6 +54,7 @@ interface DocCardProps {
   slotKey: DocumentSlotKey;
   processing: DocumentProcessingState;
   onDocumentChange: (pages: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
+  onIssueChange: (issue: IBIData['issue']) => void;
   onProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
 }
 
@@ -160,6 +165,33 @@ function BlurWarningCard({ preview, onRetry, onForce }: { preview: string | null
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PersistentIssueNotice({
+  message,
+  tone = 'amber',
+}: {
+  message: string;
+  tone?: 'amber' | 'red';
+}) {
+  const palette = tone === 'red'
+    ? {
+        box: 'bg-red-50 border-red-200',
+        icon: 'text-red-500',
+        text: 'text-red-700',
+      }
+    : {
+        box: 'bg-amber-50 border-amber-200',
+        icon: 'text-amber-500',
+        text: 'text-amber-800',
+      };
+
+  return (
+    <div className={`flex items-start gap-2 border rounded-xl p-3 ${palette.box}`}>
+      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${palette.icon}`} />
+      <p className={`text-sm ${palette.text}`}>{message}</p>
     </div>
   );
 }
@@ -380,6 +412,7 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
         <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
           <input
             type="file"
+            data-testid="contract-input"
             accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
@@ -436,6 +469,7 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
             <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
               <input
                 type="file"
+                data-testid="contract-input"
                 accept="image/jpeg,image/png,application/pdf"
                 multiple
                 className="hidden"
@@ -458,13 +492,16 @@ function ContractCard({ contract, onChange }: ContractCardProps) {
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
-function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onProcessingChange }: DocCardProps) {
+function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onIssueChange, onProcessingChange }: DocCardProps) {
   const processFiles = useCallback(async (files: File[]) => {
     const hadAcceptedDocument = !!data.photo || data.pages.length > 0;
+    let storedPages: UploadedPhoto[] = [];
+    let nextOriginalPdfs = data.originalPdfs;
     onProcessingChange(slotKey, { status: 'validating', pendingPreview: null });
 
     try {
       const { files: expandedFiles, originalPdfs, errors } = await expandUploadFiles(files);
+      nextOriginalPdfs = originalPdfs;
       if (errors.length > 0) {
         onProcessingChange(slotKey, {
           status: hadAcceptedDocument ? 'accepted' : 'rejected',
@@ -530,16 +567,27 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
           || res.reason === 'temporary-error'
           ? res.reason
           : (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error');
+        storedPages = preparedPages.map((page) => createUploadedPhoto(
+          page.file,
+          page.preview,
+          page.width,
+          page.height
+        ));
+        onDocumentChange(storedPages, null, originalPdfs);
+        onIssueChange(createDocumentIssue(
+          errorCode,
+          res.message || 'Hemos guardado el documento, pero la lectura automática no pudo completarse.'
+        ));
         onProcessingChange(slotKey, {
-          status: hadAcceptedDocument ? 'accepted' : 'rejected',
+          status: 'accepted',
           errorCode,
           errorMessage: res.message || 'No se pudo procesar el documento.',
-          pendingPreview: hadAcceptedDocument ? null : firstPage.preview,
+          pendingPreview: null,
         });
         return;
       }
 
-      const storedPages = preparedPages.map((page) => createUploadedPhoto(
+      storedPages = preparedPages.map((page) => createUploadedPhoto(
         page.file,
         page.preview,
         page.width,
@@ -550,31 +598,45 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
         needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
         confirmedByUser: true,
       }, originalPdfs);
+      onIssueChange(
+        (res.needsManualReview ?? res.extraction.needsManualReview ?? false)
+          ? createDocumentIssue('manual-review', 'Hemos guardado el documento, pero conviene revisarlo antes de tramitarlo.')
+          : null
+      );
       onProcessingChange(slotKey, { status: 'accepted', pendingPreview: null });
     } catch (err) {
       console.error('extractDocument error:', err);
+      if (storedPages.length > 0) {
+        onDocumentChange(storedPages, null, nextOriginalPdfs);
+        onIssueChange(createDocumentIssue(
+          'temporary-error',
+          'Hemos guardado el documento, pero la lectura automática falló por conexión. Puedes continuar y revisarlo más tarde.'
+        ));
+      }
       onProcessingChange(slotKey, {
-        status: hadAcceptedDocument ? 'accepted' : 'rejected',
+        status: storedPages.length > 0 || hadAcceptedDocument ? 'accepted' : 'rejected',
         errorCode: 'temporary-error',
         errorMessage: 'Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.',
         pendingPreview: null,
       });
     }
-  }, [data.pages.length, data.photo, onDocumentChange, onProcessingChange, slotKey]);
+  }, [data.originalPdfs, data.pages.length, data.photo, onDocumentChange, onIssueChange, onProcessingChange, slotKey]);
 
   const reset = useCallback(() => {
     onDocumentChange([], null, []);
+    onIssueChange(null);
     onProcessingChange(slotKey, { status: 'idle', pendingPreview: null });
-  }, [onDocumentChange, onProcessingChange, slotKey]);
+  }, [onDocumentChange, onIssueChange, onProcessingChange, slotKey]);
 
   const extractedData = data.extraction?.extractedData || {};
   const pageCount = data.pages.length;
   const accepted = pageCount > 0;
+  const persistentIssue = data.issue ?? null;
   const isBusy = processing.status === 'validating' || processing.status === 'extracting';
   // Only show red error when there is NO accepted doc (fresh failure, not a replacement failure)
   const showError = !!processing.errorMessage && !isBusy && !accepted;
   // Show amber note inside accepted card when a replacement attempt failed
-  const showReplacementNote = !!processing.errorMessage && !isBusy && accepted;
+  const showReplacementNote = !!processing.errorMessage && !isBusy && accepted && !persistentIssue?.message;
 
   return (
     <div className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}>
@@ -596,6 +658,7 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
         <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
           <input
             type="file"
+            data-testid={`${slotKey}-input`}
             accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
@@ -644,6 +707,13 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
         </div>
       )}
 
+      {!isBusy && persistentIssue?.message && (
+        <PersistentIssueNotice
+          message={persistentIssue.message}
+          tone={accepted ? 'amber' : 'red'}
+        />
+      )}
+
       {accepted && (
         <div className="space-y-3">
           {data.photo?.preview && <img src={data.photo.preview} alt={title} className="w-full h-28 object-cover rounded-xl opacity-80" />}
@@ -666,7 +736,7 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onP
                   <p className="text-xs text-amber-700">Mantén el móvil fijo, busca buena luz y sitúate a 20-30 cm del documento.</p>
                 </div>
               ) : (
-                <p className="text-sm text-amber-700">El nuevo documento no pudo procesarse — se mantiene el anterior. Inténtalo de nuevo si quieres sustituirlo.</p>
+                <p className="text-sm text-amber-700">El documento se ha guardado, pero la lectura automática no pudo completarse. Puedes continuar o volver a intentarlo si quieres sustituirlo.</p>
               )}
             </div>
           )}
@@ -712,10 +782,12 @@ interface DNICardProps {
   front: DocSlot;
   back: DocSlot;
   originalPdfs: StoredDocumentFile[];
+  issue: DNIData['issue'];
   onFrontPhotoChange: (p: UploadedPhoto | null) => void;
   onFrontExtractionChange: (e: AIExtraction | null) => void;
   onBackPhotoChange: (p: UploadedPhoto | null) => void;
   onBackExtractionChange: (e: AIExtraction | null) => void;
+  onIssueChange: (issue: DNIData['issue']) => void;
   onOriginalPdfsMerge: (pdfs: StoredDocumentFile[]) => void;
   onBusyChange: (busy: boolean) => void;
 }
@@ -724,10 +796,12 @@ function DNICard({
   front,
   back,
   originalPdfs,
+  issue,
   onFrontPhotoChange,
   onFrontExtractionChange,
   onBackPhotoChange,
   onBackExtractionChange,
+  onIssueChange,
   onOriginalPdfsMerge,
   onBusyChange,
 }: DNICardProps) {
@@ -743,6 +817,56 @@ function DNICard({
   const isBusy = isPreparing || pendingItems.some(p => p.status !== 'failed');
 
   useEffect(() => { onBusyChange(isBusy); }, [isBusy, onBusyChange]);
+
+  const commitWithoutExtraction = useCallback((
+    preparedFiles: PreparedDniItem[],
+    uploadedOriginalPdfs: StoredDocumentFile[],
+    issueCode: 'temporary-error' | 'wrong-document' | 'unreadable' | 'wrong-side',
+    issueMessage: string,
+    options?: { assignedFront?: boolean; assignedBack?: boolean }
+  ) => {
+    let nextFrontAssigned = options?.assignedFront ?? !!front.photo;
+    let nextBackAssigned = options?.assignedBack ?? !!back.photo;
+    let savedAny = false;
+
+    preparedFiles.forEach((prepared) => {
+      const photo = createUploadedPhoto(prepared.file, prepared.preview, prepared.width, prepared.height);
+      if (!nextFrontAssigned) {
+        nextFrontAssigned = true;
+        savedAny = true;
+        onFrontPhotoChange(photo);
+        onFrontExtractionChange(null);
+        return;
+      }
+      if (!nextBackAssigned) {
+        nextBackAssigned = true;
+        savedAny = true;
+        onBackPhotoChange(photo);
+        onBackExtractionChange(null);
+      }
+    });
+
+    if (savedAny) {
+      if (uploadedOriginalPdfs.length > 0) onOriginalPdfsMerge(uploadedOriginalPdfs);
+      onIssueChange(createDocumentIssue(issueCode, issueMessage));
+    }
+
+    setPendingItems((prev) => prev.filter((item) => !preparedFiles.some((prepared) => prepared.id === item.id)));
+    return {
+      savedAny,
+      assignedFront: nextFrontAssigned,
+      assignedBack: nextBackAssigned,
+    };
+  }, [
+    back.photo,
+    front.photo,
+    onBackExtractionChange,
+    onBackPhotoChange,
+    onFrontExtractionChange,
+    onFrontPhotoChange,
+    onIssueChange,
+    onOriginalPdfsMerge,
+  ]);
 
   const processFiles = useCallback(async (files: File[], opts?: { forceSkipBlur?: boolean }) => {
     const forceSkipBlur = opts?.forceSkipBlur ?? false;
@@ -840,25 +964,44 @@ function DNICard({
     try {
       const res = await extractDniBatch(preparedFiles.map((item) => item.base64));
       let acceptedCount = 0;
+      let fallbackCount = 0;
+      let nextIssue: DNIData['issue'] = null;
 
       if (!res.success || !Array.isArray(res.results) || res.results.length !== preparedFiles.length) {
-        const error = res.message || 'No se pudo procesar el DNI.';
-        setPendingItems(prev => prev.map(p =>
-          preparedFiles.some((item) => item.id === p.id)
-            ? { ...p, status: 'failed' as const, error }
-            : p
-        ));
+        commitWithoutExtraction(
+          preparedFiles,
+          uploadedOriginalPdfs,
+          'temporary-error',
+          res.message || 'Hemos guardado las imágenes, pero la lectura automática del DNI falló. Puedes continuar y revisarlo más tarde.'
+        );
         return;
       }
 
       preparedFiles.forEach((prepared, index) => {
         const result = res.results?.[index];
         if (!result?.extraction) {
-          setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
-            ...p,
-            status: 'failed' as const,
-            error: result?.message || 'No se pudo procesar el DNI.',
-          } : p));
+          const fallbackResult = commitWithoutExtraction(
+            [prepared],
+            [],
+            'temporary-error',
+            result?.message || 'Hemos guardado la imagen, pero la lectura automática del DNI no pudo completarse.',
+            { assignedFront, assignedBack }
+          );
+          assignedFront = fallbackResult.assignedFront;
+          assignedBack = fallbackResult.assignedBack;
+          if (!fallbackResult.savedAny) {
+            setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
+              ...p,
+              status: 'failed' as const,
+              error: result?.message || 'No se pudo procesar el DNI.',
+            } : p));
+            return;
+          }
+          fallbackCount += 1;
+          nextIssue = createDocumentIssue(
+            'temporary-error',
+            result?.message || 'Hemos guardado la imagen, pero la lectura automática del DNI no pudo completarse.'
+          );
           return;
         }
 
@@ -898,20 +1041,41 @@ function DNICard({
           acceptedCount += 1;
         }
 
+        if ((result.needsManualReview ?? false) && !nextIssue) {
+          nextIssue = createDocumentIssue(
+            'manual-review',
+            'Hemos guardado el DNI, pero conviene revisarlo antes de tramitarlo.'
+          );
+        }
+
         setPendingItems(prev => prev.filter(p => p.id !== prepared.id));
       });
 
-      if (acceptedCount > 0 && uploadedOriginalPdfs.length > 0) {
+      if ((acceptedCount > 0 || fallbackCount > 0) && uploadedOriginalPdfs.length > 0) {
         onOriginalPdfsMerge(uploadedOriginalPdfs);
       }
+      if (acceptedCount > 0 || fallbackCount > 0) {
+        onIssueChange(nextIssue);
+      }
     } catch {
-      setPendingItems(prev => prev.map(p =>
-        preparedFiles.some((item) => item.id === p.id)
-          ? { ...p, status: 'failed' as const, error: 'Error de conexión. Inténtalo de nuevo.' }
-          : p
-      ));
+      commitWithoutExtraction(
+        preparedFiles,
+        uploadedOriginalPdfs,
+        'temporary-error',
+        'Hemos guardado las imágenes, pero la lectura automática del DNI falló por conexión. Puedes continuar y revisarlo más tarde.'
+      );
     }
-  }, [front.photo, back.photo, onBackExtractionChange, onBackPhotoChange, onFrontExtractionChange, onFrontPhotoChange, onOriginalPdfsMerge]);
+  }, [
+    back.photo,
+    commitWithoutExtraction,
+    front.photo,
+    onBackExtractionChange,
+    onBackPhotoChange,
+    onFrontExtractionChange,
+    onFrontPhotoChange,
+    onIssueChange,
+    onOriginalPdfsMerge,
+  ]);
 
   const dismissError = (id: string) => {
     setPendingItems(prev => prev.filter(p => p.id !== id));
@@ -942,6 +1106,13 @@ function DNICard({
         </p>
       )}
 
+      {issue?.message && !isBusy && (
+        <PersistentIssueNotice
+          message={issue.message}
+          tone={hasAny ? 'amber' : 'red'}
+        />
+      )}
+
       {/* Front + Back slots */}
       {hasAny && (
         <div className="grid grid-cols-2 gap-3">
@@ -953,7 +1124,7 @@ function DNICard({
                   <img src={front.photo.preview} alt="DNI frontal" className="w-full h-24 object-cover" />
                   <button
                     type="button"
-                    onClick={() => { onFrontPhotoChange(null); onFrontExtractionChange(null); }}
+                    onClick={() => { onFrontPhotoChange(null); onFrontExtractionChange(null); onIssueChange(null); }}
                     className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -984,7 +1155,7 @@ function DNICard({
                   <img src={back.photo.preview} alt="DNI trasera" className="w-full h-24 object-cover" />
                   <button
                     type="button"
-                    onClick={() => { onBackPhotoChange(null); onBackExtractionChange(null); }}
+                    onClick={() => { onBackPhotoChange(null); onBackExtractionChange(null); onIssueChange(null); }}
                     className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1079,6 +1250,7 @@ function DNICard({
         }`}>
           <input
             type="file"
+            data-testid="dni-input"
             accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
@@ -1100,12 +1272,14 @@ function DNICard({
 interface ElectricityCardProps {
   pages: ElectricityBillData['pages'];
   originalPdfs: StoredDocumentFile[];
-  onAddPages: (photos: UploadedPhoto[], extraction: AIExtraction, originalPdfs: StoredDocumentFile[]) => void;
+  issue: ElectricityBillData['issue'];
+  onAddPages: (photos: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
   onRemovePage: (index: number) => void;
+  onIssueChange: (issue: ElectricityBillData['issue']) => void;
   onBusyChange: (busy: boolean) => void;
 }
 
-function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusyChange }: ElectricityCardProps) {
+function ElectricityCard({ pages, originalPdfs, issue, onAddPages, onRemovePage, onIssueChange, onBusyChange }: ElectricityCardProps) {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [pdfExpanding, setPdfExpanding] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -1182,10 +1356,15 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
       const res = await extractDocumentBatch(validFiles.map(f => f.base64), 'electricity');
 
       if (!res.success || !res.extraction) {
-        const errMsg = res.message || 'No se pudo procesar la factura.';
-        setPendingItems(prev => prev.map(p =>
-          validFiles.find(f => f.id === p.id) ? { ...p, status: 'failed' as const, error: errMsg } : p
+        const fallbackPhotos = validFiles.map(({ file, preview, width, height }) =>
+          createUploadedPhoto(file, preview, width, height)
+        );
+        onAddPages(fallbackPhotos, null, uploadedOriginalPdfs);
+        onIssueChange(createDocumentIssue(
+          'temporary-error',
+          'Hemos guardado la factura, pero la lectura automática no pudo completarse. Puedes continuar y revisarla más tarde.'
         ));
+        setPendingItems(prev => prev.filter((item) => !validFiles.find((file) => file.id === item.id)));
         return;
       }
 
@@ -1210,16 +1389,26 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
       if (newPhotos.length > 0 || uploadedOriginalPdfs.length > 0) {
         onAddPages(newPhotos, extraction, uploadedOriginalPdfs);
       }
+      onIssueChange(
+        (res.needsManualReview ?? false)
+          ? createDocumentIssue('manual-review', 'Hemos guardado la factura, pero conviene revisarla antes de tramitarla.')
+          : null
+      );
 
       // Remove from pending only after onAddPages is called
       setPendingItems(prev => prev.filter(p => !processedIds.includes(p.id)));
     } catch {
-      const errMsg = 'Error de conexión. Inténtalo de nuevo.';
-      setPendingItems(prev => prev.map(p =>
-        validFiles.find(f => f.id === p.id) ? { ...p, status: 'failed' as const, error: errMsg } : p
+      const fallbackPhotos = validFiles.map(({ file, preview, width, height }) =>
+        createUploadedPhoto(file, preview, width, height)
+      );
+      onAddPages(fallbackPhotos, null, uploadedOriginalPdfs);
+      onIssueChange(createDocumentIssue(
+        'temporary-error',
+        'Hemos guardado la factura, pero la lectura automática falló por conexión. Puedes continuar y revisarla más tarde.'
       ));
+      setPendingItems(prev => prev.filter((item) => !validFiles.find((file) => file.id === item.id)));
     }
-  }, [onAddPages, pages]);
+  }, [onAddPages, onIssueChange, pages]);
 
   const dismissError = (id: string) => {
     setPendingItems(prev => prev.filter(p => p.id !== id));
@@ -1278,6 +1467,13 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
         <p className="text-xs text-gray-500">
           PDF original guardado: {originalPdfs.length} archivo{originalPdfs.length !== 1 ? 's' : ''}.
         </p>
+      )}
+
+      {issue?.message && !isBusy && (
+        <PersistentIssueNotice
+          message={issue.message}
+          tone={hasPages ? 'amber' : 'red'}
+        />
       )}
 
       {/* Uploaded pages grid */}
@@ -1406,6 +1602,7 @@ function ElectricityCard({ pages, originalPdfs, onAddPages, onRemovePage, onBusy
         }`}>
           <input
             type="file"
+            data-testid="electricity-input"
             accept="image/jpeg,image/png,application/pdf"
             multiple
             className="hidden"
@@ -1437,10 +1634,13 @@ export function PropertyDocsSection({
   onDNIFrontExtractionChange,
   onDNIBackPhotoChange,
   onDNIBackExtractionChange,
+  onDNIIssueChange,
   onDNIOriginalPdfsMerge,
   onIBIDocumentChange,
+  onIBIIssueChange,
   onAddElectricityPages,
   onRemoveElectricityPage,
+  onElectricityIssueChange,
   onDocumentProcessingChange,
   onContractChange,
   scrollToDoc,
@@ -1561,10 +1761,12 @@ export function PropertyDocsSection({
               front={dni.front}
               back={dni.back}
               originalPdfs={dni.originalPdfs}
+              issue={dni.issue ?? null}
               onFrontPhotoChange={onDNIFrontPhotoChange}
               onFrontExtractionChange={onDNIFrontExtractionChange}
               onBackPhotoChange={onDNIBackPhotoChange}
               onBackExtractionChange={onDNIBackExtractionChange}
+              onIssueChange={onDNIIssueChange}
               onOriginalPdfsMerge={onDNIOriginalPdfsMerge}
               onBusyChange={setDniIsBusy}
             />
@@ -1588,6 +1790,7 @@ export function PropertyDocsSection({
               slotKey="ibi"
               processing={documentProcessing.ibi}
               onDocumentChange={onIBIDocumentChange}
+              onIssueChange={onIBIIssueChange}
               onProcessingChange={onDocumentProcessingChange}
             />
           )}
@@ -1606,8 +1809,10 @@ export function PropertyDocsSection({
             <ElectricityCard
               pages={electricityBill.pages}
               originalPdfs={electricityBill.originalPdfs}
+              issue={electricityBill.issue ?? null}
               onAddPages={onAddElectricityPages}
               onRemovePage={onRemoveElectricityPage}
+              onIssueChange={onElectricityIssueChange}
               onBusyChange={setElectricityIsBusy}
             />
           )}

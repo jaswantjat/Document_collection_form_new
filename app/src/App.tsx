@@ -14,6 +14,8 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 import { getLocationInfo } from '@/lib/provinceMapping';
+import { mergeProjectWithDeviceBackup } from '@/lib/projectBackupMerge';
+import { prefetchCustomerSection } from '@/lib/sectionPrefetch';
 // SuccessSection is imported statically (not lazy) — it's tiny and must render
 // instantly after submit completes, avoiding a Suspense/LoadingSection flash.
 import { SuccessSection } from '@/sections/SuccessSection';
@@ -63,14 +65,6 @@ const EnergyCertificateSection = lazyWithRetry(() => import('@/sections/EnergyCe
 const ReviewSection = lazyWithRetry(() => import('@/sections/ReviewSection').then((module) => ({ default: module.ReviewSection })));
 const Dashboard = lazyWithRetry(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const DashboardLogin = lazyWithRetry(() => import('@/pages/DashboardLogin').then((module) => ({ default: module.DashboardLogin })));
-
-// Pre-warm remaining lazy section chunks immediately so transitions feel instant.
-function preloadSections() {
-  import('@/sections/ProvinceSelectionSection');
-  import('@/sections/RepresentationSection');
-  import('@/sections/EnergyCertificateSection');
-  import('@/sections/ReviewSection');
-}
 
 // ── Dashboard wrapper (handles login gate) ────────────────────────────────────
 function DashboardApp() {
@@ -168,6 +162,32 @@ function getInitialSection(
   if (location) return 'representation';
   if (hasPropertyDocsDone(fd)) return 'province-selection';
   return 'property-docs';
+}
+
+function getLikelyNextSection(
+  currentSection: Section | 'phone',
+  formData: FormData,
+  followUpDocumentFlow: boolean
+): Section | null {
+  const location = formData.location ?? formData.representation?.location ?? null;
+  switch (currentSection) {
+    case 'property-docs':
+      if (followUpDocumentFlow) return hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate';
+      if (!location) return 'province-selection';
+      return location === 'other'
+        ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
+        : 'representation';
+    case 'province-selection':
+      return location === 'other'
+        ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
+        : 'representation';
+    case 'representation':
+      return hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate';
+    case 'energy-certificate':
+      return 'review';
+    default:
+      return null;
+  }
 }
 
 // ── Section persistence: restore current section on page reload ───────────────
@@ -284,76 +304,7 @@ function FormApp() {
               // (e.g. user changed something and reloaded before server auto-save fired).
               normalizedProject = { ...normalizedProject, formData: backupFd };
             } else {
-              // Server is up-to-date for form state, but photos are stripped from server
-              // saves to keep payloads small. Restore photo binary data from local backup.
-              const serverFd = normalizedProject.formData;
-              const hasPreview = (p: { preview?: string } | null | undefined) => !!p?.preview;
-              const hasDataUrl = (f: { dataUrl?: string } | null | undefined) => !!f?.dataUrl;
-
-              normalizedProject = {
-                ...normalizedProject,
-                formData: normalizeFormData({
-                  ...serverFd,
-                  dni: {
-                    ...serverFd?.dni,
-                    front: {
-                      ...serverFd?.dni?.front,
-                      photo: hasPreview(backupFd.dni?.front?.photo)
-                        ? backupFd.dni.front.photo
-                        : serverFd?.dni?.front?.photo ?? null,
-                      extraction: serverFd?.dni?.front?.extraction ?? null,
-                    },
-                    back: {
-                      ...serverFd?.dni?.back,
-                      photo: hasPreview(backupFd.dni?.back?.photo)
-                        ? backupFd.dni.back.photo
-                        : serverFd?.dni?.back?.photo ?? null,
-                      extraction: serverFd?.dni?.back?.extraction ?? null,
-                    },
-                    originalPdfs: backupFd.dni?.originalPdfs?.some(hasDataUrl)
-                      ? backupFd.dni.originalPdfs
-                      : serverFd?.dni?.originalPdfs ?? [],
-                  },
-                  ibi: {
-                    ...serverFd?.ibi,
-                    photo: hasPreview(backupFd.ibi?.photo)
-                      ? backupFd.ibi.photo
-                      : serverFd?.ibi?.photo ?? null,
-                    pages: backupFd.ibi?.pages?.some(hasPreview)
-                      ? backupFd.ibi.pages
-                      : serverFd?.ibi?.pages ?? [],
-                    originalPdfs: backupFd.ibi?.originalPdfs?.some(hasDataUrl)
-                      ? backupFd.ibi.originalPdfs
-                      : serverFd?.ibi?.originalPdfs ?? [],
-                    extraction: serverFd?.ibi?.extraction ?? null,
-                  },
-                  electricityBill: {
-                    ...serverFd?.electricityBill,
-                    pages: backupFd.electricityBill?.pages?.some((p) => hasPreview(p?.photo))
-                      ? backupFd.electricityBill.pages
-                      : serverFd?.electricityBill?.pages ?? [],
-                    originalPdfs: backupFd.electricityBill?.originalPdfs?.some(hasDataUrl)
-                      ? backupFd.electricityBill.originalPdfs
-                      : serverFd?.electricityBill?.originalPdfs ?? [],
-                  },
-                  contract: {
-                    ...serverFd?.contract,
-                    originalPdfs: backupFd.contract?.originalPdfs?.some(hasDataUrl)
-                      ? backupFd.contract.originalPdfs
-                      : serverFd?.contract?.originalPdfs ?? [],
-                    extraction: serverFd?.contract?.extraction ?? null,
-                  },
-                  energyCertificate: {
-                    ...serverFd?.energyCertificate,
-                    status: serverFd?.energyCertificate?.status ?? 'not-started',
-                    renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
-                      ? backupFd.energyCertificate.renderedDocument
-                      : serverFd?.energyCertificate?.renderedDocument ?? null,
-                    currentStepIndex: backupFd.energyCertificate?.currentStepIndex
-                      ?? serverFd?.energyCertificate?.currentStepIndex,
-                  } as import('@/types').EnergyCertificateData,
-                } as import('@/types').FormData),
-              };
+              normalizedProject = mergeProjectWithDeviceBackup(normalizedProject, backupFd);
             }
           }
 
@@ -421,9 +372,12 @@ function FormApp() {
     formData, errors, documentProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
+    setDNIIssue,
     mergeDNIOriginalPdfs,
     setIBIDocument,
+    setIBIIssue,
     addElectricityPages, removeElectricityPage,
+    setElectricityIssue,
     setContract,
     setLocation,
     setRepresentation,
@@ -442,9 +396,20 @@ function FormApp() {
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
   useBeforeUnloadSave(activeProject?.code ?? null, formData, source);
+  const nextLikelySection = getLikelyNextSection(activeSection, formData, followUpDocumentFlow);
+  const hasSkippedInitialPrefetch = useRef(false);
 
-  // Pre-warm lazy section chunks during idle time to eliminate loading spinners
-  useEffect(() => { preloadSections(); }, []);
+  useEffect(() => {
+    if (!activeProject || activeLoading || activeSection === 'phone' || activeSection === 'success') return;
+    if (!hasSkippedInitialPrefetch.current) {
+      hasSkippedInitialPrefetch.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      prefetchCustomerSection(nextLikelySection);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [activeLoading, activeProject, activeSection, nextLikelySection]);
 
   // Auto-set location from contract province when no location is selected yet
   useEffect(() => {
@@ -521,54 +486,7 @@ function FormApp() {
       } else if (bestBackup.savedAt > serverTs + 500) {
         normalizedProject = { ...normalizedProject, formData: backupFd };
       } else {
-        const serverFd = normalizedProject.formData;
-        const hasPreview = (p: { preview?: string } | null | undefined) => !!p?.preview;
-        const hasDataUrl = (f: { dataUrl?: string } | null | undefined) => !!f?.dataUrl;
-        normalizedProject = {
-          ...normalizedProject,
-          formData: normalizeFormData({
-            ...serverFd,
-            dni: {
-              ...serverFd?.dni,
-              front: {
-                ...serverFd?.dni?.front,
-                photo: hasPreview(backupFd.dni?.front?.photo) ? backupFd.dni.front.photo : serverFd?.dni?.front?.photo ?? null,
-                extraction: serverFd?.dni?.front?.extraction ?? null,
-              },
-              back: {
-                ...serverFd?.dni?.back,
-                photo: hasPreview(backupFd.dni?.back?.photo) ? backupFd.dni.back.photo : serverFd?.dni?.back?.photo ?? null,
-                extraction: serverFd?.dni?.back?.extraction ?? null,
-              },
-              originalPdfs: backupFd.dni?.originalPdfs?.some(hasDataUrl) ? backupFd.dni.originalPdfs : serverFd?.dni?.originalPdfs ?? [],
-            },
-            ibi: {
-              ...serverFd?.ibi,
-              photo: hasPreview(backupFd.ibi?.photo) ? backupFd.ibi.photo : serverFd?.ibi?.photo ?? null,
-              pages: backupFd.ibi?.pages?.some(hasPreview) ? backupFd.ibi.pages : serverFd?.ibi?.pages ?? [],
-              originalPdfs: backupFd.ibi?.originalPdfs?.some(hasDataUrl) ? backupFd.ibi.originalPdfs : serverFd?.ibi?.originalPdfs ?? [],
-              extraction: serverFd?.ibi?.extraction ?? null,
-            },
-            electricityBill: {
-              ...serverFd?.electricityBill,
-              pages: backupFd.electricityBill?.pages?.some((p) => hasPreview(p?.photo)) ? backupFd.electricityBill.pages : serverFd?.electricityBill?.pages ?? [],
-              originalPdfs: backupFd.electricityBill?.originalPdfs?.some(hasDataUrl) ? backupFd.electricityBill.originalPdfs : serverFd?.electricityBill?.originalPdfs ?? [],
-            },
-            contract: {
-              ...serverFd?.contract,
-              originalPdfs: backupFd.contract?.originalPdfs?.some(hasDataUrl) ? backupFd.contract.originalPdfs : serverFd?.contract?.originalPdfs ?? [],
-              extraction: serverFd?.contract?.extraction ?? null,
-            },
-            energyCertificate: {
-              ...serverFd?.energyCertificate,
-              status: serverFd?.energyCertificate?.status ?? 'not-started',
-              renderedDocument: backupFd.energyCertificate?.renderedDocument?.imageDataUrl
-                ? backupFd.energyCertificate.renderedDocument
-                : serverFd?.energyCertificate?.renderedDocument ?? null,
-              currentStepIndex: backupFd.energyCertificate?.currentStepIndex ?? serverFd?.energyCertificate?.currentStepIndex,
-            } as import('@/types').EnergyCertificateData,
-          } as import('@/types').FormData),
-        };
+        normalizedProject = mergeProjectWithDeviceBackup(normalizedProject, backupFd);
       }
     }
 
@@ -606,10 +524,13 @@ function FormApp() {
             onDNIFrontExtractionChange={setDNIFrontExtraction}
             onDNIBackPhotoChange={setDNIBackPhoto}
             onDNIBackExtractionChange={setDNIBackExtraction}
+            onDNIIssueChange={setDNIIssue}
             onDNIOriginalPdfsMerge={mergeDNIOriginalPdfs}
             onIBIDocumentChange={setIBIDocument}
+            onIBIIssueChange={setIBIIssue}
             onAddElectricityPages={addElectricityPages}
             onRemoveElectricityPage={removeElectricityPage}
+            onElectricityIssueChange={setElectricityIssue}
             onDocumentProcessingChange={setDocumentProcessingState}
             onContractChange={setContract}
             scrollToDoc={propertyDocsTarget}
@@ -643,9 +564,6 @@ function FormApp() {
         );
 
       case 'representation':
-        // Eagerly warm the EC chunk while the user is signing so the section
-        // transition is instant and cannot fail due to a lazy-load network blip.
-        import('@/sections/EnergyCertificateSection').catch(() => {/* silently handled by lazyWithRetry */});
         return (
           <RepresentationSection
             formData={formData}

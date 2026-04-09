@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
 import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset } from '@/types';
 import { submitForm, preUploadAssets } from '@/services/api';
+import { clearSubmissionAttempt, getOrCreateSubmissionAttempt } from '@/lib/submissionAttempt';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
@@ -43,6 +44,8 @@ interface ChecklistItem {
   actionLabel: string;
 }
 
+type PreUploadStatus = 'uploading' | 'retrying' | 'ready' | 'error';
+
 export function ReviewSection({
   project,
   formData,
@@ -64,6 +67,7 @@ export function ReviewSection({
   const preUploadPromise = useRef<Promise<boolean> | null>(null);
   const preUploadDone = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const [preUploadStatus, setPreUploadStatus] = useState<PreUploadStatus>('uploading');
 
   const signaturesOk = hasRequiredSignatures(formData);
   const locationVar = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
@@ -76,6 +80,9 @@ export function ReviewSection({
   const dniDone = isIdentityDocumentComplete(dni);
   const ibiBool = !!ibi.photo || (ibi.pages?.length ?? 0) > 0;
   const electricityBool = ebUploaded > 0;
+  const dniIssue = dni.issue ?? null;
+  const ibiIssue = ibi.issue ?? null;
+  const electricityIssue = electricityBill.issue ?? null;
 
   const rawEnergyStatus = formData.energyCertificate.status;
   const energyStatus =
@@ -84,25 +91,30 @@ export function ReviewSection({
       : rawEnergyStatus;
 
   const dniDoneLabel = getIdentityDocumentDoneLabel(dni);
+  const getIssueHint = (issue: { message: string } | null, fallback: string) => issue?.message || fallback;
 
   const docItems = [
     {
       id: 'dni',
       description: 'Documento de identidad del titular',
-      hint: dniDone ? 'Toca para revisar o actualizar' : 'DNI (dos caras), NIE o pasaporte',
+      hint: dniDone
+        ? getIssueHint(dniIssue, 'Toca para revisar o actualizar')
+        : 'DNI (dos caras), NIE o pasaporte',
       label: dniDoneLabel ?? 'DNI / NIE',
       icon: Camera,
-      status: (dniDone ? 'done' : 'pending') as ChecklistStatus,
+      status: (dniDone ? (dniIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
     },
     {
       id: 'ibi',
       description: 'Recibo del IBI o escritura de la propiedad',
-      hint: ibiBool ? 'Documento de propiedad subido' : 'Puede ser una foto o un PDF',
+      hint: ibiBool
+        ? getIssueHint(ibiIssue, 'Documento de propiedad subido')
+        : 'Puede ser una foto o un PDF',
       label: 'IBI o escritura',
       icon: FileText,
-      status: (ibiBool ? 'done' : 'pending') as ChecklistStatus,
+      status: (ibiBool ? (ibiIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
     },
@@ -110,13 +122,16 @@ export function ReviewSection({
       id: 'electricity',
       description: 'Última factura de la luz',
       hint: electricityBool
-        ? `${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''} subida${ebUploaded !== 1 ? 's' : ''}`
+        ? getIssueHint(
+            electricityIssue,
+            `${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''} subida${ebUploaded !== 1 ? 's' : ''}`
+          )
         : 'Foto o PDF — si tiene varias páginas, súbelas todas',
       label: electricityBool
         ? `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`
         : 'Factura de luz',
       icon: Zap,
-      status: (electricityBool ? 'done' : 'pending') as ChecklistStatus,
+      status: (electricityBool ? (electricityIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
     },
@@ -178,6 +193,13 @@ export function ReviewSection({
   const doneCount = doneItems.length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((doneCount / totalCount) * 100);
+  const preUploadMessage = preUploadStatus === 'uploading'
+    ? 'Subiendo archivos en segundo plano para que el envío final sea más rápido.'
+    : preUploadStatus === 'retrying'
+      ? 'Reintentando la subida de archivos antes de enviar.'
+      : preUploadStatus === 'ready'
+        ? 'Archivos preparados. El envío final ya puede completarse.'
+        : 'Algunos archivos no se han subido todavía. Reintentaremos la subida al enviar.';
 
   const submit = async () => {
     if (submitInProgress.current) return;
@@ -185,6 +207,7 @@ export function ReviewSection({
     setSubmitting(true);
     setSubmitError('');
     try {
+      const attemptId = getOrCreateSubmissionAttempt(project.code);
       const renderedRepresentation = stampRenderedDocumentMetadata(formData);
       let renderedFormData = renderedRepresentation;
 
@@ -204,13 +227,18 @@ export function ReviewSection({
 
       const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
       if (!preUploadSuccess) {
+        setPreUploadStatus('retrying');
         await preUploadAssets(project.code, renderedFormData);
         preUploadDone.current = true;
+        setPreUploadStatus('ready');
       }
 
       const submitPayload = stripAllBinaryData(renderedFormData);
-      const res = await submitForm(project.code, submitPayload, source);
-      if (res.success) onSuccess();
+      const res = await submitForm(project.code, submitPayload, source, attemptId);
+      if (res.success) {
+        clearSubmissionAttempt(project.code);
+        onSuccess();
+      }
       else setSubmitError(res.message || 'Error al enviar. Inténtalo de nuevo.');
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
@@ -252,13 +280,18 @@ export function ReviewSection({
       return Promise.resolve(formData);
     };
 
+    setPreUploadStatus('uploading');
     preUploadPromise.current = getReadyFormData()
       .then(fd => preUploadAssets(project.code, fd))
       .then(() => {
         preUploadDone.current = true;
+        setPreUploadStatus('ready');
         return true;
       })
-      .catch(() => false);
+      .catch(() => {
+        setPreUploadStatus('error');
+        return false;
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -433,6 +466,35 @@ export function ReviewSection({
             <p className="text-sm font-medium text-eltex-blue">Procesando documentos...</p>
           </div>
         )}
+
+        <div
+          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+            preUploadStatus === 'ready'
+              ? 'border-emerald-200 bg-emerald-50'
+              : preUploadStatus === 'error'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-blue-100 bg-blue-50'
+          }`}
+        >
+          {preUploadStatus === 'ready' ? (
+            <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+          ) : preUploadStatus === 'error' ? (
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          ) : (
+            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
+          )}
+          <p
+            className={`text-sm ${
+              preUploadStatus === 'ready'
+                ? 'text-emerald-800'
+                : preUploadStatus === 'error'
+                  ? 'text-amber-800'
+                  : 'text-eltex-blue'
+            }`}
+          >
+            {preUploadMessage}
+          </p>
+        </div>
 
         {/* ── Error ── */}
         {submitError && (

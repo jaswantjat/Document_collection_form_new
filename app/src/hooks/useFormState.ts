@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
-  StoredDocumentFile, EnergyCertificateData, ContractData,
+  StoredDocumentFile, EnergyCertificateData, ContractData, DocumentIssue,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
 import { saveProgress, preUploadAssets } from '@/services/api';
@@ -98,12 +98,12 @@ function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): Do
   return [];
 }
 
-const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null });
+const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null, issue: null });
 
 export const initialFormData: FormData = {
-  dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [] },
-  ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
-  electricityBill: { pages: [], originalPdfs: [] },
+  dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [], issue: null },
+  ibi: { photo: null, pages: [], originalPdfs: [], extraction: null, issue: null },
+  electricityBill: { pages: [], originalPdfs: [], issue: null },
   contract: emptyContractData(),
   browserLanguage: typeof navigator !== 'undefined' ? navigator.language : undefined,
   energyCertificate: {
@@ -220,6 +220,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       front: mergeDocSlot(initialFormData.dni.front, savedFormData?.dni?.front),
       back: mergeDocSlot(initialFormData.dni.back, savedFormData?.dni?.back),
       originalPdfs: savedFormData?.dni?.originalPdfs ?? initialFormData.dni.originalPdfs,
+      issue: savedFormData?.dni?.issue ?? null,
     },
     ibi: {
       ...initialFormData.ibi,
@@ -227,14 +228,17 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       pages: savedFormData?.ibi?.pages
         ?? (savedFormData?.ibi?.photo ? [savedFormData.ibi.photo] : initialFormData.ibi.pages),
       originalPdfs: savedFormData?.ibi?.originalPdfs ?? initialFormData.ibi.originalPdfs,
+      issue: savedFormData?.ibi?.issue ?? null,
     },
     electricityBill: {
       pages: normalizeElectricityPages(savedFormData?.electricityBill),
       originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
+      issue: savedFormData?.electricityBill?.issue ?? null,
     },
     contract: {
       originalPdfs: savedFormData?.contract?.originalPdfs ?? [],
       extraction: savedFormData?.contract?.extraction ?? null,
+      issue: savedFormData?.contract?.issue ?? null,
     },
     energyCertificate: normalizedEc,
     signatures: {
@@ -402,6 +406,7 @@ export const useFormState = (
         ...prev.dni,
         front: { photo, extraction: photo ? prev.dni.front.extraction : null },
         originalPdfs: photo || prev.dni.back.photo ? prev.dni.originalPdfs : [],
+        issue: photo || prev.dni.back.photo ? prev.dni.issue ?? null : null,
       },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
@@ -420,6 +425,7 @@ export const useFormState = (
         ...prev.dni,
         back: { photo, extraction: photo ? prev.dni.back.extraction : null },
         originalPdfs: photo || prev.dni.front.photo ? prev.dni.originalPdfs : [],
+        issue: photo || prev.dni.front.photo ? prev.dni.issue ?? null : null,
       },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
@@ -445,6 +451,16 @@ export const useFormState = (
     }));
   }, [preserveRepresentationSignatures]);
 
+  const setDNIIssue = useCallback((issue: DocumentIssue | null | undefined) => {
+    setFormData((prev) => ({
+      ...prev,
+      dni: {
+        ...prev.dni,
+        issue: issue ?? null,
+      },
+    }));
+  }, []);
+
   const setIBIDocument = useCallback((pages: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[] = []) => {
     const primaryPhoto = pages[0] ?? null;
     setFormData(prev => ({
@@ -455,28 +471,45 @@ export const useFormState = (
         pages,
         originalPdfs,
         extraction: primaryPhoto ? extraction : null,
+        issue: primaryPhoto ? prev.ibi.issue ?? null : null,
       },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
   }, [preserveRepresentationSignatures]);
 
+  const setIBIIssue = useCallback((issue: DocumentIssue | null | undefined) => {
+    setFormData((prev) => ({
+      ...prev,
+      ibi: {
+        ...prev.ibi,
+        issue: issue ?? null,
+      },
+    }));
+  }, []);
+
   // Electricity — multi-page
-  const addElectricityPages = useCallback((photos: UploadedPhoto[], extraction: AIExtraction, originalPdfs: StoredDocumentFile[] = []) => {
+  const addElectricityPages = useCallback((photos: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[] = []) => {
     if (photos.length === 0 && originalPdfs.length === 0) return;
+    let uniquePhotos: UploadedPhoto[] = [];
     setFormData(prev => ({
       ...prev,
       electricityBill: {
         pages: [
           ...prev.electricityBill.pages,
-          ...photos.map((photo) => ({ photo, extraction })),
+          ...(() => {
+            const existingPreviews = new Set(prev.electricityBill.pages.map((page) => page.photo?.preview).filter(Boolean));
+            uniquePhotos = photos.filter((photo) => !existingPreviews.has(photo.preview));
+            return uniquePhotos.map((photo) => ({ photo, extraction }));
+          })(),
         ],
         originalPdfs: mergeStoredDocumentFiles(prev.electricityBill.originalPdfs, originalPdfs),
+        issue: prev.electricityBill.issue ?? null,
       },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
     setElectricityProcessing(prev => [
       ...prev,
-      ...photos.map((): DocumentProcessingState => ({ status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null })),
+      ...uniquePhotos.map((): DocumentProcessingState => ({ status: 'accepted', errorCode: undefined, errorMessage: undefined, pendingPreview: null })),
     ]);
   }, [preserveRepresentationSignatures]);
 
@@ -488,11 +521,24 @@ export const useFormState = (
         originalPdfs: prev.electricityBill.pages.filter((_, i) => i !== index).length > 0
           ? prev.electricityBill.originalPdfs
           : [],
+        issue: prev.electricityBill.pages.filter((_, i) => i !== index).length > 0
+          ? prev.electricityBill.issue ?? null
+          : null,
       },
       representation: clearRepresentationArtifacts(prev.representation, preserveRepresentationSignatures),
     }));
     setElectricityProcessing(prev => prev.filter((_, i) => i !== index));
   }, [preserveRepresentationSignatures]);
+
+  const setElectricityIssue = useCallback((issue: DocumentIssue | null | undefined) => {
+    setFormData((prev) => ({
+      ...prev,
+      electricityBill: {
+        ...prev.electricityBill,
+        issue: issue ?? null,
+      },
+    }));
+  }, []);
 
   const setElectricityPageProcessing = useCallback((index: number, state: DocumentProcessingState) => {
     setElectricityProcessing(prev => {
@@ -625,8 +671,11 @@ export const useFormState = (
     formData, errors, documentProcessing, electricityProcessing, hasBlockingDocumentProcessing,
     setDNIFrontPhoto, setDNIFrontExtraction,
     setDNIBackPhoto, setDNIBackExtraction,
+    setDNIIssue,
     mergeDNIOriginalPdfs,
     setIBIDocument,
+    setIBIIssue,
+    setElectricityIssue,
     addElectricityPages, removeElectricityPage, setElectricityPageProcessing,
     setContract,
     setLocation,

@@ -66,13 +66,13 @@ describe('identityDocument', () => {
       expect(isIdentityDocumentComplete(dni)).toBe(true);
     });
 
-    // Test 4: front only (passport/unknown) → isIdentityDocumentComplete = true
-    it('Test 4: front only (passport/unknown) → should be complete', () => {
+    // Test 4: front only (passport/unknown) → isIdentityDocumentComplete = false
+    it('Test 4: front only (passport/unknown) → should NOT be complete until back is provided', () => {
       const dni: Pick<DNIData, 'front' | 'back'> = {
         front: createDocSlot(createMockPhoto('front-4'), createMockExtraction()),
         back: createDocSlot(null, null),
       };
-      expect(isIdentityDocumentComplete(dni)).toBe(true);
+      expect(isIdentityDocumentComplete(dni)).toBe(false);
     });
 
     // Test 5: both front and back → isIdentityDocumentComplete = true
@@ -115,13 +115,13 @@ describe('identityDocument', () => {
       expect(isIdentityDocumentComplete(dni)).toBe(true);
     });
 
-    // Test 7c: front photo present but extraction null (still processing) → complete (don't block until kind known)
-    it('Test 7c: front photo with null extraction → complete (do not block while extraction pending)', () => {
+    // Test 7c: front photo present but extraction null (still processing) → incomplete
+    it('Test 7c: front photo with null extraction → should NOT be complete until back is provided', () => {
       const dni: Pick<DNIData, 'front' | 'back'> = {
         front: createDocSlot(createMockPhoto('front-7c'), null),
         back: createDocSlot(null, null),
       };
-      expect(isIdentityDocumentComplete(dni)).toBe(true);
+      expect(isIdentityDocumentComplete(dni)).toBe(false);
     });
   });
 
@@ -190,6 +190,16 @@ describe('identityDocument', () => {
       const ext: AIExtraction = { ...createMockExtraction('dni-card'), notes: 'combined image' };
       const front = createDocSlot(createMockPhoto('f'), ext);
       expect(isDNIBackRequired(front)).toBe(false);
+    });
+
+    it('returns true when the extracted kind is unknown', () => {
+      const front = createDocSlot(createMockPhoto('f'), createMockExtraction());
+      expect(isDNIBackRequired(front)).toBe(true);
+    });
+
+    it('returns true while extraction is unavailable', () => {
+      const front = createDocSlot(createMockPhoto('f'), null);
+      expect(isDNIBackRequired(front)).toBe(true);
     });
 
     it('returns false when no front photo', () => {

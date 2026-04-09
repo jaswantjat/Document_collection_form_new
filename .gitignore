@@ -51,3 +51,6 @@ test_*.py
 # Playwright
 playwright-report/
 test-results/
+
+# Generated TestSprite artifacts
+testsprite_tests/

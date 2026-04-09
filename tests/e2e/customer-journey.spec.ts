@@ -151,7 +151,7 @@ test.describe('Customer Journey Regressions', () => {
   test('resume by phone restores local backup and routes to the resumed step', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
 
-    await request.post(`${API_BASE}/api/test/reset-property-docs/${projectCode}`);
+    await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
 
     await seedLocalBackup(page, projectCode, {
       dni: {

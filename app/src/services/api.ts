@@ -324,12 +324,13 @@ export async function saveProgress(
 export async function submitForm(
   code: string,
   formData: AppFormData,
-  source: string
+  source: string,
+  attemptId: string
 ): Promise<{ success: boolean; submissionId?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/submit`, {
     method: 'POST',
     headers: projectHeaders(),
-    body: JSON.stringify({ formData, source }),
+    body: JSON.stringify({ formData, source, attemptId }),
     signal: AbortSignal.timeout(60000),
   });
   return readJsonOrThrow(res, 'No se pudo enviar la documentación.');

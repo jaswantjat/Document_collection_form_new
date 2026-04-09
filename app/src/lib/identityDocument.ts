@@ -22,6 +22,7 @@ function isCombinedDNIImage(extraction?: AIExtraction | null): boolean {
 export function isIdentityDocumentComplete(dni: Pick<DNIData, 'front' | 'back'>): boolean {
   if (!dni.front.photo) return false;
   const kind = getIdentityDocumentKind(dni.front.extraction);
+  if (!kind) return !!dni.back.photo;
   if (kind === 'dni-card' && !isCombinedDNIImage(dni.front.extraction)) {
     return !!dni.back.photo;
   }
@@ -42,6 +43,7 @@ export function getIdentityDocumentDoneLabel(dni: Pick<DNIData, 'front' | 'back'
 export function isDNIBackRequired(front: DocSlot): boolean {
   if (!front.photo) return false;
   const kind = getIdentityDocumentKind(front.extraction);
+  if (!kind) return true;
   return kind === 'dni-card' && !isCombinedDNIImage(front.extraction);
 }
 
@@ -49,7 +51,7 @@ export function getIdentityDocumentPendingLabel(front: DocSlot, back: DocSlot): 
   if (!front.photo && back.photo) return 'Falta la frontal';
   if (front.photo && !back.photo) {
     const kind = getIdentityDocumentKind(front.extraction);
-    if (kind === 'dni-card' && !isCombinedDNIImage(front.extraction)) {
+    if (!kind || (kind === 'dni-card' && !isCombinedDNIImage(front.extraction))) {
       return 'Falta la trasera';
     }
   }
