@@ -356,6 +356,29 @@ describe('preUploadAssets', () => {
     mockFetch({ success: false, message: 'upload failed' }, 503);
     await expect(preUploadAssets('ELT-UPLOAD-003', makeFormData())).rejects.toThrow('upload failed');
   });
+
+  it('includes property photo asset keys in the upload manifest', async () => {
+    mockFetch({ success: true, savedKeys: ['dniFront', 'roof_0'] });
+
+    await preUploadAssets('ELT-UPLOAD-004', {
+      ...makeFormData(),
+      roof: {
+        photos: [{
+          id: 'roof-1',
+          preview,
+          timestamp: 2,
+          sizeBytes: 8,
+        }],
+      },
+    } as Parameters<typeof preUploadAssets>[1] & { roof: { photos: Array<{ id: string; preview: string; timestamp: number; sizeBytes: number }> } });
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const requestBody = fetchMock.mock.calls[0][1].body as FormData;
+    const entries = Array.from(requestBody.entries());
+
+    expect(entries.some(([key]) => key === 'roof_0')).toBe(true);
+    expect(entries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['dniFront', 'roof_0']));
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

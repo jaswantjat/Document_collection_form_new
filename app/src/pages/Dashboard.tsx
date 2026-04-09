@@ -50,9 +50,9 @@ import {
   getIbiPages, prepareAdminUploadPages,
   viewPDFInNewTab, downloadCSV,
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
-  downloadProjectZip,
   getDocumentAssetsFromProject, getElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
+import { downloadProjectZip } from '@/lib/dashboardExport';
 
 function ProductBadge({ type }: { type: string }) {
   const isSolar = type?.toLowerCase() === 'solar';
@@ -92,6 +92,10 @@ function FieldRow({ label, value }: { label: string; value: any }) {
       <span className="text-gray-800 font-medium break-all">{String(value)}</span>
     </div>
   );
+}
+
+function isDashboardAuthError(error: string | undefined) {
+  return error === 'UNAUTHORIZED' || error === 'SESSION_EXPIRED';
 }
 
 export function InfoCard({
@@ -963,14 +967,23 @@ function AdminUploadModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4"
+      data-testid="admin-upload-modal"
+      onClick={onClose}
+    >
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">Subir documento — {projectCode}</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+          <button
+            type="button"
+            data-testid="admin-upload-close-btn"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1020,6 +1033,7 @@ function AdminUploadModal({
               <span className="text-sm text-gray-500">Haz clic para seleccionar imagen o PDF</span>
               <input
                 ref={fileRef}
+                data-testid="admin-upload-file-input"
                 type="file"
                 accept="image/jpeg,image/png,application/pdf"
                 multiple
@@ -1143,7 +1157,7 @@ function ProjectDetailModal({
                 data-testid="download-zip-btn"
                 onClick={async () => {
                   try {
-                    await downloadProjectZip(project, token);
+                    await downloadProjectZip(project, { loadProjectDetail, token });
                   } catch (err) {
                     console.error('Project ZIP download failed:', err);
                     alert('No se pudo descargar el ZIP del expediente.');
@@ -1406,6 +1420,7 @@ function ProjectTableRow({
           </button>
           <button
             type="button"
+            data-testid="open-upload-btn"
             onClick={() => setShowUpload(true)}
             className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
           >
@@ -1417,7 +1432,7 @@ function ProjectTableRow({
             disabled={downloading}
             onClick={async () => {
               setDownloading(true);
-              try { await downloadProjectZip(project, token); }
+              try { await downloadProjectZip(project, { loadProjectDetail, token }); }
               catch { alert('Error al descargar los archivos del expediente.'); }
               finally { setDownloading(false); }
             }}
@@ -2109,7 +2124,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
       const response = await fetchDashboard(token);
       if (response.success && response.projects) {
         setProjects(response.projects);
-      } else if (response.error === 'UNAUTHORIZED') {
+      } else if (isDashboardAuthError(response.error)) {
         await handleLogout();
       } else {
         setError('No se pudieron cargar los datos.');
@@ -2132,9 +2147,9 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
       return response.project;
     }
 
-    if (response.error === 'UNAUTHORIZED') {
+    if (isDashboardAuthError(response.error)) {
       await handleLogout();
-      throw new Error('UNAUTHORIZED');
+      throw new Error(response.error);
     }
 
     throw new Error(response.message || response.error || 'PROJECT_LOAD_FAILED');
@@ -2197,6 +2212,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              data-testid="dashboard-refresh-btn"
               onClick={() => void load()}
               title="Actualizar"
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"

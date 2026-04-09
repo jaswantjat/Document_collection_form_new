@@ -1,7 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const MANAGED_ASSET_PREFIXES = ['ibi_', 'electricity_', 'dniOriginal_', 'ibiOriginal_', 'electricityOriginal_'];
+const MANAGED_ASSET_PREFIXES = [
+  'ibi_',
+  'electricity_',
+  'dniOriginal_',
+  'ibiOriginal_',
+  'electricityOriginal_',
+  'electricalPanel_',
+  'roof_',
+  'installationSpace_',
+  'radiators_',
+];
 const MANAGED_ASSET_KEYS = new Set(['dniFront', 'dniBack', 'energyCert']);
 
 function isManagedAssetKey(key) {

@@ -9,6 +9,7 @@ import {
   getDashboardDocuments,
   getDashboardElectricityPages,
   getDashboardEnergyCertificateSummary,
+  getDashboardPhotoGroups,
   getDashboardSignedPdfItems,
   getDashboardFinalSignatureAssets,
   getDashboardProjectSummary,
@@ -402,6 +403,37 @@ describe('getDashboardFinalSignatureAssets — bad data', () => {
     };
     const items = getDashboardFinalSignatureAssets(project);
     expect(items).toHaveLength(1);
+  });
+});
+
+describe('getDashboardPhotoGroups — preview and asset fallback', () => {
+  it('returns preview-backed property photo groups when previews exist', () => {
+    const groups = getDashboardPhotoGroups({
+      formData: {
+        roof: {
+          photos: [makePhoto()],
+        },
+      },
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].key).toBe('roof');
+    expect(groups[0].items[0].dataUrl).toContain('data:image/jpeg');
+  });
+
+  it('falls back to uploaded asset paths when photo previews were stripped', () => {
+    const groups = getDashboardPhotoGroups({
+      formData: {},
+      assetFiles: {
+        roof_0: '/uploads/assets/ELT001/roof_0.jpg',
+        roof_1: '/uploads/assets/ELT001/roof_1.png',
+      },
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items).toHaveLength(2);
+    expect(groups[0].items[0].dataUrl).toBe('/uploads/assets/ELT001/roof_0.jpg');
+    expect(groups[0].items[1].mimeType).toBe('image/png');
   });
 });
 

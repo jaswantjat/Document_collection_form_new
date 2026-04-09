@@ -5,6 +5,7 @@ import {
   type SignedDocumentKind,
 } from '@/lib/signedDocumentOverlays';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { getPropertyPhotoGroups } from '@/lib/propertyPhotoGroups';
 
 export type DashboardDocumentKey = string;
 
@@ -92,6 +93,15 @@ export interface DashboardProjectSummary {
 function getMimeType(dataUrl: string | null | undefined) {
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null;
   return dataUrl.slice(5, dataUrl.indexOf(';')) || null;
+}
+
+function getPathMimeType(assetPath: string | null | undefined) {
+  if (!assetPath || typeof assetPath !== 'string') return null;
+  const lower = assetPath.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return 'image/jpeg';
 }
 
 function getLocation(project: any) {
@@ -376,42 +386,37 @@ export function getDashboardFinalSignatureAssets(project: any): DashboardAssetIt
 }
 
 export function getDashboardPhotoGroups(project: any): DashboardAssetGroup[] {
-  const formData = project?.formData || {};
-  const groups = [
-    {
-      key: 'electricalPanel',
-      label: 'Cuadro eléctrico',
-      photos: formData?.electricalPanel?.photos || [],
-    },
-    {
-      key: 'roof',
-      label: 'Tejado',
-      photos: formData?.roof?.photos || [],
-    },
-    {
-      key: 'installationSpace',
-      label: 'Espacio de instalación',
-      photos: formData?.installationSpace?.photos || [],
-    },
-    {
-      key: 'radiators',
-      label: 'Radiadores',
-      photos: formData?.radiators?.photos || [],
-    },
-  ];
+  const assetFiles = project?.assetFiles || {};
 
-  return groups
-    .map((group) => ({
-      key: group.key,
-      label: group.label,
-      items: group.photos
-        .map((photo: any, index: number) => toAssetItem(
+  return getPropertyPhotoGroups(project?.formData)
+    .map((group) => {
+      const previewItems = group.photos
+        .map((photo, index) => toAssetItem(
           `${group.key}-${index}`,
           `${group.label} ${index + 1}`,
           photo?.preview,
         ))
-        .filter(Boolean) as DashboardAssetItem[],
-    }))
+        .filter(Boolean) as DashboardAssetItem[];
+
+      if (previewItems.length > 0) {
+        return { key: group.key, label: group.label, items: previewItems };
+      }
+
+      const storedKeys = Object.keys(assetFiles)
+        .filter((key) => key.startsWith(`${group.key}_`))
+        .sort();
+
+      return {
+        key: group.key,
+        label: group.label,
+        items: storedKeys.map((key, index) => ({
+          key,
+          label: `${group.label} ${index + 1}`,
+          dataUrl: assetFiles[key],
+          mimeType: getPathMimeType(assetFiles[key]),
+        })),
+      };
+    })
     .filter((group) => group.items.length > 0);
 }
 

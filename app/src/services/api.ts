@@ -5,6 +5,7 @@ import type {
   UploadedPhoto,
   StoredDocumentFile,
 } from '@/types';
+import { getPropertyPhotoGroups, type PropertyPhotoFormData } from '@/lib/propertyPhotoGroups';
 
 const API_BASE = '/api';
 
@@ -152,6 +153,12 @@ function buildAssetUploadDescriptors(formData: AppFormData): UploadAssetDescript
 
   (formData.electricityBill?.pages ?? []).forEach((page, i) => {
     pushPhotoDescriptor(descriptors, `electricity_${i}`, page?.photo);
+  });
+
+  getPropertyPhotoGroups(formData as AppFormData & PropertyPhotoFormData).forEach((group) => {
+    group.photos.forEach((photo, i) => {
+      pushPhotoDescriptor(descriptors, `${group.key}_${i}`, photo);
+    });
   });
 
   if (formData.energyCertificate?.renderedDocument?.imageDataUrl) {

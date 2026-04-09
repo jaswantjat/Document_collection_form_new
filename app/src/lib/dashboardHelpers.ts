@@ -219,23 +219,6 @@ export async function buildEnergyCertificatePdfFactory(project: ProjectData) {
   return () => generateImagePDF(imageDataUrl, `${project.code}_certificado-energetico.pdf`);
 }
 
-export async function downloadProjectZip(project: { code: string; customerName?: string }, token: string) {
-  const response = await fetch(`/api/project/${project.code}/download-zip`, {
-    headers: { 'x-dashboard-token': token },
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({})) as { message?: string };
-    throw new Error(err.message || `HTTP ${response.status}`);
-  }
-  const blob = await response.blob();
-  if (blob.size === 0) {
-    alert('Este expediente no tiene archivos descargables aún.');
-    return;
-  }
-  const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
-  downloadBlob(blob, `${project.code}_${safeName}.zip`);
-}
-
 export function assetFromPreview(key: string, label: string, preview: string | null | undefined): DashboardAssetItem | null {
   if (!preview) return null;
   return {

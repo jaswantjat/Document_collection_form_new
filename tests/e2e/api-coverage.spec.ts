@@ -1,11 +1,140 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_CODE = 'ELT20250001';
+const VALID_JPEG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/autoritzacio-representacio.jpg')).toString('base64');
+const VALID_PNG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/eltex-logo.png')).toString('base64');
+const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
 
 function uniquePhone() {
   const suffix = Date.now().toString().slice(-8);
   return `+346${suffix}`;
+}
+
+function makeDataUrl(_payload: string, mimeType = 'image/jpeg') {
+  const base64 = mimeType === 'image/png'
+    ? VALID_PNG_BASE64
+    : mimeType === 'application/pdf'
+      ? VALID_PDF_BASE64
+      : VALID_JPEG_BASE64;
+  return `data:${mimeType};base64,${base64}`;
+}
+
+function makePhoto(payload: string) {
+  return {
+    id: `photo-${payload}`,
+    preview: makeDataUrl(payload),
+    timestamp: 1,
+    sizeBytes: payload.length,
+  };
+}
+
+function makeStoredPdf(payload: string) {
+  return {
+    id: `pdf-${payload}`,
+    filename: `${payload}.pdf`,
+    mimeType: 'application/pdf',
+    dataUrl: makeDataUrl(payload, 'application/pdf'),
+    timestamp: 1,
+    sizeBytes: payload.length,
+  };
+}
+
+async function parseZipEntries(buffer: Buffer) {
+  const { default: UZIP } = await import('../../app/node_modules/uzip/UZIP.js');
+  return Object.keys(UZIP.parse(buffer)).sort();
+}
+
+function makeCompletedEnergyCertificate() {
+  return {
+    status: 'completed',
+    housing: {
+      cadastralReference: '1234567DF3813C0001AA',
+      habitableAreaM2: '110',
+      floorCount: '2',
+      averageFloorHeight: '2.7-3.2m',
+      bedroomCount: '3',
+      doorsByOrientation: { north: '1', east: '1', south: '1', west: '1' },
+      windowsByOrientation: { north: '1', east: '1', south: '1', west: '1' },
+      windowFrameMaterial: 'pvc',
+      doorMaterial: 'Madera',
+      windowGlassType: 'doble',
+      hasShutters: false,
+      shutterWindowCount: '',
+    },
+    thermal: {
+      thermalInstallationType: 'aerotermia',
+      boilerFuelType: 'aerotermia',
+      equipmentDetails: 'Equipo exterior',
+      hasAirConditioning: false,
+      airConditioningType: null,
+      airConditioningDetails: '',
+      heatingEmitterType: 'radiadores-agua',
+      radiatorMaterial: 'aluminio',
+    },
+    additional: {
+      soldProduct: 'solo-paneles',
+      isExistingCustomer: false,
+      hasSolarPanels: false,
+      solarPanelDetails: '',
+    },
+    customerSignature: makeDataUrl('ec-signature', 'image/png'),
+    renderedDocument: {
+      imageDataUrl: makeDataUrl('ec-render', 'image/png'),
+      generatedAt: '2026-04-09T10:00:00Z',
+      templateVersion: '2026-04-01.3',
+    },
+    completedAt: '2026-04-09T10:00:00Z',
+    skippedAt: null,
+  };
+}
+
+function buildLegacyZipFormData() {
+  return {
+    dni: {
+      front: { photo: makePhoto('dni-front'), extraction: null },
+      back: { photo: makePhoto('dni-back'), extraction: null },
+      originalPdfs: [makeStoredPdf('dni-original')],
+    },
+    ibi: {
+      photo: null,
+      pages: [makePhoto('ibi-1')],
+      originalPdfs: [makeStoredPdf('ibi-original')],
+      extraction: null,
+    },
+    electricityBill: {
+      pages: [{ photo: makePhoto('bill-1'), extraction: null }],
+      originalPdfs: [makeStoredPdf('bill-original')],
+    },
+    contract: { originalPdfs: [], extraction: null },
+    location: 'cataluna',
+    representation: {
+      location: 'cataluna',
+      isCompany: false,
+      companyName: '',
+      companyNIF: '',
+      companyAddress: '',
+      companyMunicipality: '',
+      companyPostalCode: '',
+      postalCode: '08001',
+      ivaPropertyAddress: 'Calle Solar 1',
+      ivaCertificateSignature: makeDataUrl('iva-cat', 'image/png'),
+      representacioSignature: makeDataUrl('rep-cat', 'image/png'),
+      generalitatRole: 'titular',
+      generalitatSignature: makeDataUrl('gen-cat', 'image/png'),
+      poderRepresentacioSignature: null,
+      ivaCertificateEsSignature: null,
+      renderedDocuments: {},
+    },
+    signatures: {
+      customerSignature: makeDataUrl('customer-signature', 'image/png'),
+      repSignature: makeDataUrl('rep-signature', 'image/png'),
+    },
+    energyCertificate: makeCompletedEnergyCertificate(),
+    roof: { photos: [makePhoto('roof-1')] },
+  };
 }
 
 async function loginDashboard(request: any) {
@@ -41,15 +170,49 @@ test.describe('API Coverage', () => {
   });
 
   test('API-03: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: 'QA Bot',
+        assessorId: 'QA-BOT',
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+
+    const saveRes = await request.post(`${BASE}/api/project/${code}/save`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { formData: buildLegacyZipFormData(), source: 'customer' },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
     const dashToken = await loginDashboard(request);
 
-    const res = await request.get(`${BASE}/api/project/${VALID_CODE}/download-zip`, {
+    const res = await request.get(`${BASE}/api/project/${code}/download-zip`, {
       headers: { 'x-dashboard-token': dashToken },
       timeout: 30000,
     });
     expect(res.status()).toBe(200);
     expect(res.headers()['content-type'] || '').toMatch(/zip|octet-stream/);
-    expect((await res.body()).length).toBeGreaterThanOrEqual(22);
+
+    const entries = await parseZipEntries(await res.body());
+
+    expect(entries).toEqual(expect.arrayContaining([
+      '1_documentos/DNI_frontal.jpg',
+      '1_documentos/DNI_trasera.jpg',
+      '1_documentos/IBI.jpg',
+      '1_documentos/Factura_luz_1.jpg',
+      '1_documentos/DNI_original_pdf.pdf',
+      '1_documentos/IBI_original_pdf.pdf',
+      '1_documentos/Factura_luz_original_pdf.pdf',
+      '2_certificados/Certificado_energetico.pdf',
+    ]));
+    expect(entries.some((entry: string) => entry.startsWith('2_pdfs_firmados/'))).toBe(false);
+    expect(entries.some((entry: string) => entry.startsWith('4_firmas_finales/'))).toBe(false);
+    expect(entries.some((entry: string) => entry.startsWith('5_fotos_inmueble/'))).toBe(false);
   });
 
   test('API-04: upload-assets prunes stale asset keys when the active manifest shrinks', async ({ request }) => {

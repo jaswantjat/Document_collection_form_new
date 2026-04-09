@@ -336,15 +336,22 @@ const upload = multer({
   }
 });
 
+const PROPERTY_PHOTO_ASSET_KEYS = ['electricalPanel', 'roof', 'installationSpace', 'radiators'];
+
+function buildIndexedAssetFields(prefix, count) {
+  return Array.from({ length: count }, (_, i) => ({ name: `${prefix}_${i}`, maxCount: 1 }));
+}
+
 const ASSET_FIELDS = [
   { name: 'dniFront', maxCount: 1 },
   { name: 'dniBack', maxCount: 1 },
-  ...Array.from({ length: 5 }, (_, i) => ({ name: `ibi_${i}`, maxCount: 1 })),
-  ...Array.from({ length: 5 }, (_, i) => ({ name: `electricity_${i}`, maxCount: 1 })),
+  ...buildIndexedAssetFields('ibi', 5),
+  ...buildIndexedAssetFields('electricity', 5),
+  ...PROPERTY_PHOTO_ASSET_KEYS.flatMap((key) => buildIndexedAssetFields(key, 20)),
   { name: 'energyCert', maxCount: 1 },
-  ...Array.from({ length: 5 }, (_, i) => ({ name: `dniOriginal_${i}`, maxCount: 1 })),
-  ...Array.from({ length: 5 }, (_, i) => ({ name: `ibiOriginal_${i}`, maxCount: 1 })),
-  ...Array.from({ length: 5 }, (_, i) => ({ name: `electricityOriginal_${i}`, maxCount: 1 })),
+  ...buildIndexedAssetFields('dniOriginal', 5),
+  ...buildIndexedAssetFields('ibiOriginal', 5),
+  ...buildIndexedAssetFields('electricityOriginal', 5),
 ];
 
 const assetStorage = multer.diskStorage({
@@ -1379,120 +1386,137 @@ app.put('/api/project/:code/admin-formdata', requireDashboardAuth, (req, res) =>
   res.json({ success: true, formData: project.formData });
 });
 
-// ── Download all project files as a ZIP ───────────────────────────────────────
+// ── Download core project files as a ZIP (legacy dashboard export) ───────────
 app.get('/api/project/:code/download-zip', requireDashboardAuth, async (req, res) => {
-  const project = database.projects[req.params.code];
-  if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND' });
+  try {
+    const project = database.projects[req.params.code];
+    if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND' });
 
-  const fd = project.formData;
-  const zip = new AdmZip();
+    const fd = project.formData;
+    const zip = new AdmZip();
 
-  const addBase64File = (label, dataUrl, folder) => {
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
-    const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
-    if (!mimeMatch) return;
-    const mime = mimeMatch[1];
-    const ext = mime === 'application/pdf' ? 'pdf' : mime.split('/')[1]?.split('+')[0] || 'jpg';
-    const base64Data = dataUrl.slice(mimeMatch[0].length);
-    const buffer = Buffer.from(base64Data, 'base64');
-    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    zip.addFile(`${folder}/${safeName}.${ext}`, buffer);
-  };
-
-  const addRenderedPdfFile = async (label, imageDataUrl, folder) => {
-    const pdfBuffer = await renderedImageToPdfBuffer(imageDataUrl);
-    if (!pdfBuffer) return;
-    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    zip.addFile(`${folder}/${safeName}.pdf`, pdfBuffer);
-  };
-
-  const addStoredFiles = (label, files, folder) => {
-    if (!Array.isArray(files)) return;
-    files.forEach((file, index) => {
-      addBase64File(files.length === 1 ? label : `${label}_${index + 1}`, file?.dataUrl, folder);
-    });
-  };
-
-  // Read a pre-uploaded binary asset from disk and add to the ZIP.
-  // Returns true if the file was found; caller can fall back to base64 otherwise.
-  const addFileFromPath = (label, assetKey, folder) => {
-    const assetPath = project.assetFiles?.[assetKey];
-    if (!assetPath) return false;
-    const fullPath = path.join(DATA_DIR, assetPath.replace(/^\//, ''));
-    if (!fs.existsSync(fullPath)) return false;
-    const ext = path.extname(fullPath).slice(1) || 'jpg';
-    const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    zip.addFile(`${folder}/${safeName}.${ext}`, fs.readFileSync(fullPath));
-    return true;
-  };
-
-  // Try pre-uploaded file first; fall back to inline base64.
-  const addDocumentFile = (label, dataUrl, assetKey, folder) => {
-    if (!addFileFromPath(label, assetKey, folder)) {
-      addBase64File(label, dataUrl, folder);
-    }
-  };
-
-  // Try pre-uploaded file first for stored PDFs; fall back to inline base64 array.
-  const addStoredFilesWithFallback = (label, files, assetKeyPrefix, folder) => {
-    const assetFiles = project.assetFiles || {};
-    const assetKeys = Object.keys(assetFiles)
-      .filter(k => k.startsWith(`${assetKeyPrefix}_`))
-      .sort();
-    if (assetKeys.length > 0) {
-      assetKeys.forEach((key, idx) => {
-        addFileFromPath(assetKeys.length === 1 ? label : `${label}_${idx + 1}`, key, folder);
-      });
-    } else {
-      addStoredFiles(label, files, folder);
-    }
-  };
-
-  if (fd) {
-    const ibiPages = getIbiPages(fd);
-    addDocumentFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'dniFront', '1_documentos');
-    addDocumentFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'dniBack', '1_documentos');
-    addStoredFilesWithFallback('DNI_original_pdf', fd.dni?.originalPdfs, 'dniOriginal', '1_documentos');
-    ibiPages.forEach((page, i) => {
-      const label = ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`;
-      addDocumentFile(label, page?.preview, `ibi_${i}`, '1_documentos');
-    });
-    addStoredFilesWithFallback('IBI_original_pdf', fd.ibi?.originalPdfs, 'ibiOriginal', '1_documentos');
-
-    const getElecPages = (formData) => {
-      const eb = formData.electricityBill;
-      if (Array.isArray(eb?.pages)) return eb.pages;
-      if (Array.isArray(eb)) return eb;
-      return [];
+    const addBase64File = (label, dataUrl, folder) => {
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
+      const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
+      if (!mimeMatch) return;
+      const mime = mimeMatch[1];
+      const ext = mime === 'application/pdf'
+        ? 'pdf'
+        : mime === 'image/jpeg' || mime === 'image/jpg'
+          ? 'jpg'
+          : mime.split('/')[1]?.split('+')[0] || 'jpg';
+      const base64Data = dataUrl.slice(mimeMatch[0].length);
+      const buffer = Buffer.from(base64Data, 'base64');
+      const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      zip.addFile(`${folder}/${safeName}.${ext}`, buffer);
     };
-    getElecPages(fd).forEach((page, i) => {
-      addDocumentFile(`Factura_luz_${i + 1}`, page?.photo?.preview, `electricity_${i}`, '1_documentos');
-    });
-    addStoredFilesWithFallback('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'electricityOriginal', '1_documentos');
 
-    const energyCertificate = fd.energyCertificate;
-    const energyCertAssetPath = project.assetFiles?.energyCert;
-    if (energyCertAssetPath) {
-      const fullPath = path.join(DATA_DIR, energyCertAssetPath.replace(/^\//, ''));
-      if (fs.existsSync(fullPath)) {
-        const dataUrl = `data:image/jpeg;base64,${fs.readFileSync(fullPath).toString('base64')}`;
-        await addRenderedPdfFile('Certificado_energetico', dataUrl, '2_certificados');
+    const assetFileToDataUrl = (assetPath) => {
+      if (!assetPath) return null;
+      const fullPath = path.join(DATA_DIR, assetPath.replace(/^\//, ''));
+      if (!fs.existsSync(fullPath)) return null;
+      const ext = path.extname(fullPath).slice(1).toLowerCase();
+      const mime = ext === 'png'
+        ? 'image/png'
+        : ext === 'pdf'
+          ? 'application/pdf'
+          : 'image/jpeg';
+      return `data:${mime};base64,${fs.readFileSync(fullPath).toString('base64')}`;
+    };
+
+    const addRenderedPdfFile = async (label, imageDataUrl, folder) => {
+      const pdfBuffer = await renderedImageToPdfBuffer(imageDataUrl);
+      if (!pdfBuffer) return;
+      const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      zip.addFile(`${folder}/${safeName}.pdf`, pdfBuffer);
+    };
+
+    const addStoredFiles = (label, files, folder) => {
+      if (!Array.isArray(files)) return;
+      files.forEach((file, index) => {
+        addBase64File(files.length === 1 ? label : `${label}_${index + 1}`, file?.dataUrl, folder);
+      });
+    };
+
+    // Read a pre-uploaded binary asset from disk and add to the ZIP.
+    // Returns true if the file was found; caller can fall back to base64 otherwise.
+    const addFileFromPath = (label, assetKey, folder) => {
+      const assetPath = project.assetFiles?.[assetKey];
+      if (!assetPath) return false;
+      const fullPath = path.join(DATA_DIR, assetPath.replace(/^\//, ''));
+      if (!fs.existsSync(fullPath)) return false;
+      const rawExt = path.extname(fullPath).slice(1).toLowerCase();
+      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt || 'jpg';
+      const safeName = label.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      zip.addFile(`${folder}/${safeName}.${ext}`, fs.readFileSync(fullPath));
+      return true;
+    };
+
+    // Try pre-uploaded file first; fall back to inline base64.
+    const addDocumentFile = (label, dataUrl, assetKey, folder) => {
+      if (!addFileFromPath(label, assetKey, folder)) {
+        addBase64File(label, dataUrl, folder);
+      }
+    };
+
+    // Try pre-uploaded file first for stored PDFs; fall back to inline base64 array.
+    const addStoredFilesWithFallback = (label, files, assetKeyPrefix, folder) => {
+      const assetFiles = project.assetFiles || {};
+      const assetKeys = Object.keys(assetFiles)
+        .filter(k => k.startsWith(`${assetKeyPrefix}_`))
+        .sort();
+      if (assetKeys.length > 0) {
+        assetKeys.forEach((key, idx) => {
+          addFileFromPath(assetKeys.length === 1 ? label : `${label}_${idx + 1}`, key, folder);
+        });
+      } else {
+        addStoredFiles(label, files, folder);
+      }
+    };
+
+    if (fd) {
+      const ibiPages = getIbiPages(fd);
+      addDocumentFile('DNI_frontal', fd.dni?.front?.photo?.preview, 'dniFront', '1_documentos');
+      addDocumentFile('DNI_trasera', fd.dni?.back?.photo?.preview, 'dniBack', '1_documentos');
+      addStoredFilesWithFallback('DNI_original_pdf', fd.dni?.originalPdfs, 'dniOriginal', '1_documentos');
+      ibiPages.forEach((page, i) => {
+        const label = ibiPages.length === 1 ? 'IBI' : `IBI_${i + 1}`;
+        addDocumentFile(label, page?.preview, `ibi_${i}`, '1_documentos');
+      });
+      addStoredFilesWithFallback('IBI_original_pdf', fd.ibi?.originalPdfs, 'ibiOriginal', '1_documentos');
+
+      const getElecPages = (formData) => {
+        const eb = formData.electricityBill;
+        if (Array.isArray(eb?.pages)) return eb.pages;
+        if (Array.isArray(eb)) return eb;
+        return [];
+      };
+      getElecPages(fd).forEach((page, i) => {
+        addDocumentFile(`Factura_luz_${i + 1}`, page?.photo?.preview, `electricity_${i}`, '1_documentos');
+      });
+      addStoredFilesWithFallback('Factura_luz_original_pdf', fd.electricityBill?.originalPdfs, 'electricityOriginal', '1_documentos');
+
+      const energyCertificate = fd.energyCertificate;
+      const energyCertAssetDataUrl = assetFileToDataUrl(project.assetFiles?.energyCert);
+      if (energyCertAssetDataUrl) {
+        await addRenderedPdfFile('Certificado_energetico', energyCertAssetDataUrl, '2_certificados');
       } else if (energyCertificate?.renderedDocument?.imageDataUrl) {
         await addRenderedPdfFile('Certificado_energetico', energyCertificate.renderedDocument.imageDataUrl, '2_certificados');
       }
-    } else if (energyCertificate?.renderedDocument?.imageDataUrl) {
-      await addRenderedPdfFile('Certificado_energetico', energyCertificate.renderedDocument.imageDataUrl, '2_certificados');
     }
+
+    const zipBuffer = zip.toBuffer();
+    const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${project.code}_${safeName}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', zipBuffer.length);
+    res.send(zipBuffer);
+  } catch (error) {
+    console.error(`[dashboard-zip-legacy] Failed for ${req.params.code}:`, error);
+    res.status(500).json({ success: false, error: 'ZIP_EXPORT_FAILED' });
   }
-
-  const zipBuffer = zip.toBuffer();
-  const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `${project.code}_${safeName}.zip`;
-
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Length', zipBuffer.length);
-  res.send(zipBuffer);
 });
 
 // ── Download all images for a project as a ZIP-like JSON bundle ────────────────
