@@ -16,6 +16,7 @@ const {
   normalizeActiveAssetKeys,
   pruneManagedAssetFiles,
 } = require('./lib/assetFiles');
+const { configureTrustProxy } = require('./lib/trustProxy');
 const {
   beginSubmissionAttempt,
   completeSubmissionAttempt,
@@ -56,6 +57,10 @@ function getOpenRouterApiKey() {
 loadEnvFiles();
 
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT !== undefined;
+const trustProxy = configureTrustProxy(app, {
+  railwayEnvironment: process.env.RAILWAY_ENVIRONMENT,
+  trustProxyEnv: process.env.TRUST_PROXY,
+});
 const DOCFLOW_WEBHOOK_SECRET = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET || 'eltex-docflow-2026-v1';
 const DATA_DIR = process.env.DATA_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/data' : __dirname);
 const uploadDir = path.join(DATA_DIR, 'uploads');
@@ -73,6 +78,9 @@ if (!initialOpenRouterApiKey) {
   console.warn(`   Checked: ${ENV_PATHS.join(' | ')}`);
 } else {
   console.log('✅ OPENROUTER_API_KEY loaded:', initialOpenRouterApiKey.slice(0, 8) + '...');
+}
+if (trustProxy !== false) {
+  console.log(`✅ Express trust proxy configured: ${String(trustProxy)}`);
 }
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite-preview';
 
