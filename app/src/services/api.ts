@@ -2,6 +2,7 @@ import type {
   AIExtraction,
   ProjectData,
   FormData as AppFormData,
+  AdditionalBankDocumentType,
   UploadedPhoto,
   StoredDocumentFile,
 } from '@/types';
@@ -358,7 +359,7 @@ export async function submitForm(
 
 export async function extractDocument(
   imageBase64: string | string[],
-  documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto' | 'contract'
+  documentType: 'ibi' | 'electricity' | 'dniFront' | 'dniBack' | 'dniAuto' | 'contract' | AdditionalBankDocumentType
 ): Promise<ExtractDocumentResponse> {
   const body = Array.isArray(imageBase64)
     ? { imagesBase64: imageBase64, documentType }
@@ -374,7 +375,7 @@ export async function extractDocument(
 
 export async function extractDocumentBatch(
   imagesBase64: string[],
-  documentType: 'electricity' | 'ibi' | 'contract'
+  documentType: 'electricity' | 'ibi' | 'contract' | AdditionalBankDocumentType
 ): Promise<{
   success: boolean;
   extraction?: AIExtraction;

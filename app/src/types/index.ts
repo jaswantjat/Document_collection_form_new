@@ -54,6 +54,8 @@ export interface AdditionalBankDocumentEntry {
   type: AdditionalBankDocumentType;
   customLabel?: string;
   files: AdditionalBankDocumentFile[];
+  extraction?: AIExtraction | null;
+  issue?: DocumentIssue | null;
 }
 
 export type AIExtractionValue =

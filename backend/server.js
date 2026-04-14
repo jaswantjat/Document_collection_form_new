@@ -30,6 +30,12 @@ const {
   ensureResettableTestProject,
   getDefaultProjects,
 } = require('./lib/testProjects');
+const {
+  getAdditionalBankDocumentPrompt,
+  getAdditionalBankDocumentWrongDocumentMessage,
+  isAdditionalBankDocumentType,
+  normalizeAdditionalBankDocumentExtraction,
+} = require('./lib/additionalBankDocumentExtraction');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -1954,6 +1960,21 @@ Return exactly one result object per image, preserving the same order as the inp
 
 const IDENTITY_DOCUMENT_KINDS = new Set(['dni-card', 'nie-card', 'nie-certificate', 'passport']);
 
+function getExtractionPrompt(documentType) {
+  return PROMPTS[documentType] || getAdditionalBankDocumentPrompt(documentType);
+}
+
+function getWrongDocumentMessage(documentType) {
+  if (isAdditionalBankDocumentType(documentType)) {
+    return getAdditionalBankDocumentWrongDocumentMessage(documentType);
+  }
+  if (documentType === 'contract') {
+    return 'Documento incorrecto. Por favor sube el contrato de venta.';
+  }
+
+  return `Documento incorrecto. Por favor sube ${documentType.includes('dni') ? 'el DNI/NIE' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'la factura de electricidad'}.`;
+}
+
 function normalizeExtractedStringFields(extractedData) {
   if (!extractedData || typeof extractedData !== 'object') return extractedData;
   const normalized = { ...extractedData };
@@ -2072,7 +2093,7 @@ app.post('/api/extract', aiExtractLimiter, async (req, res) => {
     : imageBase64 ? [imageBase64] : null;
   if (!imagesToSend || !documentType) return res.status(400).json({ success: false, message: 'Faltan imageBase64 o documentType.' });
 
-  const prompt = PROMPTS[documentType];
+  const prompt = getExtractionPrompt(documentType);
   if (!prompt) return res.status(400).json({ success: false, message: `Tipo de documento no soportado: ${documentType}` });
 
   const openRouterApiKey = getOpenRouterApiKey();
@@ -2144,7 +2165,7 @@ app.post('/api/extract', aiExtractLimiter, async (req, res) => {
         success: false,
         isWrongDocument: true,
         reason: 'wrong-document',
-        message: `Documento incorrecto. Por favor sube ${documentType.includes('dni') ? 'el DNI/NIE' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'la factura de electricidad'}.`
+        message: getWrongDocumentMessage(documentType)
       });
     }
 
@@ -2152,6 +2173,19 @@ app.post('/api/extract', aiExtractLimiter, async (req, res) => {
       extraction = normalizeIdentityExtraction(extraction);
     } else if (extraction.extractedData && typeof extraction.extractedData === 'object') {
       extraction.extractedData = normalizeExtractedStringFields(extraction.extractedData);
+    }
+
+    if (isAdditionalBankDocumentType(documentType)) {
+      const normalized = normalizeAdditionalBankDocumentExtraction(documentType, extraction);
+      extraction = normalized.extraction;
+      if (normalized.wrongDocumentMessage) {
+        return res.json({
+          success: false,
+          isWrongDocument: true,
+          reason: 'wrong-document',
+          message: normalized.wrongDocumentMessage,
+        });
+      }
     }
 
     // CUPS validation
@@ -2222,7 +2256,7 @@ app.post('/api/extract-batch', aiExtractLimiter, async (req, res) => {
     return res.status(400).json({ success: false, message: 'Faltan imagesBase64 o documentType.' });
   }
 
-  const prompt = PROMPTS[documentType];
+  const prompt = getExtractionPrompt(documentType);
   if (!prompt) return res.status(400).json({ success: false, message: `Tipo de documento no soportado: ${documentType}` });
 
   const openRouterApiKey = getOpenRouterApiKey();
@@ -2288,7 +2322,7 @@ app.post('/api/extract-batch', aiExtractLimiter, async (req, res) => {
     }
 
     if (!extraction.isCorrectDocument) {
-      return res.json({ success: false, isWrongDocument: true, reason: 'wrong-document', message: `Documento incorrecto. Por favor sube ${documentType === 'electricity' ? 'la factura de electricidad' : documentType === 'ibi' ? 'el recibo del IBI o escritura' : 'el documento correcto'}.` });
+      return res.json({ success: false, isWrongDocument: true, reason: 'wrong-document', message: getWrongDocumentMessage(documentType) });
     }
 
     if (extraction.extractedData && typeof extraction.extractedData === 'object') {
@@ -2331,6 +2365,19 @@ app.post('/api/extract-batch', aiExtractLimiter, async (req, res) => {
     if (documentType === 'ibi' && extraction.extractedData?.direccion) {
       const sitMatch = String(extraction.extractedData.direccion).match(/\bSIT(?:UACION)?[:\s-]*([^()]+)/i);
       if (sitMatch?.[1]) extraction.extractedData.direccion = sitMatch[1].trim();
+    }
+
+    if (isAdditionalBankDocumentType(documentType)) {
+      const normalized = normalizeAdditionalBankDocumentExtraction(documentType, extraction);
+      extraction = normalized.extraction;
+      if (normalized.wrongDocumentMessage) {
+        return res.json({
+          success: false,
+          isWrongDocument: true,
+          reason: 'wrong-document',
+          message: normalized.wrongDocumentMessage,
+        });
+      }
     }
 
     res.json({
