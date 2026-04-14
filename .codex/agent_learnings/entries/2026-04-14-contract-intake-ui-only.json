@@ -1,0 +1,13 @@
+{
+  "ts_utc": "2026-04-14T10:22:00Z",
+  "category": "architecture",
+  "text": "The initial customer contract upload can be removed from PropertyDocsSection without deleting contract support elsewhere.\nLegacy contract extraction is still consumed for location/name autofill and downstream rendering, so keep formData.contract compatibility intact.\nFor scope-limited intake changes, prefer UI-only removal over schema or backend deletion.",
+  "issue": "#5",
+  "pointers": [
+    "app/src/sections/PropertyDocsSection.tsx",
+    "app/src/App.tsx",
+    "app/src/hooks/useFormState.ts",
+    "app/src/lib/signedDocumentOverlays.ts",
+    "backend/server.js"
+  ]
+}

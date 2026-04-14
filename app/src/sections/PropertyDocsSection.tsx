@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
+import { getPropertyDocsProgress } from '@/lib/propertyDocsProgress';
 import type {
   IBIData,
   ElectricityBillData,
   DNIData,
-  ContractData,
   UploadedPhoto,
   StoredDocumentFile,
   AIExtraction,
@@ -23,7 +23,6 @@ interface Props {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
-  contract: ContractData;
   followUpMode?: boolean;
   errors: FormErrors;
   documentProcessing: Record<DocumentSlotKey, DocumentProcessingState>;
@@ -41,7 +40,6 @@ interface Props {
   onRemoveElectricityPage: (index: number) => void;
   onElectricityIssueChange: (issue: ElectricityBillData['issue']) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
-  onContractChange: (contract: ContractData) => void;
   scrollToDoc?: string;
   onBack?: () => void;
   onContinue: () => void;
@@ -57,17 +55,6 @@ interface DocCardProps {
   onIssueChange: (issue: IBIData['issue']) => void;
   onProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
 }
-
-const CONTRACT_FIELDS = [
-  { key: 'contractNumber', label: 'Nº Contrato' },
-  { key: 'fullName', label: 'Cliente' },
-  { key: 'nif', label: 'NIF/DNI' },
-  { key: 'address', label: 'Dirección' },
-  { key: 'postalCode', label: 'C. Postal' },
-  { key: 'municipality', label: 'Municipio' },
-  { key: 'province', label: 'Provincia' },
-  { key: 'email', label: 'Email' },
-];
 
 const IBI_FIELDS = [
   { key: 'referenciaCatastral', label: 'Ref. Catastral' },
@@ -297,198 +284,6 @@ function computeValidationWarnings(
   }
 
   return warnings;
-}
-
-// ── Contract Card ──────────────────────────────────────────────────────────────
-interface ContractCardProps {
-  contract: ContractData;
-  onChange: (contract: ContractData) => void;
-}
-
-type ContractStatus = 'idle' | 'processing' | 'accepted' | 'failed';
-type ContractTransientStatus = 'processing' | 'failed' | null;
-
-function ContractCard({ contract, onChange }: ContractCardProps) {
-  const [status, setStatus] = useState<ContractTransientStatus>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [pageCount, setPageCount] = useState<number>(0);
-
-  const hasContractData = contract.originalPdfs.length > 0 || !!contract.extraction;
-  const resolvedStatus: ContractStatus = status === 'processing'
-    ? 'processing'
-    : status === 'failed'
-      ? 'failed'
-      : hasContractData
-        ? 'accepted'
-        : 'idle';
-
-  const accepted = resolvedStatus === 'accepted';
-  const isBusy = resolvedStatus === 'processing';
-
-  const processFiles = useCallback(async (files: File[]) => {
-    setStatus('processing');
-    setErrorMessage(null);
-
-    try {
-      const { files: expandedFiles, originalPdfs, errors } = await expandUploadFiles(files);
-
-      if (errors.length > 0) {
-        setStatus('failed');
-        setErrorMessage(errors[0].message);
-        return;
-      }
-
-      if (expandedFiles.length === 0) {
-        setStatus('failed');
-        setErrorMessage('No se encontró ninguna página utilizable en el documento.');
-        return;
-      }
-
-      // Persist the raw PDF/image files into parent state immediately —
-      // before AI extraction starts. This guarantees they survive: a) a page
-      // reload mid-extraction, b) an extraction failure, c) localStorage
-      // quota limits that prevent the backup from reaching the full payload.
-      // The extraction field is updated (or stays null) once the API responds.
-      onChange({ originalPdfs, extraction: null });
-
-      setPageCount(expandedFiles.length);
-
-      const base64Pages: string[] = [];
-      for (const { file } of expandedFiles) {
-        const { aiBase64 } = await preparePhotoAssets(file);
-        base64Pages.push(aiBase64);
-      }
-
-      const res = base64Pages.length === 1
-        ? await extractDocument(base64Pages[0], 'contract')
-        : await extractDocumentBatch(base64Pages, 'contract');
-
-      if (!res.success || !res.extraction) {
-        const msg = res.message || 'No se pudo procesar el contrato.';
-        setStatus('failed');
-        setErrorMessage(msg);
-        // originalPdfs already committed above — user can retry extraction
-        // without re-uploading the file.
-        return;
-      }
-
-      onChange({
-        originalPdfs,
-        extraction: {
-          ...res.extraction,
-          needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
-          confirmedByUser: true,
-        },
-      });
-      setStatus(null);
-    } catch {
-      setStatus('failed');
-      setErrorMessage('Error de conexión. Comprueba tu conexión a internet y vuelve a intentarlo.');
-    }
-  }, [onChange]);
-
-  const reset = useCallback(() => {
-    onChange({ originalPdfs: [], extraction: null });
-    setStatus(null);
-    setErrorMessage(null);
-    setPageCount(0);
-  }, [onChange]);
-
-  const extractedData = contract.extraction?.extractedData || {};
-  const storedPdfCount = contract.originalPdfs.length;
-
-  return (
-    <div
-      data-testid="contract-card"
-      data-contract-status={resolvedStatus}
-      className={`rounded-2xl border-2 transition-colors ${accepted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'} p-5 space-y-4`}
-    >
-      <div className="flex items-center justify-between">
-        <p className={`font-semibold ${accepted ? 'text-gray-500' : 'text-gray-900'}`}>Contrato Eltex</p>
-        {accepted && <CheckCircle data-testid="contract-accepted-icon" className="w-5 h-5 text-green-500" />}
-      </div>
-
-      {!accepted && !isBusy && (
-        <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-eltex-blue hover:bg-blue-50/30 transition-colors">
-          <input
-            type="file"
-            data-testid="contract-input"
-            accept="image/jpeg,image/png,application/pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              e.target.value = '';
-              if (files.length) processFiles(files);
-            }}
-          />
-          <FileText className="w-7 h-7 text-gray-300" />
-          <span className="text-sm font-medium text-gray-500">Fotos o PDF</span>
-          <span className="text-xs text-gray-400 text-center px-4">Contrato o presupuesto Eltex firmado.</span>
-        </label>
-      )}
-
-      {isBusy && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 py-1">
-            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-            <p className="text-sm text-gray-500">
-              {pageCount > 0 ? `Extrayendo datos (${pageCount} páginas)…` : 'Extrayendo datos…'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {resolvedStatus === 'failed' && !isBusy && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{errorMessage}</p>
-        </div>
-      )}
-
-      {accepted && (
-        <div className="space-y-3">
-          {storedPdfCount > 0 && (
-            <p className="text-xs text-gray-500">
-              PDF original guardado: {storedPdfCount} archivo{storedPdfCount !== 1 ? 's' : ''}.
-            </p>
-          )}
-          <div className="space-y-1.5">
-            {CONTRACT_FIELDS.map(({ key, label }) => {
-              const value = contract.extraction?.manualCorrections?.[key] ?? extractedData[key];
-              if (!value) return null;
-              return (
-                <div key={key} className="flex gap-2 text-sm">
-                  <span className="text-gray-400 shrink-0 w-28">{label}</span>
-                  <span className="font-medium text-gray-700">{String(value)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-2">
-            <label className="flex-1 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center cursor-pointer">
-              <input
-                type="file"
-                data-testid="contract-input"
-                accept="image/jpeg,image/png,application/pdf"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  e.target.value = '';
-                  if (files.length) processFiles(files);
-                }}
-              />
-              <Camera className="w-3.5 h-3.5" /> Sustituir
-            </label>
-            <button type="button" onClick={reset} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 transition-colors justify-center">
-              <RotateCcw className="w-3.5 h-3.5" /> Quitar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
@@ -1625,7 +1420,6 @@ export function PropertyDocsSection({
   dni,
   ibi,
   electricityBill,
-  contract,
   followUpMode = false,
   errors,
   documentProcessing,
@@ -1642,7 +1436,6 @@ export function PropertyDocsSection({
   onRemoveElectricityPage,
   onElectricityIssueChange,
   onDocumentProcessingChange,
-  onContractChange,
   scrollToDoc,
   onBack,
   onContinue,
@@ -1714,8 +1507,11 @@ export function PropertyDocsSection({
     ?? electricityBill.pages[0]?.extraction?.extractedData?.titular
     ?? `${electricityBill.pages.length} imagen${electricityBill.pages.length !== 1 ? 'es' : ''}`;
 
-  const contractDone = contract.originalPdfs.length > 0 || !!contract.extraction;
-  const missingCount = [!contractDone, !dniDone, !ibiDone, !elecDone].filter(Boolean).length;
+  const { missingCount, slots } = getPropertyDocsProgress({
+    dniDone,
+    ibiDone,
+    electricityDone: elecDone,
+  });
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -1731,21 +1527,8 @@ export function PropertyDocsSection({
           </p>
         </div>
 
-        {/* Progress strip — shows all 4 required documents above the fold */}
-        <DocProgressStrip
-          slots={[
-            { label: 'Contrato Eltex', done: contractDone },
-            { label: 'DNI / NIE', done: dniDone },
-            { label: 'IBI o escritura', done: ibiDone },
-            { label: 'Factura de luz', done: elecDone },
-          ]}
-        />
-
-        {/* Contract card — always shown at top, primary data source */}
-        <ContractCard
-          contract={contract}
-          onChange={onContractChange}
-        />
+        {/* Progress strip — shows the initial required documents above the fold */}
+        <DocProgressStrip slots={slots} />
 
         {/* DNI card or compact row */}
         <div ref={dniRef}>
