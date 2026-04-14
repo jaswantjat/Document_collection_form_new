@@ -81,11 +81,6 @@ test.describe('Energy Certificate Flow Tests', () => {
     await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    // Current follow-up logic lands on review first, with the missing docs surfaced as checklist items.
-    await expect(page.locator('h1, h2').first()).toContainText(/Confirma tu documentación|Sube lo que falte y confirma/);
-    const identityCard = page.getByRole('button', { name: /Documento de identidad del titular/i }).first();
-    await expect(identityCard).toBeVisible();
-    await identityCard.click();
     await expect(page.locator('h1').first()).toContainText('Documentos');
 
     // Clear localStorage while still on the form page (before beforeunload fires)

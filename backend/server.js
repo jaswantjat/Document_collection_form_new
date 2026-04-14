@@ -247,6 +247,12 @@ app.post('/api/test/reset-property-docs/:code', (req, res) => {
   project.formData.dni = { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] };
   project.formData.ibi = { photo: null, pages: [], originalPdfs: [], extraction: null };
   project.formData.electricityBill = { pages: [], originalPdfs: [] };
+  project.formData.additionalBankDocuments = [];
+  project.formData.location = undefined;
+  project.formData.representation = {
+    ...project.formData.representation,
+    location: null,
+  };
   project.formData.energyCertificate = {
     status: 'not-started',
     housing: {
