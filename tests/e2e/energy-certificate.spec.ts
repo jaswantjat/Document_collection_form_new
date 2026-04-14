@@ -31,8 +31,11 @@ test.describe('Energy Certificate PRD Tests', () => {
     await expect(skipBtn).toBeVisible();
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
-    
-    // After skipping with everything else complete, it auto-submits to success.
+
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await expect(page.getByText(/El certificado energético es opcional y no bloquea el envío inicial/i)).toBeVisible();
+    await page.getByTestId('review-submit-btn').click();
+
     await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 

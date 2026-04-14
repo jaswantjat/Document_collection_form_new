@@ -12,7 +12,7 @@ import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
-import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { hasEnergyCertificateDecision } from '@/lib/energyCertificateFlow';
 import { getLocationInfo } from '@/lib/provinceMapping';
 import { mergeProjectWithDeviceBackup } from '@/lib/projectBackupMerge';
 import { prefetchCustomerSection } from '@/lib/sectionPrefetch';
@@ -115,16 +115,6 @@ function hasExistingRepresentationFlow(formData: FormData | null): boolean {
   return hasRepresentationDone(formData, location);
 }
 
-function hasEnergyCertificateDecision(formData: FormData | null): boolean {
-  if (!formData) return false;
-  const status = formData.energyCertificate?.status;
-  if (status === 'skipped') return true;
-  // Only treat 'completed' as a real decision if all required fields pass validation.
-  // This prevents routing to 'review' when a stale/invalid 'completed' is in state.
-  if (status === 'completed') return isEnergyCertificateReadyToComplete(formData.energyCertificate);
-  return false;
-}
-
 function getInitialSection(
   project: ProjectData | null,
   urlCode: string | null
@@ -134,7 +124,7 @@ function getInitialSection(
   const fd = project.formData;
   const location = fd?.location ?? fd?.representation?.location ?? null;
   const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
-  const hasEnergyDecision = hasEnergyCertificateDecision(fd);
+  const hasEnergyDecision = hasEnergyCertificateDecision(fd?.energyCertificate);
 
   // Try to restore the last saved section before recomputing from scratch.
   const saved = readSavedSection(urlCode);
@@ -172,17 +162,31 @@ function getLikelyNextSection(
   const location = formData.location ?? formData.representation?.location ?? null;
   switch (currentSection) {
     case 'property-docs':
-      if (followUpDocumentFlow) return hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate';
+      if (followUpDocumentFlow) {
+        return hasEnergyCertificateDecision(formData.energyCertificate)
+          ? 'review'
+          : 'energy-certificate';
+      }
       if (!location) return 'province-selection';
       return location === 'other'
-        ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
+        ? (
+          hasEnergyCertificateDecision(formData.energyCertificate)
+            ? 'review'
+            : 'energy-certificate'
+        )
         : 'representation';
     case 'province-selection':
       return location === 'other'
-        ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
+        ? (
+          hasEnergyCertificateDecision(formData.energyCertificate)
+            ? 'review'
+            : 'energy-certificate'
+        )
         : 'representation';
     case 'representation':
-      return hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate';
+      return hasEnergyCertificateDecision(formData.energyCertificate)
+        ? 'review'
+        : 'energy-certificate';
     case 'energy-certificate':
       return 'review';
     default:
@@ -229,7 +233,6 @@ function FormApp() {
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!urlCode);
-  const [autoSubmitReview, setAutoSubmitReview] = useState(false);
   const projectMatchesUrl = !urlCode || project?.code === urlCode;
   const activeProject = urlCode && projectMatchesUrl ? project : null;
   const activeLoadError = urlCode ? loadError : null;
@@ -448,7 +451,9 @@ function FormApp() {
     const handlePopState = () => {
       // Re-push so repeated back presses keep being intercepted.
       window.history.pushState({ eltexBack: true }, '');
-      const dest = hasEnergyCertificateDecision(formDataRef.current) ? 'review' : 'energy-certificate';
+      const dest = hasEnergyCertificateDecision(formDataRef.current.energyCertificate)
+        ? 'review'
+        : 'energy-certificate';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setCurrentSection(dest);
       if (urlCode) saveSectionToStorage(urlCode, dest);
@@ -535,7 +540,11 @@ function FormApp() {
             onContinue={() => {
               if (!validatePropertyDocs()) return;
               if (followUpDocumentFlow) {
-                goTo(hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate');
+                goTo(
+                  hasEnergyCertificateDecision(formData.energyCertificate)
+                    ? 'review'
+                    : 'energy-certificate'
+                );
                 return;
               }
               goTo('province-selection');
@@ -545,17 +554,23 @@ function FormApp() {
 
       case 'province-selection':
         return (
-            <ProvinceSelectionSection
-              formData={formData}
-              representationData={formData.representation}
-              onLocationSelect={setLocation}
-              onRepresentationChange={(patch: Partial<RepresentationData>) => setRepresentation({ ...formData.representation, ...patch })}
-              onBack={() => goTo('property-docs')}
+          <ProvinceSelectionSection
+            formData={formData}
+            representationData={formData.representation}
+            onLocationSelect={setLocation}
+            onRepresentationChange={(patch: Partial<RepresentationData>) => setRepresentation({ ...formData.representation, ...patch })}
+            onBack={() => goTo('property-docs')}
             onContinue={() => {
               const loc = formData.location ?? formData.representation?.location ?? null;
-              goTo(loc === 'other'
-                ? (hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')
-                : 'representation');
+              goTo(
+                loc === 'other'
+                  ? (
+                    hasEnergyCertificateDecision(formData.energyCertificate)
+                      ? 'review'
+                      : 'energy-certificate'
+                  )
+                  : 'representation'
+              );
             }}
           />
         );
@@ -567,7 +582,11 @@ function FormApp() {
             location={formData.location ?? formData.representation.location ?? null}
             onChange={setRepresentation}
             onBack={() => goTo('province-selection')}
-            onContinue={() => goTo(hasEnergyCertificateDecision(formData) ? 'review' : 'energy-certificate')}
+            onContinue={() => goTo(
+              hasEnergyCertificateDecision(formData.energyCertificate)
+                ? 'review'
+                : 'energy-certificate'
+            )}
           />
         );
 
@@ -586,7 +605,7 @@ function FormApp() {
               const energyLoc = formData.location ?? formData.representation?.location ?? null;
               goTo(energyLoc === 'other' ? 'province-selection' : 'representation');
             }}
-            onContinue={() => { setAutoSubmitReview(true); goTo('review'); }}
+            onContinue={() => goTo('review')}
           />
         );
 
@@ -600,7 +619,6 @@ function FormApp() {
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}
             onEdit={(s: string) => {
-              setAutoSubmitReview(false);
               const [sectionName, docTarget] = s.split(':');
               setPropertyDocsTarget(docTarget || undefined);
               goTo(sectionName as Section);
@@ -618,8 +636,7 @@ function FormApp() {
               }
               goTo('success');
             }}
-            onBack={followUpDocumentFlow ? undefined : () => { setAutoSubmitReview(false); goTo('energy-certificate'); }}
-            autoSubmit={autoSubmitReview}
+            onBack={followUpDocumentFlow ? undefined : () => goTo('energy-certificate')}
           />
         );
       }

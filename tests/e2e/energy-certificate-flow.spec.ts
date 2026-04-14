@@ -4,7 +4,7 @@ const EC05_CODE = 'ELT20250005';
 const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 async function openEnergyCertificate(page: Page) {
-  await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+  await expect(page.locator('h1, h2').first()).toContainText(/Confirma tu documentación|Sube lo que falte y confirma/);
   await page.getByRole('button', { name: /certificado energético/i }).click();
   await expect(page.locator('h1').first()).toContainText('Certificado energético');
 }
@@ -50,7 +50,10 @@ test.describe('Energy Certificate Flow Tests', () => {
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
 
-    // After skipping with everything else complete, the flow auto-submits to success.
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await expect(page.getByText(/El certificado energético es opcional y no bloquea el envío inicial/i)).toBeVisible();
+    await page.getByTestId('review-submit-btn').click();
+
     await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 
@@ -107,7 +110,10 @@ test.describe('Energy Certificate Flow Tests', () => {
     await skipBtn.click();
     await page.waitForLoadState('networkidle');
 
-    // With all required steps resolved, skipping the EC auto-submits to success.
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await expect(page.getByText(/El certificado energético es opcional y no bloquea el envío inicial/i)).toBeVisible();
+    await page.getByTestId('review-submit-btn').click();
+
     await expect(page.locator('h1').first()).toContainText('¡Todo listo');
   });
 });

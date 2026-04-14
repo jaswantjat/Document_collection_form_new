@@ -472,6 +472,10 @@ export function EnergyCertificateSection({
             </button>
           </div>
 
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-eltex-blue">
+            Este paso es opcional. Si no lo tienes ahora, puedes saltarlo y enviar el resto.
+          </div>
+
           <div className="relative">
             <div className="flex items-center justify-between">
               {STEPS.map((step, index) => {

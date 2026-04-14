@@ -6,7 +6,7 @@ import { clearSubmissionAttempt, getOrCreateSubmissionAttempt } from '@/lib/subm
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
-import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { getCustomerEnergyFlowStatus } from '@/lib/energyCertificateFlow';
 import { FinancingCtaCard } from '@/components/FinancingCtaCard';
 import { resolveFinancingCta } from '@/lib/financing';
 
@@ -20,7 +20,6 @@ interface Props {
   onEdit: (section: string) => void;
   onSuccess: () => void;
   onBack?: () => void;
-  autoSubmit?: boolean;
 }
 
 function hasRequiredSignatures(formData: FormData): boolean {
@@ -44,6 +43,7 @@ interface ChecklistItem {
   status: ChecklistStatus;
   section: string;
   actionLabel: string;
+  resolved: boolean;
 }
 
 type PreUploadStatus = 'uploading' | 'retrying' | 'ready' | 'error';
@@ -57,14 +57,11 @@ export function ReviewSection({
   onEdit,
   onSuccess,
   onBack,
-  autoSubmit = false,
 }: Props) {
-  const [submitting, setSubmitting] = useState(autoSubmit);
+  const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
   const submitInProgress = useRef(false);
-  const autoSubmitFired = useRef(false);
-  const autoSubmitProp = useRef(autoSubmit);
   const energyCertPreRender = useRef<Promise<RenderedDocumentAsset> | null>(null);
   const preUploadPromise = useRef<Promise<boolean> | null>(null);
   const preUploadDone = useRef(false);
@@ -86,11 +83,7 @@ export function ReviewSection({
   const ibiIssue = ibi.issue ?? null;
   const electricityIssue = electricityBill.issue ?? null;
 
-  const rawEnergyStatus = formData.energyCertificate.status;
-  const energyStatus =
-    rawEnergyStatus === 'completed' && !isEnergyCertificateReadyToComplete(formData.energyCertificate)
-      ? ('in-progress' as const)
-      : rawEnergyStatus;
+  const energyStatus = getCustomerEnergyFlowStatus(formData.energyCertificate);
 
   const dniDoneLabel = getIdentityDocumentDoneLabel(dni);
   const getIssueHint = (issue: { message: string } | null, fallback: string) => issue?.message || fallback;
@@ -107,6 +100,7 @@ export function ReviewSection({
       status: (dniDone ? (dniIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
+      resolved: dniDone,
     },
     {
       id: 'ibi',
@@ -119,6 +113,7 @@ export function ReviewSection({
       status: (ibiBool ? (ibiIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
+      resolved: ibiBool,
     },
     {
       id: 'electricity',
@@ -136,6 +131,7 @@ export function ReviewSection({
       status: (electricityBool ? (electricityIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
       section: 'property-docs',
       actionLabel: 'Subir',
+      resolved: electricityBool,
     },
   ];
 
@@ -156,6 +152,7 @@ export function ReviewSection({
     status: signaturesOk ? 'done' : formData.representation?.signatureDeferred ? 'attention' : 'pending',
     section: 'representation',
     actionLabel: 'Firmar',
+    resolved: signaturesOk,
   } : null;
 
   const energyItem: ChecklistItem = {
@@ -163,22 +160,23 @@ export function ReviewSection({
     description: energyStatus === 'completed'
       ? 'Certificado energético — confirmado'
       : energyStatus === 'skipped'
-        ? 'Certificado energético — saltado por cliente'
-        : 'Certificado energético — pendiente',
+        ? 'Certificado energético opcional — lo completarás más tarde'
+        : 'Certificado energético opcional',
     hint: energyStatus === 'completed'
       ? 'Toca para revisar o actualizar el certificado firmado'
       : energyStatus === 'skipped'
-        ? 'Puedes completarlo más tarde desde este mismo enlace'
-        : 'Completa el formulario del certificado energético',
+        ? 'No bloquea el envío inicial. Puedes retomarlo más tarde desde este mismo enlace.'
+        : 'Es opcional. Puedes hacerlo ahora o seguir y enviarlo más tarde desde este mismo enlace.',
     label: energyStatus === 'completed'
       ? 'Certificado energético — confirmado'
       : energyStatus === 'skipped'
-        ? 'Certificado energético — saltado'
-        : 'Certificado energético',
+        ? 'Certificado energético — opcional'
+        : 'Certificado energético — opcional',
     icon: FileText,
     status: energyStatus === 'completed' ? 'done' : energyStatus === 'skipped' ? 'attention' : 'pending',
     section: 'energy-certificate',
-    actionLabel: 'Completar',
+    actionLabel: 'Abrir',
+    resolved: energyStatus !== 'pending',
   };
 
   const allChecklistItems: ChecklistItem[] = [
@@ -187,14 +185,14 @@ export function ReviewSection({
     energyItem,
   ];
 
-  const pendingItems = allChecklistItems.filter(i => i.status === 'pending');
-  const attentionItems = allChecklistItems.filter(i => i.status === 'attention');
-  const doneItems = allChecklistItems.filter(i => i.status === 'done');
+  const pendingItems = allChecklistItems.filter((item) => item.status === 'pending');
+  const attentionItems = allChecklistItems.filter((item) => item.status === 'attention');
+  const doneItems = allChecklistItems.filter((item) => item.status === 'done');
 
   const docsAllDone = dniDone && ibiBool && electricityBool;
-  const doneCount = doneItems.length;
+  const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
-  const progressPct = Math.round((doneCount / totalCount) * 100);
+  const progressPct = Math.round((resolvedCount / totalCount) * 100);
   const financingCta = resolveFinancingCta({ project, formData });
   const preUploadMessage = preUploadStatus === 'uploading'
     ? 'Subiendo archivos en segundo plano para que el envío final sea más rápido.'
@@ -255,13 +253,6 @@ export function ReviewSection({
       setSubmitting(false);
     }
   };
-
-  useEffect(() => {
-    if (!autoSubmitProp.current || autoSubmitFired.current) return;
-    autoSubmitFired.current = true;
-    submit();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (formData.energyCertificate.status !== 'completed') return;
@@ -337,7 +328,7 @@ export function ReviewSection({
           <div className="flex items-center justify-between mb-3">
             <img src="/eltex-logo.png" alt="Eltex" className="h-6 object-contain" />
             <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-              {doneCount} de {totalCount} completados
+              {resolvedCount} de {totalCount} listos
             </span>
           </div>
           <h2 className="text-xl font-bold text-gray-900">
@@ -350,6 +341,11 @@ export function ReviewSection({
               ? 'Revisa el estado de cada documento y confirma.'
               : 'Revisa cada punto antes de enviar.'}
           </p>
+          {energyStatus !== 'completed' && (
+            <p className="text-xs text-gray-500 mt-2">
+              El certificado energético es opcional y no bloquea el envío inicial.
+            </p>
+          )}
           <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-eltex-blue rounded-full transition-all duration-500"

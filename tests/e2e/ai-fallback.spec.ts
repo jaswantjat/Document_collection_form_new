@@ -202,6 +202,8 @@ test.describe('AI fallback', () => {
     await page.getByTestId('property-docs-continue-btn').click();
     await expect(page.locator('h1').first()).toContainText('Certificado energético');
     await page.getByRole('button', { name: /saltar/i }).click();
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación', { timeout: 30000 });
+    await page.getByTestId('review-submit-btn').click();
     await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 30000 });
     expect(extractionCalls).toBeGreaterThan(0);
   });

@@ -63,6 +63,8 @@ test.describe('Low-network resilience', () => {
 
     await openEnergyCertificate(page);
     await page.getByRole('button', { name: /saltar/i }).click();
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación', { timeout: 30000 });
+    await page.getByTestId('review-submit-btn').click();
 
     await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 30000 });
     await expect(page.getByText(/hemos recibido tu documentación correctamente/i)).toBeVisible({ timeout: 30000 });
@@ -102,6 +104,8 @@ test.describe('Low-network resilience', () => {
 
     await openEnergyCertificate(page);
     await page.getByRole('button', { name: /saltar/i }).click();
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación', { timeout: 30000 });
+    await page.getByTestId('review-submit-btn').click();
 
     await expect(page.getByText(/sin conexión/i)).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: /reintentar envío/i }).click();
