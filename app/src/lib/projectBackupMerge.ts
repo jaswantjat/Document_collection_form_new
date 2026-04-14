@@ -71,6 +71,9 @@ export function mergeProjectWithDeviceBackup(
       extraction: serverData.contract?.extraction ?? null,
       issue: serverData.contract?.issue ?? backupData.contract?.issue ?? null,
     },
+    additionalBankDocuments: (backupData.additionalBankDocuments?.length ?? 0) > 0
+      ? backupData.additionalBankDocuments
+      : (serverData.additionalBankDocuments ?? []),
     energyCertificate: {
       ...serverData.energyCertificate,
       renderedDocument: backupData.energyCertificate.renderedDocument?.imageDataUrl

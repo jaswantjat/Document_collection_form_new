@@ -355,6 +355,7 @@ const ASSET_FIELDS = [
   { name: 'dniBack', maxCount: 1 },
   ...buildIndexedAssetFields('ibi', 5),
   ...buildIndexedAssetFields('electricity', 5),
+  ...buildIndexedAssetFields('bankDocument', 25),
   ...PROPERTY_PHOTO_ASSET_KEYS.flatMap((key) => buildIndexedAssetFields(key, 20)),
   { name: 'energyCert', maxCount: 1 },
   ...buildIndexedAssetFields('dniOriginal', 5),

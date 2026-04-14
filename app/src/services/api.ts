@@ -5,6 +5,7 @@ import type {
   UploadedPhoto,
   StoredDocumentFile,
 } from '@/types';
+import { withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocuments';
 import { getPropertyPhotoGroups, type PropertyPhotoFormData } from '@/lib/propertyPhotoGroups';
 
 const API_BASE = '/api';
@@ -81,12 +82,12 @@ function appendDataUrl(fd: globalThis.FormData, fieldName: string, dataUrl: stri
   return true;
 }
 
-function appendStoredPdf(fd: globalThis.FormData, fieldName: string, pdf: StoredDocumentFile): boolean {
-  if (!pdf?.dataUrl) return false;
-  const blob = dataUrlToBlob(pdf.dataUrl);
+function appendStoredDocument(fd: globalThis.FormData, fieldName: string, file: StoredDocumentFile): boolean {
+  if (!file?.dataUrl) return false;
+  const blob = dataUrlToBlob(file.dataUrl);
   if (!blob) return false;
-  const ext = pdf.mimeType === 'application/pdf' ? '.pdf' : '.jpg';
-  fd.append(fieldName, blob, pdf.filename || `${fieldName}${ext}`);
+  const ext = file.mimeType === 'application/pdf' ? '.pdf' : file.mimeType === 'image/png' ? '.png' : '.jpg';
+  fd.append(fieldName, blob, file.filename || `${fieldName}${ext}`);
   return true;
 }
 
@@ -121,19 +122,20 @@ function pushDataUrlDescriptor(
   });
 }
 
-function pushStoredPdfDescriptors(
+function pushStoredDocumentDescriptors(
   descriptors: UploadAssetDescriptor[],
   fieldPrefix: string,
-  pdfs: StoredDocumentFile[] | null | undefined
+  files: StoredDocumentFile[] | null | undefined
 ): void {
-  if (!Array.isArray(pdfs)) return;
-  pdfs.forEach((pdf, i) => {
-    if (!pdf?.dataUrl) return;
+  if (!Array.isArray(files)) return;
+  files.forEach((file, i) => {
+    if (!file) return;
     const fieldName = `${fieldPrefix}_${i}`;
+    const dataFingerprint = file?.dataUrl ? dataUrlFingerprint(file.dataUrl) : 'asset-only';
     descriptors.push({
       fieldName,
-      fingerprint: `pdf:${pdf.id}:${pdf.filename}:${pdf.sizeBytes}:${dataUrlFingerprint(pdf.dataUrl)}`,
-      append: (fd) => appendStoredPdf(fd, fieldName, pdf),
+      fingerprint: `file:${file?.id}:${file?.filename}:${file?.mimeType}:${file?.sizeBytes}:${file?.timestamp}:${dataFingerprint}`,
+      append: (fd) => appendStoredDocument(fd, fieldName, file),
     });
   });
 }
@@ -171,9 +173,20 @@ function buildAssetUploadDescriptors(formData: AppFormData): UploadAssetDescript
     );
   }
 
-  pushStoredPdfDescriptors(descriptors, 'dniOriginal', formData.dni?.originalPdfs);
-  pushStoredPdfDescriptors(descriptors, 'ibiOriginal', formData.ibi?.originalPdfs);
-  pushStoredPdfDescriptors(descriptors, 'electricityOriginal', formData.electricityBill?.originalPdfs);
+  pushStoredDocumentDescriptors(descriptors, 'dniOriginal', formData.dni?.originalPdfs);
+  pushStoredDocumentDescriptors(descriptors, 'ibiOriginal', formData.ibi?.originalPdfs);
+  pushStoredDocumentDescriptors(descriptors, 'electricityOriginal', formData.electricityBill?.originalPdfs);
+
+  withAdditionalBankDocumentAssetKeys(formData.additionalBankDocuments).forEach((entry) => {
+    entry.files.forEach((file) => {
+      if (!file.assetKey) return;
+      descriptors.push({
+        fieldName: file.assetKey,
+        fingerprint: `bank:${entry.id}:${entry.type}:${entry.customLabel ?? ''}:${file.id}:${file.filename}:${file.mimeType}:${file.sizeBytes}:${file.timestamp}:${file.dataUrl ? dataUrlFingerprint(file.dataUrl) : 'asset-only'}`,
+        append: (fd) => appendStoredDocument(fd, file.assetKey!, file),
+      });
+    });
+  });
 
   return descriptors;
 }

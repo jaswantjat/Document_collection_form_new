@@ -304,6 +304,7 @@ describe('preUploadAssets', () => {
       ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
       electricityBill: { pages: [], originalPdfs: [] },
       contract: { originalPdfs: [], extraction: null },
+      additionalBankDocuments: [],
       representation: {} as Parameters<typeof preUploadAssets>[1]['representation'],
       energyCertificate: { status: 'not-started' } as Parameters<typeof preUploadAssets>[1]['energyCertificate'],
       signatures: { customerSignature: null, repSignature: null },
@@ -378,6 +379,62 @@ describe('preUploadAssets', () => {
 
     expect(entries.some(([key]) => key === 'roof_0')).toBe(true);
     expect(entries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['dniFront', 'roof_0']));
+  });
+
+  it('uploads additional bank document assets with sequential bankDocument keys', async () => {
+    mockFetch({ success: true, savedKeys: ['dniFront', 'bankDocument_0'] });
+
+    await preUploadAssets('ELT-UPLOAD-005', {
+      ...makeFormData(),
+      additionalBankDocuments: [{
+        id: 'bank-doc-1',
+        type: 'payroll',
+        files: [{
+          id: 'bank-file-1',
+          filename: 'nomina-marzo.pdf',
+          mimeType: 'application/pdf',
+          dataUrl: 'data:application/pdf;base64,ZmFrZQ==',
+          timestamp: 3,
+          sizeBytes: 12,
+        }],
+      }],
+    } as Parameters<typeof preUploadAssets>[1]);
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const requestBody = fetchMock.mock.calls[0][1].body as FormData;
+    const entries = Array.from(requestBody.entries());
+
+    expect(entries.some(([key]) => key === 'bankDocument_0')).toBe(true);
+    expect(entries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['dniFront', 'bankDocument_0']));
+  });
+
+  it('keeps additional bank document manifest keys even when the binary data was already stripped', async () => {
+    mockFetch({ success: true, savedKeys: ['bankDocument_0'] });
+
+    await preUploadAssets('ELT-UPLOAD-006', {
+      ...makeFormData(),
+      dni: { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] },
+      additionalBankDocuments: [{
+        id: 'bank-doc-2',
+        type: 'other',
+        customLabel: 'IRPF 2024',
+        files: [{
+          id: 'bank-file-2',
+          filename: 'irpf-2024.pdf',
+          mimeType: 'application/pdf',
+          dataUrl: '' as unknown as string,
+          timestamp: 4,
+          sizeBytes: 20,
+          assetKey: 'bankDocument_0',
+        }],
+      }],
+    } as Parameters<typeof preUploadAssets>[1]);
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const requestBody = fetchMock.mock.calls[0][1].body as FormData;
+    const entries = Array.from(requestBody.entries());
+
+    expect(entries).toEqual([['activeKeys', '["bankDocument_0"]']]);
   });
 });
 

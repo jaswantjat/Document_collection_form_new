@@ -16,13 +16,14 @@ test('normalizeActiveAssetKeys returns null when the client did not send a manif
 });
 
 test('normalizeActiveAssetKeys keeps only managed keys and deduplicates them', () => {
-  const result = normalizeActiveAssetKeys(JSON.stringify(['dniFront', 'ibi_0', 'roof_0', 'dniFront', 'not-real']));
-  assert.deepEqual(result, ['dniFront', 'ibi_0', 'roof_0']);
+  const result = normalizeActiveAssetKeys(JSON.stringify(['dniFront', 'ibi_0', 'bankDocument_0', 'roof_0', 'dniFront', 'not-real']));
+  assert.deepEqual(result, ['dniFront', 'ibi_0', 'bankDocument_0', 'roof_0']);
 });
 
 test('isManagedAssetKey recognizes exact and prefixed asset keys', () => {
   assert.equal(isManagedAssetKey('dniFront'), true);
   assert.equal(isManagedAssetKey('electricity_3'), true);
+  assert.equal(isManagedAssetKey('bankDocument_0'), true);
   assert.equal(isManagedAssetKey('roof_2'), true);
   assert.equal(isManagedAssetKey('randomField'), false);
 });

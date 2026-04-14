@@ -7,6 +7,7 @@ const MANAGED_ASSET_PREFIXES = [
   'dniOriginal_',
   'ibiOriginal_',
   'electricityOriginal_',
+  'bankDocument_',
   'electricalPanel_',
   'roof_',
   'installationSpace_',

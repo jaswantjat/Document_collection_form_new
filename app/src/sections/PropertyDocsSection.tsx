@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import { getPropertyDocsProgress } from '@/lib/propertyDocsProgress';
+import { AdditionalBankDocumentsCard } from '@/sections/property-docs/AdditionalBankDocumentsCard';
 import type {
+  AdditionalBankDocumentEntry,
   IBIData,
   ElectricityBillData,
   DNIData,
@@ -23,6 +25,7 @@ interface Props {
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
+  additionalBankDocuments: AdditionalBankDocumentEntry[];
   followUpMode?: boolean;
   errors: FormErrors;
   documentProcessing: Record<DocumentSlotKey, DocumentProcessingState>;
@@ -39,6 +42,9 @@ interface Props {
   onAddElectricityPages: (photos: UploadedPhoto[], extraction: AIExtraction | null, originalPdfs: StoredDocumentFile[]) => void;
   onRemoveElectricityPage: (index: number) => void;
   onElectricityIssueChange: (issue: ElectricityBillData['issue']) => void;
+  onAddAdditionalBankDocuments: (entries: AdditionalBankDocumentEntry[]) => void;
+  onReplaceAdditionalBankDocument: (entryId: string, replacement: AdditionalBankDocumentEntry) => void;
+  onRemoveAdditionalBankDocument: (entryId: string) => void;
   onDocumentProcessingChange: (slot: DocumentSlotKey, state: DocumentProcessingState) => void;
   scrollToDoc?: string;
   onBack?: () => void;
@@ -1420,6 +1426,7 @@ export function PropertyDocsSection({
   dni,
   ibi,
   electricityBill,
+  additionalBankDocuments,
   followUpMode = false,
   errors,
   documentProcessing,
@@ -1435,6 +1442,9 @@ export function PropertyDocsSection({
   onAddElectricityPages,
   onRemoveElectricityPage,
   onElectricityIssueChange,
+  onAddAdditionalBankDocuments,
+  onReplaceAdditionalBankDocument,
+  onRemoveAdditionalBankDocument,
   onDocumentProcessingChange,
   scrollToDoc,
   onBack,
@@ -1600,6 +1610,13 @@ export function PropertyDocsSection({
             />
           )}
         </div>
+
+        <AdditionalBankDocumentsCard
+          documents={additionalBankDocuments}
+          onAddDocuments={onAddAdditionalBankDocuments}
+          onReplaceDocument={onReplaceAdditionalBankDocument}
+          onRemoveDocument={onRemoveAdditionalBankDocument}
+        />
 
         {/* Cross-document validation warnings */}
         {validationWarnings.map((warning, i) => (

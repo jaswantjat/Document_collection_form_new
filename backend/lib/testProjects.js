@@ -11,6 +11,7 @@ function buildBaseFlowFormData() {
     ibi: { photo: 'data:image/jpeg;base64,/9j/TEST_IBI', pages: [], originalPdfs: [], extraction: null, issue: null },
     electricityBill: { pages: [{ photo: 'data:image/jpeg;base64,/9j/TEST_BILL', extraction: null }], originalPdfs: [], issue: null },
     contract: null,
+    additionalBankDocuments: [],
     location: 'other',
     representation: { location: 'other', isCompany: false, companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '', postalCode: '', ivaPropertyAddress: '', ivaCertificateSignature: null, representacioSignature: null, generalitatRole: 'titular', generalitatSignature: null, poderRepresentacioSignature: null, ivaCertificateEsSignature: null, renderedDocuments: {} },
     signatures: {},

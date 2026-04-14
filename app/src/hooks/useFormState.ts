@@ -4,9 +4,11 @@ import type {
   FormData, FormErrors, UploadedPhoto,
   AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
   StoredDocumentFile, EnergyCertificateData, ContractData, DocumentIssue,
+  AdditionalBankDocumentEntry,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
 import { saveProgress, preUploadAssets } from '@/services/api';
+import { normalizeAdditionalBankDocuments, withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocuments';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 
@@ -105,6 +107,7 @@ export const initialFormData: FormData = {
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null, issue: null },
   electricityBill: { pages: [], originalPdfs: [], issue: null },
   contract: emptyContractData(),
+  additionalBankDocuments: [],
   browserLanguage: typeof navigator !== 'undefined' ? navigator.language : undefined,
   energyCertificate: {
     status: 'not-started',
@@ -240,6 +243,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       extraction: savedFormData?.contract?.extraction ?? null,
       issue: savedFormData?.contract?.issue ?? null,
     },
+    additionalBankDocuments: withAdditionalBankDocumentAssetKeys(savedFormData?.additionalBankDocuments),
     energyCertificate: normalizedEc,
     signatures: {
       ...initialFormData.signatures,
@@ -378,6 +382,12 @@ export const useFormState = (
     formData.ibi?.photo?.preview?.slice(0, 40) ?? '',
     (formData.ibi?.pages?.length ?? 0),
     (formData.electricityBill?.pages?.length ?? 0),
+    ...(formData.additionalBankDocuments ?? []).flatMap((entry) => [
+      entry.id,
+      entry.type,
+      entry.customLabel ?? '',
+      ...entry.files.map((file) => `${file.filename}:${file.sizeBytes}:${file.dataUrl.length}`),
+    ]),
   ].join('|');
   const lastPhotoFingerprint = useRef('');
   useEffect(() => {
@@ -555,6 +565,37 @@ export const useFormState = (
     setFormData(prev => ({ ...prev, contract }));
   }, []);
 
+  const addAdditionalBankDocuments = useCallback((entries: AdditionalBankDocumentEntry[]) => {
+    if (entries.length === 0) return;
+    setFormData((prev) => ({
+      ...prev,
+      additionalBankDocuments: withAdditionalBankDocumentAssetKeys([
+        ...normalizeAdditionalBankDocuments(prev.additionalBankDocuments),
+        ...normalizeAdditionalBankDocuments(entries),
+      ]),
+    }));
+  }, []);
+
+  const replaceAdditionalBankDocument = useCallback((entryId: string, replacement: AdditionalBankDocumentEntry) => {
+    setFormData((prev) => ({
+      ...prev,
+      additionalBankDocuments: withAdditionalBankDocumentAssetKeys(
+        normalizeAdditionalBankDocuments(prev.additionalBankDocuments).map((entry) => (
+          entry.id === entryId ? replacement : entry
+        ))
+      ),
+    }));
+  }, []);
+
+  const removeAdditionalBankDocument = useCallback((entryId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      additionalBankDocuments: withAdditionalBankDocumentAssetKeys(
+        normalizeAdditionalBankDocuments(prev.additionalBankDocuments).filter((entry) => entry.id !== entryId)
+      ),
+    }));
+  }, []);
+
   // Representation
   const setRepresentation = useCallback((rep: RepresentationData) => {
     setFormData(prev => {
@@ -678,6 +719,7 @@ export const useFormState = (
     setElectricityIssue,
     addElectricityPages, removeElectricityPage, setElectricityPageProcessing,
     setContract,
+    addAdditionalBankDocuments, replaceAdditionalBankDocument, removeAdditionalBankDocument,
     setLocation,
     setRepresentation,
     setEnergyCertificate,
