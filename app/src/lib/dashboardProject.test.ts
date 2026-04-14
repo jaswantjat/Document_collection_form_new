@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  getDashboardAdditionalBankDocumentAssets,
   getDashboardDocuments,
   getDashboardElectricityPages,
   getDashboardEnergyCertificateSummary,
@@ -434,6 +435,81 @@ describe('getDashboardPhotoGroups — preview and asset fallback', () => {
     expect(groups[0].items).toHaveLength(2);
     expect(groups[0].items[0].dataUrl).toBe('/uploads/assets/ELT001/roof_0.jpg');
     expect(groups[0].items[1].mimeType).toBe('image/png');
+  });
+});
+
+describe('getDashboardAdditionalBankDocumentAssets', () => {
+  it('returns inline and asset-backed additional bank documents with stable labels', () => {
+    const assets = getDashboardAdditionalBankDocumentAssets({
+      formData: {
+        additionalBankDocuments: [
+          {
+            id: 'ownership',
+            type: 'bank-ownership-certificate',
+            files: [{
+              id: 'ownership-file',
+              filename: 'ownership.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+          },
+          {
+            id: 'other',
+            type: 'other',
+            customLabel: 'IRPF 2024',
+            files: [{
+              id: 'other-file',
+              filename: 'irpf.png',
+              mimeType: 'image/png',
+              dataUrl: '',
+              assetKey: 'bank-doc-other',
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+          },
+        ],
+      },
+      assetFiles: {
+        'bank-doc-other': '/uploads/assets/ELT001/bank-doc-other.png',
+      },
+    });
+
+    expect(assets).toHaveLength(2);
+    expect(assets[0]).toMatchObject({
+      label: 'Certificado de titularidad bancaria',
+      mimeType: 'application/pdf',
+    });
+    expect(assets[1]).toMatchObject({
+      label: 'IRPF 2024',
+      dataUrl: '/uploads/assets/ELT001/bank-doc-other.png',
+      mimeType: 'image/png',
+    });
+  });
+
+  it('adds additional bank documents to quick downloads without affecting document counts', () => {
+    const summary = getDashboardProjectSummary({
+      formData: {
+        additionalBankDocuments: [
+          {
+            id: 'payroll',
+            type: 'payroll',
+            files: [{
+              id: 'payroll-file',
+              filename: 'payroll.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+          },
+        ],
+      },
+    });
+
+    expect(summary.downloadGroups.some((group) => group.key === 'additional-bank-documents')).toBe(true);
+    expect(summary.counts.documentsTotal).toBe(4);
   });
 });
 

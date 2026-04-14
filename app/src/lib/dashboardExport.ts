@@ -1,6 +1,9 @@
 import type { ProjectData, StoredDocumentFile } from '@/types';
 import type { DashboardAssetGroup, DashboardSignedPdfItem } from '@/lib/dashboardProject';
-import { getDashboardProjectSummary } from '@/lib/dashboardProject';
+import {
+  getDashboardAdditionalBankDocumentAssets,
+  getDashboardProjectSummary,
+} from '@/lib/dashboardProject';
 import {
   buildEnergyCertificatePdfFactory,
   buildSignedPdfFactory,
@@ -160,6 +163,7 @@ function documentEntries(project: DashboardProjectExportSource) {
     ...getDocumentAssetsFromProject(project, 'dniBack'),
     ...getDocumentAssetsFromProject(project, 'ibi'),
     ...getElectricityAssetsFromProject(project),
+    ...getDashboardAdditionalBankDocumentAssets(project),
   ].map((asset) => {
     const ext = extensionFromMimeType(asset.mimeType, asset.dataUrl);
     const filename = `${buildLabelFilenameStem(asset.label)}.${ext}`;

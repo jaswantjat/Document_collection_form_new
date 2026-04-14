@@ -205,6 +205,52 @@ describe('listDashboardExportEntries', () => {
     expect(archivePaths.some((path) => path.includes('generalitat'))).toBe(false);
   });
 
+  it('includes additional bank documents in the documents folder', () => {
+    const project = makeProject('cataluna');
+    project.formData = {
+      ...project.formData!,
+      additionalBankDocuments: [
+        {
+          id: 'ownership',
+          type: 'bank-ownership-certificate',
+          files: [{
+            id: 'ownership-file',
+            filename: 'ownership.pdf',
+            mimeType: 'application/pdf',
+            dataUrl: makeDataUrl('ownership', 'application/pdf'),
+            timestamp: 1,
+            sizeBytes: 100,
+          }],
+        },
+        {
+          id: 'other',
+          type: 'other',
+          customLabel: 'IRPF 2024',
+          files: [{
+            id: 'other-file',
+            filename: 'irpf.png',
+            mimeType: 'image/png',
+            dataUrl: '',
+            assetKey: 'bank-doc-other',
+            timestamp: 1,
+            sizeBytes: 100,
+          }],
+        },
+      ],
+    } as DashboardProjectExportSource['formData'] & Record<string, unknown>;
+    project.assetFiles = {
+      ...project.assetFiles,
+      'bank-doc-other': '/uploads/assets/ELTZIP001/bank-doc-other.png',
+    };
+
+    const archivePaths = listDashboardExportEntries(project).map((entry) => entry.archivePath);
+
+    expect(archivePaths).toEqual(expect.arrayContaining([
+      '1_documentos/certificado_de_titularidad_bancaria.pdf',
+      '1_documentos/irpf_2024.png',
+    ]));
+  });
+
   it('omits pending or empty optional artifacts', () => {
     const project = makeProject('cataluna');
     project.formData = {

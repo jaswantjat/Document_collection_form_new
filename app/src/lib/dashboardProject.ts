@@ -5,6 +5,10 @@ import {
   type SignedDocumentKind,
 } from '@/lib/signedDocumentOverlays';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import {
+  getAdditionalBankDocumentFileLabel,
+  normalizeAdditionalBankDocuments,
+} from '@/lib/additionalBankDocuments';
 import { getPropertyPhotoGroups } from '@/lib/propertyPhotoGroups';
 
 export type DashboardDocumentKey = string;
@@ -385,6 +389,46 @@ export function getDashboardFinalSignatureAssets(project: any): DashboardAssetIt
   ].filter(Boolean) as DashboardAssetItem[];
 }
 
+function resolveAdditionalBankDocumentSource(
+  file: { dataUrl?: string; assetKey?: string },
+  assetFiles: Record<string, string>,
+) {
+  if (typeof file?.dataUrl === 'string' && file.dataUrl) return file.dataUrl;
+  if (typeof file?.assetKey === 'string' && file.assetKey && assetFiles[file.assetKey]) {
+    return assetFiles[file.assetKey];
+  }
+  return null;
+}
+
+function resolveAdditionalBankDocumentMimeType(
+  file: { mimeType?: string; assetKey?: string },
+  source: string | null,
+  assetFiles: Record<string, string>,
+) {
+  if (typeof file?.mimeType === 'string' && file.mimeType) return file.mimeType;
+  if (typeof file?.assetKey === 'string' && file.assetKey && assetFiles[file.assetKey]) {
+    return getPathMimeType(assetFiles[file.assetKey]);
+  }
+  return getMimeType(source);
+}
+
+export function getDashboardAdditionalBankDocumentAssets(project: any): DashboardAssetItem[] {
+  const assetFiles = project?.assetFiles || {};
+  const documents = normalizeAdditionalBankDocuments(project?.formData?.additionalBankDocuments);
+
+  return documents.flatMap((entry) => entry.files.flatMap((file, index) => {
+    const source = resolveAdditionalBankDocumentSource(file, assetFiles);
+    if (!source) return [];
+
+    return [{
+      key: file.id || `${entry.id}-${index}`,
+      label: getAdditionalBankDocumentFileLabel(entry, index),
+      dataUrl: source,
+      mimeType: resolveAdditionalBankDocumentMimeType(file, source, assetFiles),
+    }];
+  }));
+}
+
 export function getDashboardPhotoGroups(project: any): DashboardAssetGroup[] {
   const assetFiles = project?.assetFiles || {};
 
@@ -451,9 +495,11 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
 
   const photoGroups = getDashboardPhotoGroups(project);
   const finalSignatures = getDashboardFinalSignatureAssets(project);
+  const additionalBankDocuments = getDashboardAdditionalBankDocumentAssets(project);
 
   return [
     { key: 'documents', label: 'Documentos', items: [...primaryDocuments, ...ibiItems, ...electricityItems] },
+    { key: 'additional-bank-documents', label: 'Documentos bancarios adicionales', items: additionalBankDocuments },
     { key: 'photos', label: 'Fotos del inmueble', items: photoGroups.flatMap((group) => group.items) },
     { key: 'final-signatures', label: 'Firmas finales', items: finalSignatures },
   ].filter((group) => group.items.length > 0);

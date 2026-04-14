@@ -144,6 +144,36 @@ function makeDashboardFormData() {
   };
 }
 
+function makeAdditionalBankDocuments() {
+  return [
+    {
+      id: 'ownership',
+      type: 'bank-ownership-certificate',
+      files: [{
+        id: 'ownership-file',
+        filename: 'ownership.pdf',
+        mimeType: 'application/pdf',
+        dataUrl: makeDataUrl('ownership', 'application/pdf'),
+        timestamp: 1,
+        sizeBytes: 100,
+      }],
+    },
+    {
+      id: 'other',
+      type: 'other',
+      customLabel: 'IRPF 2024',
+      files: [{
+        id: 'other-file',
+        filename: 'irpf.png',
+        mimeType: 'image/png',
+        dataUrl: makeDataUrl('irpf', 'image/png'),
+        timestamp: 1,
+        sizeBytes: 100,
+      }],
+    },
+  ];
+}
+
 async function loginDashboard(request: any) {
   const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
     data: { password: 'eltex2025' },
@@ -392,6 +422,30 @@ test.describe('Dashboard QA', () => {
     const signatureDownload = page.waitForEvent('download');
     await modal.getByTitle('Descargar Firma cliente').first().click();
     expect((await signatureDownload).suggestedFilename()).toBe(`${code}_firma_cliente.png`);
+  });
+
+  test('detail modal exposes additional bank documents for download without redesigning the view', async ({ page, request }) => {
+    const code = await createDashboardProject(request, {
+      ...makeDashboardFormData(),
+      additionalBankDocuments: makeAdditionalBankDocuments(),
+    });
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await page.getByTestId('ver-expediente-btn').click();
+    const modal = page.getByTestId('project-detail-modal');
+    await expect(modal).toBeVisible();
+
+    await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
+    await expect(modal.getByText('Certificado de titularidad bancaria')).toBeVisible();
+    await expect(modal.getByText('IRPF 2024')).toBeVisible();
+
+    const bankDocDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar Certificado de titularidad bancaria').click();
+    expect((await bankDocDownload).suggestedFilename()).toBe(
+      `${code}_certificado_de_titularidad_bancaria.pdf`,
+    );
   });
 
   test('admin upload refreshes the dashboard and makes the new document downloadable', async ({ page, request }) => {

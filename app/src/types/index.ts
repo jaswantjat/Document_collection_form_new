@@ -37,6 +37,25 @@ export interface StoredDocumentFile {
   sizeBytes: number;
 }
 
+export type AdditionalBankDocumentType =
+  | 'bank-ownership-certificate'
+  | 'payroll'
+  | 'bank-statements'
+  | 'employment-contract'
+  | 'tax-return'
+  | 'other';
+
+export interface AdditionalBankDocumentFile extends StoredDocumentFile {
+  assetKey?: string;
+}
+
+export interface AdditionalBankDocumentEntry {
+  id: string;
+  type: AdditionalBankDocumentType;
+  customLabel?: string;
+  files: AdditionalBankDocumentFile[];
+}
+
 export type AIExtractionValue =
   | string
   | null
@@ -231,6 +250,7 @@ export interface FormData {
   ibi: IBIData;
   electricityBill: ElectricityBillData;
   contract?: ContractData;
+  additionalBankDocuments?: AdditionalBankDocumentEntry[];
   location?: LocationRegion;
   representation: RepresentationData;
   energyCertificate: EnergyCertificateData;
