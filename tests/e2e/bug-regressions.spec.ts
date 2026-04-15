@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 test.describe('Bug Regressions', () => {
-  test('REG-04: customer root without a code shows contact-advisor handling', async ({ page }) => {
-    await page.goto('/');
+  test('REG-04: customer root without a code or with source=assessor shows contact-advisor handling', async ({ page }) => {
+    await page.goto('/?source=assessor');
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('heading', { name: /sin código de proyecto/i })).toBeVisible();

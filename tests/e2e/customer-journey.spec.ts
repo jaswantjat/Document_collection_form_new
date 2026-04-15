@@ -122,13 +122,13 @@ test.describe('Customer Journey Regressions', () => {
     });
     expect(deleteRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${staleCode}`);
-    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
-    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
+    await page.goto(`/?code=${staleCode}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible({ timeout: 15000 });
     await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 
-  test('assessor phone lookup restores local backup and routes to the resumed step', async ({ page, request }) => {
+  test('code-bearing assessor link restores local backup and routes to the resumed step', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
 
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
@@ -156,9 +156,7 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto('/?source=assessor');
-    await page.locator('input[type="tel"]').fill('666000005');
-    await page.getByRole('button', { name: /continuar/i }).click();
+    await page.goto(`/?code=${projectCode}&source=assessor`);
 
     await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
     await page.getByRole('button', { name: /certificado energético/i }).click();

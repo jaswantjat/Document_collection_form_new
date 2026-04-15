@@ -1,12 +1,11 @@
 import { lazy, Suspense, useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Toaster } from 'sonner';
-import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
 import { useLocalStorageBackup, readLocalBackup, clearLocalBackup } from '@/hooks/useLocalStorageBackup';
 import { readIndexedDBBackup } from '@/hooks/useIndexedDBBackup';
 import { fetchProject } from '@/services/api';
-import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
@@ -210,10 +209,6 @@ function readSavedSection(code: string): Section | null {
   } catch { return null; }
 }
 
-function buildProjectUrl(code: string) {
-  return `/?code=${code}`;
-}
-
 function normalizeLoadedProject(project: ProjectData): ProjectData {
   return {
     ...project,
@@ -224,7 +219,6 @@ function normalizeLoadedProject(project: ProjectData): ProjectData {
 // ── Main Form App ─────────────────────────────────────────────────────────────
 function FormApp() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   const urlCode = searchParams.get('code') || searchParams.get('project');
   const urlToken = searchParams.get('token');
@@ -467,60 +461,9 @@ function FormApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, followUpDocumentFlow]);
 
-  const handlePhoneConfirmed = async (_phone: string, foundProject: ProjectData) => {
-    let normalizedProject = normalizeLoadedProject(foundProject);
-
-    // Merge any local backup so that photos the user uploaded earlier are
-    // restored immediately — the URL-based load path does this but the phone
-    // path previously skipped it, causing uploads to disappear on return.
-    const code = foundProject.code;
-    const serverTs = normalizedProject.lastActivity
-      ? new Date(normalizedProject.lastActivity).getTime()
-      : 0;
-
-    const localBackup = readLocalBackup(code);
-    const idbBackup = localBackup ? null : await readIndexedDBBackup(code);
-    const bestBackup = localBackup ?? idbBackup;
-
-    if (bestBackup) {
-      const backupFd = normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]);
-      const projectCreatedAt = normalizedProject.createdAt
-        ? new Date(normalizedProject.createdAt).getTime()
-        : 0;
-      const backupIsStale = projectCreatedAt > 0 && bestBackup.savedAt < projectCreatedAt - 1000;
-      if (backupIsStale) {
-        clearLocalBackup(code);
-      } else if (bestBackup.savedAt > serverTs + 500) {
-        normalizedProject = { ...normalizedProject, formData: backupFd };
-      } else {
-        normalizedProject = mergeProjectWithDeviceBackup(normalizedProject, backupFd);
-      }
-    }
-
-    setProject(normalizedProject);
-    navigate(buildProjectUrl(foundProject.code), { replace: true });
-    goTo(getInitialSection(normalizedProject, foundProject.code));
-  };
-
   const renderSection = () => {
     if (!urlCode) {
-      if (source === 'assessor') {
-        return (
-          <PhoneSection
-            onPhoneConfirmed={handlePhoneConfirmed}
-          />
-        );
-      }
-
       return <ErrorSection error="INVALID_CODE" />;
-    }
-
-    if (activeSection === 'phone') {
-      return (
-        <PhoneSection
-          onPhoneConfirmed={handlePhoneConfirmed}
-        />
-      );
     }
 
     if (activeLoading) return <LoadingSection />;
