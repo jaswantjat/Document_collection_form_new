@@ -24,6 +24,13 @@ type DashboardProjectRecord = ProjectData & {
   submissionCount?: number;
 };
 
+export interface DashboardProjectActionResult {
+  action: 'created' | 'opened' | 'resent';
+  existing: boolean;
+  project: ProjectData;
+  customerLink: string;
+}
+
 interface ExtractDocumentResponse {
   success: boolean;
   side?: 'front' | 'back';
@@ -325,6 +332,35 @@ export async function fetchDashboardProject(
   token: string
 ): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
+    headers: { 'x-dashboard-token': token },
+  });
+  return readJsonResponse(res);
+}
+
+export async function createDashboardProject(
+  data: {
+    phone: string;
+    customerName?: string;
+    email?: string;
+    productType?: string;
+    assessor: string;
+  },
+  token: string,
+): Promise<{ success: boolean; project?: ProjectData; existing?: boolean; customerLink?: string; message?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-dashboard-token': token },
+    body: JSON.stringify(data),
+  });
+  return readJsonResponse(res);
+}
+
+export async function resendDashboardProjectLink(
+  code: string,
+  token: string,
+): Promise<{ success: boolean; project?: ProjectData; customerLink?: string; message?: string; error?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}/resend`, {
+    method: 'POST',
     headers: { 'x-dashboard-token': token },
   });
   return readJsonResponse(res);

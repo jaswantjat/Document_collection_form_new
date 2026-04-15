@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_CODE = 'ELT20250001';
+const APPROVED_ASSESSOR = 'Sergi Guillen Cavero';
 const VALID_JPEG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/autoritzacio-representacio.jpg')).toString('base64');
 const VALID_PNG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/eltex-logo.png')).toString('base64');
 const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
@@ -424,5 +425,81 @@ test.describe('API Coverage', () => {
     const afterRes = await request.get(`${BASE}/api/project/ELT20250005?token=${encodeURIComponent(accessToken)}`, { timeout: 15000 });
     const afterBody = await afterRes.json();
     expect(afterBody.project.submissionCount).toBe(beforeSubmissionCount + 1);
+  });
+
+  test('API-07: dashboard create returns the secure customer link and reuses the existing project for duplicate phones', async ({ request }) => {
+    const dashToken = await loginDashboard(request);
+    const phone = uniquePhone();
+
+    const firstCreate = await request.post(`${BASE}/api/dashboard/project`, {
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashToken },
+      data: {
+        phone,
+        assessor: APPROVED_ASSESSOR,
+        productType: 'solar',
+        email: 'staff-create@example.com',
+      },
+      timeout: 15000,
+    });
+    expect(firstCreate.status()).toBe(200);
+    const firstBody = await firstCreate.json();
+    expect(firstBody.existing).toBe(false);
+    expect(firstBody.customerLink).toMatch(new RegExp(`^/\\?code=${firstBody.project.code}&token=`));
+
+    const duplicateCreate = await request.post(`${BASE}/api/dashboard/project`, {
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashToken },
+      data: {
+        phone,
+        assessor: APPROVED_ASSESSOR,
+        productType: 'solar',
+      },
+      timeout: 15000,
+    });
+    expect(duplicateCreate.status()).toBe(200);
+    const duplicateBody = await duplicateCreate.json();
+    expect(duplicateBody.existing).toBe(true);
+    expect(duplicateBody.project.code).toBe(firstBody.project.code);
+    expect(duplicateBody.customerLink).toBe(firstBody.customerLink);
+  });
+
+  test('API-08: dashboard create rejects assessors outside the approved dropdown allowlist', async ({ request }) => {
+    const dashToken = await loginDashboard(request);
+    const res = await request.post(`${BASE}/api/dashboard/project`, {
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashToken },
+      data: {
+        phone: uniquePhone(),
+        assessor: 'QA Bot',
+      },
+      timeout: 15000,
+    });
+    expect(res.status()).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      message: 'Selecciona un asesor de la lista aprobada.',
+    });
+  });
+
+  test('API-09: dashboard resend rotates accessToken and returns the current secure customer link', async ({ request }) => {
+    const dashToken = await loginDashboard(request);
+    const createRes = await request.post(`${BASE}/api/dashboard/project`, {
+      headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashToken },
+      data: {
+        phone: uniquePhone(),
+        assessor: APPROVED_ASSESSOR,
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+
+    const resendRes = await request.post(`${BASE}/api/dashboard/project/${createBody.project.code}/resend`, {
+      headers: { 'x-dashboard-token': dashToken },
+      timeout: 15000,
+    });
+    expect(resendRes.status()).toBe(200);
+    const resendBody = await resendRes.json();
+    expect(resendBody.project.code).toBe(createBody.project.code);
+    expect(resendBody.project.accessToken).not.toBe(createBody.project.accessToken);
+    expect(resendBody.customerLink).toBe(`/?code=${createBody.project.code}&token=${resendBody.project.accessToken}`);
   });
 });

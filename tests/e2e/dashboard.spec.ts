@@ -4,6 +4,19 @@ import path from 'node:path';
 import { ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '../../app/src/lib/energyCertificateDocument';
 import { SIGNED_DOCUMENT_TEMPLATE_VERSION } from '../../app/src/lib/signedDocumentOverlays';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+const APPROVED_ASSESSOR = 'Sergi Guillen Cavero';
+const APPROVED_ASSESSORS = [
+  'Sergi Guillen Cavero',
+  'Juán Felipe Murillo Tamayo',
+  'Diego Perujo Díaz',
+  'Javier Paterna Merino',
+  'José Luís Sevilla',
+  'Antonio Miguel Sorroche Martínez',
+  'Laura Martín Manzano',
+  'Adolfo José Perdiguero Molina',
+  'Albert Llacha',
+  'Koen Hoogteijling',
+];
 const VALID_JPEG_BASE64 = '/9j/4AAQSkZJRgABAQEASABIAAD/';
 const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z5Y4AAAAASUVORK5CYII=';
 const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
@@ -258,10 +271,116 @@ async function openDashboard(page: any, token: string) {
     sessionStorage.setItem('dashboard_token', dashboardToken);
   }, token);
   await page.goto('/dashboard');
-  await expect(page.getByText('Dashboard')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 }
 
 test.describe('Dashboard QA', () => {
+  test('dashboard staff can create, reopen duplicate phones, and resend the rotated secure customer link without using the public root', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    const phone = uniquePhone();
+
+    await openDashboard(page, token);
+
+    const assessorOptions = await page.locator('[data-testid="dashboard-create-assessor-select"] option').allTextContents();
+    expect(assessorOptions).toEqual(APPROVED_ASSESSORS);
+
+    await page.getByTestId('dashboard-create-phone-input').fill(phone);
+    await page.getByTestId('dashboard-create-email-input').fill('dashboard.staff@example.com');
+    await page.getByTestId('dashboard-create-assessor-select').selectOption(APPROVED_ASSESSOR);
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    const resultPanel = page.getByTestId('dashboard-project-action-result');
+    await expect(resultPanel).toContainText('Expediente creado');
+
+    const codeLine = await resultPanel.locator('text=/ELT\\d+/').first().textContent();
+    const createdCode = codeLine?.match(/ELT\d+/)?.[0];
+    expect(createdCode).toBeTruthy();
+
+    const firstLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
+    expect(firstLink).toMatch(new RegExp(`^/\\?code=${createdCode}&token=`));
+
+    await page.getByTestId('dashboard-create-phone-input').fill(phone);
+    await page.getByTestId('dashboard-create-project-btn').click();
+    await expect(resultPanel).toContainText('Expediente existente encontrado');
+    await expect(resultPanel).toContainText(createdCode!);
+
+    const popupPromise = page.waitForEvent('popup');
+    await page.getByTestId('dashboard-open-project-btn').click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState('domcontentloaded');
+    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&source=assessor`));
+    await popup.close();
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
+    await page.getByTestId('dashboard-row-resend-link-btn').click();
+    await expect(resultPanel).toContainText('Enlace reenviado');
+
+    const rotatedLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
+    expect(rotatedLink).toMatch(new RegExp(`^/\\?code=${createdCode}&token=`));
+    expect(rotatedLink).not.toBe(firstLink);
+  });
+
+  test('dashboard staff create shows a validation error when the phone is missing', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByTestId('dashboard-project-management-error')).toContainText(
+      'El número de teléfono es obligatorio.',
+    );
+  });
+
+  test('dashboard create surfaces backend failures without leaving the dashboard flow', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.route('**/api/dashboard/project', async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          message: 'Selecciona un asesor de la lista aprobada.',
+        }),
+      });
+    });
+
+    await page.getByTestId('dashboard-create-phone-input').fill(uniquePhone());
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByTestId('dashboard-project-management-error')).toContainText(
+      'Selecciona un asesor de la lista aprobada.',
+    );
+  });
+
+  test('dashboard resend failures stay scoped to the row action and show the backend error', async ({ page, request }) => {
+    const code = await createDashboardProject(request, makeDashboardFormData());
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toContain('Proyecto no encontrado.');
+      await dialog.accept();
+    });
+
+    await page.route(`**/api/dashboard/project/${code}/resend`, async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          error: 'PROJECT_NOT_FOUND',
+          message: 'Proyecto no encontrado.',
+        }),
+      });
+    });
+
+    await page.getByTestId('dashboard-row-resend-link-btn').click();
+  });
+
   test('invalid dashboard session returns to the login gate', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => {

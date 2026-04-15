@@ -36,6 +36,13 @@ const {
   isAdditionalBankDocumentType,
   normalizeAdditionalBankDocumentExtraction,
 } = require('./lib/additionalBankDocumentExtraction');
+const {
+  createDashboardProjectRecord,
+  findProjectByNormalizedPhone,
+  normalizeDashboardCreateInput,
+  serializeDashboardProjectAction,
+  validateDashboardCreateInput,
+} = require('./lib/dashboardProjectManagement');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
 const app = express();
@@ -1322,12 +1329,60 @@ app.get('/api/dashboard', requireDashboardAuth, (req, res) => {
   res.json({ success: true, projects });
 });
 
+app.post('/api/dashboard/project', requireDashboardAuth, (req, res) => {
+  const input = normalizeDashboardCreateInput(req.body, normalizePhone);
+  const validationError = validateDashboardCreateInput(input);
+  if (validationError) {
+    return res.status(400).json({ success: false, message: validationError });
+  }
+
+  const existing = findProjectByNormalizedPhone(database.projects, input.normalizedPhone, normalizePhone);
+  if (existing) {
+    return res.json({
+      success: true,
+      existing: true,
+      ...serializeDashboardProjectAction(existing, serializeProject),
+    });
+  }
+
+  const project = createDashboardProjectRecord(
+    input,
+    generateProjectCode,
+    uuidv4,
+    new Date().toISOString(),
+  );
+
+  database.projects[project.code] = project;
+  saveDB();
+
+  return res.json({
+    success: true,
+    existing: false,
+    ...serializeDashboardProjectAction(project, serializeProject),
+  });
+});
+
 app.get('/api/dashboard/project/:code', requireDashboardAuth, (req, res) => {
   const project = database.projects[req.params.code];
   if (!project) {
     return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
   }
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
+});
+
+app.post('/api/dashboard/project/:code/resend', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  project.accessToken = uuidv4();
+  saveDB();
+
+  return res.json({
+    success: true,
+    ...serializeDashboardProjectAction(project, serializeProject),
+  });
 });
 
 // ── Delete a project (admin only) ─────────────────────────────────────────────

@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-04-15T15:38:00Z",
+  "category": "architecture",
+  "text": "Dashboard staff flows should return a backend-authenticated `customerLink` string instead of reconstructing secure links from public-root UI state.\nThis keeps create/resend independent from the public phone screen and gives API/E2E tests a stable contract for link rotation behavior.",
+  "issue": "#14",
+  "pointers": [
+    "backend/lib/dashboardProjectManagement.js",
+    "app/src/services/api.ts",
+    "tests/e2e/dashboard.spec.ts"
+  ]
+}
