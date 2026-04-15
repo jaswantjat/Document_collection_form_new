@@ -68,6 +68,15 @@ describe('fetchProject', () => {
     );
   });
 
+  it('sends the customer token in the request URL and header when provided', async () => {
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    await fetchProject('ELT001', { token: 'customer-token-20250001' });
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
+  });
+
   it('returns error payload on project-not-found (404 body)', async () => {
     mockFetch({ success: false, error: 'PROJECT_NOT_FOUND' }, 200);
     const result = await fetchProject('ELT_MISSING');
@@ -233,6 +242,15 @@ describe('saveProgress', () => {
     await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('Server down');
   });
 
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true });
+    await saveProgress('ELT001', minimalFormData, 'customer', 'customer-token-20250001');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
+  });
+
   it('rejects non-OK HTTP responses instead of treating them as saved', async () => {
     mockFetch({ success: false, message: 'rate limited' }, 429);
     await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('rate limited');
@@ -267,6 +285,15 @@ describe('submitForm', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.source).toBe('assessor');
     expect(body.attemptId).toBe('attempt-2');
+  });
+
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true });
+    await submitForm('ELT001', formData, 'customer', 'attempt-token', 'customer-token-20250001');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 
   it('propagates server error', async () => {
@@ -435,6 +462,17 @@ describe('preUploadAssets', () => {
     const entries = Array.from(requestBody.entries());
 
     expect(entries).toEqual([['activeKeys', '["bankDocument_0"]']]);
+  });
+
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true, savedKeys: ['dniFront'] });
+
+    await preUploadAssets('ELT-UPLOAD-007', makeFormData(), 'customer-token-20250001');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 });
 

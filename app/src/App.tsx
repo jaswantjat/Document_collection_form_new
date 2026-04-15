@@ -6,6 +6,7 @@ import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
 import { useLocalStorageBackup, readLocalBackup, clearLocalBackup } from '@/hooks/useLocalStorageBackup';
 import { readIndexedDBBackup } from '@/hooks/useIndexedDBBackup';
 import { fetchProject } from '@/services/api';
+import { buildProjectUrl } from '@/lib/dashboardHelpers';
 import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
@@ -210,10 +211,6 @@ function readSavedSection(code: string): Section | null {
   } catch { return null; }
 }
 
-function buildProjectUrl(code: string) {
-  return `/?code=${code}`;
-}
-
 function normalizeLoadedProject(project: ProjectData): ProjectData {
   return {
     ...project,
@@ -274,7 +271,7 @@ function FormApp() {
       }
     }, 12000);
 
-    fetchProject(urlCode, { signal: controller.signal })
+    fetchProject(urlCode, { signal: controller.signal, token: urlToken || undefined })
       .then(async (res) => {
         if (controller.signal.aborted) return;
 
@@ -315,19 +312,21 @@ function FormApp() {
           return;
         }
 
+        const accessError = res.error === 'UNAUTHORIZED'
+          || res.error === 'INVALID_TOKEN'
+          || res.error === 'FORBIDDEN'
+          || res.status === 401;
+
+        if (accessError) {
+          setProject(null);
+          setLoadError('INVALID_TOKEN');
+          return;
+        }
+
         // Project was deleted or never existed — clear stale local data and go back
         // to the phone entry screen rather than showing a dead-end error page.
         // The assessor can then re-enter the phone number and create a new project.
-        if (urlCode) clearLocalBackup(urlCode);
-        setProject(null);
-        navigate('/', { replace: true });
-      })
-      .catch((err) => {
-        if (controller.signal.aborted || err?.name === 'AbortError') return;
-
-        // Gracefully handle "Project Not Found" (404) by redirecting to phone entry.
-        // This fixes the "stale code" issue where a deleted project shows an error screen.
-        if (err?.message === 'PROJECT_NOT_FOUND' || err?.status === 404) {
+        if (res.error === 'PROJECT_NOT_FOUND' || res.status === 404) {
           if (urlCode) clearLocalBackup(urlCode);
           setProject(null);
           navigate('/', { replace: true });
@@ -335,7 +334,13 @@ function FormApp() {
         }
 
         setProject(null);
-        setLoadError('NETWORK_ERROR');
+        setLoadError(res.error || 'NETWORK_ERROR');
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
+
+        setProject(null);
+        setLoadError(err?.message === 'PROJECT_NOT_FOUND' || err?.status === 404 ? 'PROJECT_NOT_FOUND' : 'NETWORK_ERROR');
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -394,13 +399,17 @@ function FormApp() {
     activeProject?.code ?? null,
     activeProject?.productType ?? 'solar',
     activeProject?.formData ?? null,
-    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow, source }
+    {
+      preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow,
+      source,
+      projectToken: urlToken || undefined,
+    }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
-  useBeforeUnloadSave(activeProject?.code ?? null, formData, source);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData, source, urlToken || undefined);
   const nextLikelySection = getLikelyNextSection(activeSection, formData, followUpDocumentFlow);
   const hasSkippedInitialPrefetch = useRef(false);
 
@@ -498,7 +507,7 @@ function FormApp() {
     }
 
     setProject(normalizedProject);
-    navigate(buildProjectUrl(foundProject.code), { replace: true });
+    navigate(buildProjectUrl(foundProject.code, 'customer', foundProject.accessToken), { replace: true });
     goTo(getInitialSection(normalizedProject, foundProject.code));
   };
 
@@ -622,6 +631,7 @@ function FormApp() {
             project={activeProject}
             formData={formData}
             source={source}
+            projectToken={urlToken || undefined}
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}
