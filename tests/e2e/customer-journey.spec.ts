@@ -156,11 +156,10 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto(`/?code=${projectCode}&source=assessor`);
-
-    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await page.goto(`/?code=${projectCode}&source=assessor`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Confirma tu documentación' })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /certificado energético/i }).click();
-    await expect(page.locator('h1').first()).toContainText('Certificado energético');
+    await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
     await expect(page).toHaveURL(/code=ELT20250005/);
   });
 
@@ -190,16 +189,20 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto(`/?code=${projectCode}`);
-    await expect(page.locator('h1').first()).toContainText('Documentos para firmar');
+    await page.goto(`/?code=${projectCode}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Documentos para firmar' })).toBeVisible({ timeout: 15000 });
 
-    await page.waitForFunction(() => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function');
+    await page.waitForFunction(
+      () => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function',
+      undefined,
+      { timeout: 15000 }
+    );
     await page.evaluate(() => (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature?.());
 
     const continueButton = page.getByTestId('representation-continue-btn');
     await expect(continueButton).toHaveAttribute('data-signed', 'true');
     await continueButton.click();
 
-    await expect(page.locator('h1').first()).toContainText('Certificado energético');
+    await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
   });
 });

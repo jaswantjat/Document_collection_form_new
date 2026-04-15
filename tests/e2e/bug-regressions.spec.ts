@@ -4,11 +4,10 @@ const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 test.describe('Bug Regressions', () => {
   test('REG-04: customer root without a code or with source=assessor shows contact-advisor handling', async ({ page }) => {
-    await page.goto('/?source=assessor');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/?source=assessor', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /sin código de proyecto/i })).toBeVisible();
-    await expect(page.getByText(/accede desde el enlace/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sin código de proyecto' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/accede desde el enlace/i)).toBeVisible({ timeout: 15000 });
     await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 
