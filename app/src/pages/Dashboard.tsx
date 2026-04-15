@@ -2083,7 +2083,19 @@ export function DownloadGroupsSection({
             <div className="mt-3 space-y-2">
               {group.items.map((asset) => (
                 <div key={asset.key} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs text-gray-700 truncate">{asset.label}</span>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <span className="block truncate text-xs text-gray-700">{asset.label}</span>
+                    {asset.needsManualReview && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+                        title="Revisión manual requerida"
+                        data-testid="additional-bank-doc-review-badge"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Revisar
+                      </span>
+                    )}
+                  </div>
                   <AssetButtons asset={asset} projectCode={projectCode} compact />
                 </div>
               ))}

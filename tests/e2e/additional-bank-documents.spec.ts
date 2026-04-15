@@ -219,7 +219,7 @@ test('additional bank documents persist across reload and remain optional for su
       confidence: 0.96,
       isCorrectDocument: true,
       documentTypeDetected: 'Declaración de la renta',
-      needsManualReview: false,
+      needsManualReview: true,
     },
   });
 
@@ -235,9 +235,11 @@ test('additional bank documents persist across reload and remain optional for su
 
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Declaración de la renta');
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ana Pérez López');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ejercicio 2024');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('250 EUR a devolver');
+  await expect(page.getByText('Revisar', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ana Pérez López');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ejercicio 2024');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('250 EUR a devolver');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Declaración de la renta presentada ante AEAT.');
 
   await expect.poll(async () => {
     const project = await readProjectState(request, projectCode);
@@ -257,8 +259,9 @@ test('additional bank documents persist across reload and remain optional for su
 
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Declaración de la renta');
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ana Pérez López');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ejercicio 2024');
+  await expect(page.getByText('Revisar', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ana Pérez López');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ejercicio 2024');
 
   await expect.poll(async () => {
     const project = await readProjectState(request, projectCode);

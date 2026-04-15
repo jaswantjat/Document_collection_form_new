@@ -488,6 +488,46 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
     });
   });
 
+  it('flags manual-review additional bank documents without changing their Spanish labels', () => {
+    const assets = getDashboardAdditionalBankDocumentAssets({
+      formData: {
+        additionalBankDocuments: [
+          {
+            id: 'payroll',
+            type: 'payroll',
+            files: [{
+              id: 'payroll-file',
+              filename: 'payroll.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+            extraction: {
+              extractedData: { summary: 'AI summary' },
+              confidence: 0.9,
+              isCorrectDocument: true,
+              documentTypeDetected: 'Payroll',
+              needsManualReview: true,
+              confirmedByUser: true,
+            },
+            issue: {
+              code: 'manual-review',
+              message: 'Revisar',
+              updatedAt: '2026-04-15T00:00:00Z',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(assets).toHaveLength(1);
+    expect(assets[0]).toMatchObject({
+      label: 'Nómina',
+      needsManualReview: true,
+    });
+  });
+
   it('adds additional bank documents to quick downloads without affecting document counts', () => {
     const summary = getDashboardProjectSummary({
       formData: {

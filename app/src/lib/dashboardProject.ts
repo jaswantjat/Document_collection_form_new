@@ -37,6 +37,7 @@ export interface DashboardAssetItem {
   label: string;
   dataUrl: string;
   mimeType: string | null;
+  needsManualReview?: boolean;
 }
 
 export interface DashboardAssetGroup {
@@ -419,12 +420,14 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
   return documents.flatMap((entry) => entry.files.flatMap((file, index) => {
     const source = resolveAdditionalBankDocumentSource(file, assetFiles);
     if (!source) return [];
+    const needsManualReview = Boolean(entry.issue?.code === 'manual-review' || entry.extraction?.needsManualReview);
 
     return [{
       key: file.id || `${entry.id}-${index}`,
       label: getAdditionalBankDocumentFileLabel(entry, index),
       dataUrl: source,
       mimeType: resolveAdditionalBankDocumentMimeType(file, source, assetFiles),
+      needsManualReview,
     }];
   }));
 }
