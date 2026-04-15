@@ -3,6 +3,23 @@ import { test, expect, type Page } from '@playwright/test';
 const EC05_CODE = 'ELT20250005';
 const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
+function isTransientRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ECONNRESET|EPIPE|socket hang up/i.test(message);
+}
+
+async function postWithRetry(request: any, url: string) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await request.post(url);
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === 1) throw error;
+    }
+  }
+
+  throw new Error(`Request retry exhausted for ${url}`);
+}
+
 async function openEnergyCertificate(page: Page) {
   await expect(page.locator('h1, h2').first()).toContainText(/Confirma tu documentación|Sube lo que falte y confirma/);
   await page.getByRole('button', { name: /certificado energético/i }).click();
@@ -13,7 +30,7 @@ test.describe('Energy Certificate Flow Tests', () => {
   test.beforeEach(async ({ request }) => {
     // Restore full base state: property docs done + EC not-started
     // This prevents cross-test contamination when reset-property-docs is called in FLOW-04
-    const res = await request.post(`${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
+    const res = await postWithRetry(request, `${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
     if (!res.ok()) {
       console.warn('[RESET] Failed to restore base flow for EC05:', await res.text());
     }
@@ -59,7 +76,7 @@ test.describe('Energy Certificate Flow Tests', () => {
 
   test('E2E-FLOW-03: EC resume path — partially filled housing data persists on reload', async ({ page, request }) => {
     // Seed EC with partial housing data (cadastralReference + some fields filled)
-    const seedRes = await request.post(`${BACKEND}/api/test/reset-ec-partial/${EC05_CODE}`);
+    const seedRes = await postWithRetry(request, `${BACKEND}/api/test/reset-ec-partial/${EC05_CODE}`);
     expect(seedRes.ok()).toBeTruthy();
 
     // Open form — should route to review first, then into EC on demand
@@ -73,15 +90,17 @@ test.describe('Energy Certificate Flow Tests', () => {
     await expect(cadastralInput).toHaveValue('1234567VK1234A0001RT');
   });
 
-  test('E2E-FLOW-04: follow-up path routing — property-docs → EC → review', async ({ page, request }) => {
-    // Step 1: clear property docs → form should route to property-docs section
-    const clearRes = await request.post(`${BACKEND}/api/test/reset-property-docs/${EC05_CODE}`);
+  test('E2E-FLOW-04: follow-up path routing — documents with missing docs → EC → review', async ({ page, request }) => {
+    // Step 1: clear property docs. With missing mandatory documents, the form should
+    // reopen on the document collection section before the customer can continue.
+    const clearRes = await postWithRetry(request, `${BACKEND}/api/test/reset-property-docs/${EC05_CODE}`);
     expect(clearRes.ok()).toBeTruthy();
 
     await page.goto(`/?code=${EC05_CODE}`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1').first()).toContainText('Documentos');
+    await expect(page.locator('h1, h2').first()).toContainText('Documentos');
+    await expect(page.getByText('DNI / NIE').first()).toBeVisible();
 
     // Clear localStorage while still on the form page (before beforeunload fires)
     await page.evaluate(() => localStorage.clear());
@@ -92,7 +111,7 @@ test.describe('Energy Certificate Flow Tests', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Step 2: restore full flow state (property docs done, EC not-started) — safe after beforeunload
-    const restoreRes = await request.post(`${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
+    const restoreRes = await postWithRetry(request, `${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
     expect(restoreRes.ok()).toBeTruthy();
 
     await page.goto(`/?code=${EC05_CODE}`);

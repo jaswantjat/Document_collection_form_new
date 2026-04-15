@@ -12,16 +12,53 @@ interface State {
   isNetworkError: boolean;
 }
 
-function isChunkLoadError(error: Error): boolean {
+interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+const CHUNK_RELOAD_KEY_PREFIX = 'eltex_chunk_reload';
+const CHUNK_RELOAD_WINDOW_MS = 30_000;
+
+export function isChunkLoadError(error: Pick<Error, 'message' | 'name'>): boolean {
   const msg = error.message.toLowerCase();
   return (
-    msg.includes('failed to fetch') ||
+    msg.includes('failed to fetch dynamically imported module') ||
     msg.includes('dynamically imported') ||
     msg.includes('loading chunk') ||
     msg.includes('error loading') ||
+    msg.includes('importing a module script failed') ||
+    msg.includes('failed to load module script') ||
+    msg.includes('load failed for the module') ||
+    msg === 'load failed' ||
     msg.includes('importerror') ||
     error.name === 'ChunkLoadError'
   );
+}
+
+function getChunkReloadKey(url: string): string {
+  return `${CHUNK_RELOAD_KEY_PREFIX}:${url}`;
+}
+
+export function shouldAutoReloadChunkError(
+  error: Pick<Error, 'message' | 'name'>,
+  storage: StorageLike | null,
+  url: string
+): boolean {
+  if (!isChunkLoadError(error) || !storage || !url) return false;
+  const previousAttempt = Number(storage.getItem(getChunkReloadKey(url)));
+  return !Number.isFinite(previousAttempt) || (Date.now() - previousAttempt) > CHUNK_RELOAD_WINDOW_MS;
+}
+
+export function markChunkReloadAttempt(storage: StorageLike | null, url: string) {
+  if (!storage || !url) return;
+  storage.setItem(getChunkReloadKey(url), String(Date.now()));
+}
+
+export function clearChunkReloadAttempt(storage: StorageLike | null, url: string) {
+  if (!storage || !url) return;
+  storage.removeItem(getChunkReloadKey(url));
 }
 
 export class ChunkErrorBoundary extends Component<Props, State> {
@@ -44,9 +81,18 @@ export class ChunkErrorBoundary extends Component<Props, State> {
       '\nComponent stack (truncated):',
       stack
     );
+
+    if (typeof window === 'undefined') return;
+    if (!shouldAutoReloadChunkError(error, window.sessionStorage, window.location.href)) return;
+
+    markChunkReloadAttempt(window.sessionStorage, window.location.href);
+    window.location.reload();
   }
 
   private handleRetry = () => {
+    if (typeof window !== 'undefined') {
+      clearChunkReloadAttempt(window.sessionStorage, window.location.href);
+    }
     window.location.reload();
   };
 

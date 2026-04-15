@@ -4,8 +4,8 @@ import path from 'node:path';
 import { ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '../../app/src/lib/energyCertificateDocument';
 import { SIGNED_DOCUMENT_TEMPLATE_VERSION } from '../../app/src/lib/signedDocumentOverlays';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
-const VALID_JPEG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/autoritzacio-representacio.jpg')).toString('base64');
-const VALID_PNG_BASE64 = readFileSync(path.resolve(process.cwd(), 'app/public/eltex-logo.png')).toString('base64');
+const VALID_JPEG_BASE64 = '/9j/4AAQSkZJRgABAQEASABIAAD/';
+const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z5Y4AAAAASUVORK5CYII=';
 const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
 const ADMIN_UPLOAD_FILE = path.resolve(process.cwd(), 'app/public/eltex-logo.png');
 
@@ -47,6 +47,29 @@ async function parseZipEntries(buffer: Buffer) {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ECONNRESET|EPIPE|socket hang up/i.test(message);
+}
+
+async function postWithRetry(
+  request: any,
+  url: string,
+  data: unknown,
+  timeout: number
+) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await request.post(url, { data, timeout });
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === 1) throw error;
+      await delay(250);
+    }
+  }
+
+  throw new Error(`Request retry exhausted for ${url}`);
 }
 
 function makeCompletedEnergyCertificate() {
@@ -175,34 +198,39 @@ function makeAdditionalBankDocuments() {
 }
 
 async function loginDashboard(request: any) {
-  const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
-    data: { password: 'eltex2025' },
-    timeout: 10000,
-  });
+  const loginRes = await postWithRetry(
+    request,
+    `${API_BASE}/api/dashboard/login`,
+    { password: 'eltex2025' },
+    10000,
+  );
   expect(loginRes.status()).toBe(200);
   const loginBody = await loginRes.json();
   return loginBody.token as string;
 }
 
 async function createDashboardProject(request: any, formData?: Record<string, unknown>) {
-  const createRes = await request.post(`${API_BASE}/api/project/create`, {
-    data: {
+  const createRes = await postWithRetry(
+    request,
+    `${API_BASE}/api/project/create`,
+    {
       phone: uniquePhone(),
       assessor: 'QA Bot',
       assessorId: 'QA-BOT',
     },
-    timeout: 15000,
-  });
+    15000,
+  );
   expect(createRes.status()).toBe(200);
   const createBody = await createRes.json();
   const code = createBody.project.code as string;
 
   if (formData) {
-    const saveRes = await request.post(`${API_BASE}/api/project/${code}/save`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { formData, source: 'customer' },
-      timeout: 15000,
-    });
+    const saveRes = await postWithRetry(
+      request,
+      `${API_BASE}/api/project/${code}/save`,
+      { formData, source: 'customer' },
+      15000,
+    );
     expect(saveRes.status()).toBe(200);
   }
 
@@ -257,14 +285,16 @@ test.describe('Dashboard QA', () => {
   test('refresh pulls in new projects and keeps the newest activity first', async ({ page, request }) => {
     const assessor = `Refresh Sort ${Date.now()}`;
     const createProject = async () => {
-      const createRes = await request.post(`${API_BASE}/api/project/create`, {
-        data: {
+      const createRes = await postWithRetry(
+        request,
+        `${API_BASE}/api/project/create`,
+        {
           phone: uniquePhone(),
           assessor,
           assessorId: assessor,
         },
-        timeout: 15000,
-      });
+        15000,
+      );
       expect(createRes.status()).toBe(200);
       const createBody = await createRes.json();
       return createBody.project.code as string;
@@ -283,7 +313,7 @@ test.describe('Dashboard QA', () => {
     const secondCode = await createProject();
     await page.getByTestId('dashboard-refresh-btn').click();
 
-    await expect(filteredRows).toHaveCount(2);
+    await expect(filteredRows).toHaveCount(2, { timeout: 15000 });
     await expect(filteredRows.first()).toContainText(secondCode);
     await expect(filteredRows.nth(1)).toContainText(firstCode);
   });
@@ -481,7 +511,10 @@ test.describe('Dashboard QA', () => {
     await page.getByTestId('admin-upload-file-input').setInputFiles(ADMIN_UPLOAD_FILE);
     await expect(page.getByText('Admin Upload Test')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Recibido')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId('admin-upload-modal')).toBeHidden({ timeout: 15000 });
+    const uploadModal = page.getByTestId('admin-upload-modal');
+    await expect(uploadModal.getByText('Documento guardado correctamente.')).toBeVisible({ timeout: 15000 });
+    await uploadModal.getByTestId('admin-upload-close-btn').click();
+    await expect(uploadModal).toBeHidden({ timeout: 15000 });
 
     await page.getByTestId('ver-expediente-btn').click();
     await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();

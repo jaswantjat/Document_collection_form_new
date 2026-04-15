@@ -2195,6 +2195,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
 
   const totalSubmitted = projects.filter((project) => project.submissionCount > 0).length;
   const totalPending = projects.length - totalSubmitted;
+  const showInitialLoading = loading && projects.length === 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -2295,13 +2296,13 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           </div>
         )}
 
-        {loading && (
+        {showInitialLoading && (
           <div className="flex justify-center py-16">
             <div className="w-8 h-8 border-2 border-eltex-blue border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
-        {!loading && (
+        {!showInitialLoading && (
           <div className="space-y-4">
             {filtered.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
@@ -2347,7 +2348,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           </div>
         )}
 
-        {!loading && filtered.length > 0 && (
+        {!showInitialLoading && filtered.length > 0 && (
           <p className="text-center text-xs text-gray-400 pb-4">
             Mostrando {filtered.length} de {projects.length} proyectos
           </p>
