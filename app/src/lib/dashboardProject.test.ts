@@ -478,7 +478,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
 
     expect(assets).toHaveLength(2);
     expect(assets[0]).toMatchObject({
-      label: 'Certificado de titularidad bancaria',
+      label: 'Documento adicional',
       mimeType: 'application/pdf',
     });
     expect(assets[1]).toMatchObject({
@@ -488,7 +488,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
     });
   });
 
-  it('flags manual-review from issue.code without changing the Spanish label', () => {
+  it('flags manual-review from issue.code without changing the generic label', () => {
     const assets = getDashboardAdditionalBankDocumentAssets({
       formData: {
         additionalBankDocuments: [
@@ -515,12 +515,12 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
 
     expect(assets).toHaveLength(1);
     expect(assets[0]).toMatchObject({
-      label: 'Nómina',
+      label: 'Documento adicional',
       needsManualReview: true,
     });
   });
 
-  it('flags manual-review from extraction.needsManualReview without changing the Spanish label', () => {
+  it('flags manual-review from extraction.needsManualReview without changing the generic label', () => {
     const assets = getDashboardAdditionalBankDocumentAssets({
       formData: {
         additionalBankDocuments: [
@@ -550,7 +550,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
 
     expect(assets).toHaveLength(1);
     expect(assets[0]).toMatchObject({
-      label: 'Nómina',
+      label: 'Documento adicional',
       needsManualReview: true,
     });
   });

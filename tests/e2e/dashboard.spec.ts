@@ -602,15 +602,15 @@ test.describe('Dashboard QA', () => {
     await expect(modal).toBeVisible();
 
     await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
-    await expect(modal.getByText('Certificado de titularidad bancaria')).toBeVisible();
+    await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('IRPF 2024')).toBeVisible();
     await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
     await expect(modal.getByText('Declaración presentada ante AEAT.')).toHaveCount(0);
 
     const bankDocDownload = page.waitForEvent('download');
-    await modal.getByTitle('Descargar Certificado de titularidad bancaria').click();
+    await modal.getByTitle('Descargar Documento adicional').click();
     expect((await bankDocDownload).suggestedFilename()).toBe(
-      `${code}_certificado_de_titularidad_bancaria.pdf`,
+      `${code}_documento_adicional.pdf`,
     );
   });
 

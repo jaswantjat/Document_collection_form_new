@@ -40,7 +40,7 @@ function makeEntry(): AdditionalBankDocumentEntry {
 }
 
 describe('AdditionalBankDocumentEntryCard', () => {
-  it('shows the Spanish label and manual-review badge without rendering AI summary fields', () => {
+  it('shows the generic label and manual-review badge without rendering AI summary fields', () => {
     const html = renderToStaticMarkup(
       createElement(AdditionalBankDocumentEntryCard, {
         accept: 'image/jpeg,application/pdf',
@@ -52,7 +52,7 @@ describe('AdditionalBankDocumentEntryCard', () => {
       })
     );
 
-    expect(html).toContain('Nómina');
+    expect(html).toContain('Documento adicional');
     expect(html).toContain('Revisar');
     expect(html).not.toContain('AI summary text');
     expect(html).not.toContain('Ana Pérez López');
