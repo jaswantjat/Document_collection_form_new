@@ -199,6 +199,10 @@ function sameAssetKeySet(existing: Iterable<string>, next: Iterable<string>): bo
   return currentKeys.every((key, index) => key === nextKeys[index]);
 }
 
+function buildProjectApiUrl(code: string, pathSuffix: string, token?: string): string {
+  return `${API_BASE}/project/${encodeURIComponent(code)}${pathSuffix}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+}
+
 async function readJsonResponse<T>(res: Response): Promise<T> {
   try {
     return await res.json() as T;
@@ -217,7 +221,8 @@ async function readJsonOrThrow<T extends ApiResponseShape>(res: Response, fallba
 
 export async function preUploadAssets(
   code: string,
-  formData: AppFormData
+  formData: AppFormData,
+  token?: string
 ): Promise<{ success: boolean; savedKeys?: string[] }> {
   const descriptors = buildAssetUploadDescriptors(formData);
   const activeKeys = descriptors.map((descriptor) => descriptor.fieldName);
@@ -240,9 +245,9 @@ export async function preUploadAssets(
     descriptor.append(fd);
   });
 
-  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/upload-assets`, {
+  const res = await fetch(buildProjectApiUrl(code, '/upload-assets', token), {
     method: 'POST',
-    headers: {},
+    headers: token ? { 'x-project-token': token } : {},
     body: fd,
     signal: AbortSignal.timeout(30000),
   });
@@ -257,19 +262,16 @@ export async function preUploadAssets(
   return body;
 }
 
-function projectHeaders(): HeadersInit {
-  return { 'Content-Type': 'application/json' };
-}
-
 export async function fetchProject(
   code: string,
-  options?: { signal?: AbortSignal }
-): Promise<{ success: boolean; project?: ProjectData; error?: string }> {
-  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}`, {
-    headers: {},
+  options?: { signal?: AbortSignal; token?: string }
+): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string; status: number }> {
+  const res = await fetch(buildProjectApiUrl(code, '', options?.token), {
+    headers: options?.token ? { 'x-project-token': options.token } : {},
     signal: options?.signal,
   });
-  return readJsonResponse(res);
+  const body = await readJsonResponse<{ success: boolean; project?: ProjectData; error?: string; message?: string }>(res);
+  return { ...body, status: res.status };
 }
 
 export async function lookupByPhone(
@@ -331,11 +333,12 @@ export async function fetchDashboardProject(
 export async function saveProgress(
   code: string,
   formData: AppFormData,
-  source?: 'customer' | 'assessor'
+  source?: 'customer' | 'assessor',
+  token?: string
 ): Promise<{ success: boolean }> {
-  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/save`, {
+  const res = await fetch(buildProjectApiUrl(code, '/save', token), {
     method: 'POST',
-    headers: projectHeaders(),
+    headers: token ? { 'Content-Type': 'application/json', 'x-project-token': token } : { 'Content-Type': 'application/json' },
     body: JSON.stringify({ formData, source }),
     signal: AbortSignal.timeout(10000),
   });
@@ -346,11 +349,12 @@ export async function submitForm(
   code: string,
   formData: AppFormData,
   source: string,
-  attemptId: string
+  attemptId: string,
+  token?: string
 ): Promise<{ success: boolean; submissionId?: string; message?: string }> {
-  const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/submit`, {
+  const res = await fetch(buildProjectApiUrl(code, '/submit', token), {
     method: 'POST',
-    headers: projectHeaders(),
+    headers: token ? { 'Content-Type': 'application/json', 'x-project-token': token } : { 'Content-Type': 'application/json' },
     body: JSON.stringify({ formData, source, attemptId }),
     signal: AbortSignal.timeout(60000),
   });

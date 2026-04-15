@@ -14,6 +14,7 @@ interface Props {
   project: ProjectData;
   formData: FormData;
   source: 'customer' | 'assessor';
+  projectToken?: string;
   canSubmit: boolean;
   hasBlockingDocumentProcessing: boolean;
   followUpMode?: boolean;
@@ -52,6 +53,7 @@ export function ReviewSection({
   project,
   formData,
   source,
+  projectToken,
   hasBlockingDocumentProcessing,
   followUpMode = false,
   onEdit,
@@ -229,13 +231,13 @@ export function ReviewSection({
       const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
       if (!preUploadSuccess) {
         setPreUploadStatus('retrying');
-        await preUploadAssets(project.code, renderedFormData);
+        await preUploadAssets(project.code, renderedFormData, projectToken);
         preUploadDone.current = true;
         setPreUploadStatus('ready');
       }
 
       const submitPayload = stripAllBinaryData(renderedFormData);
-      const res = await submitForm(project.code, submitPayload, source, attemptId);
+      const res = await submitForm(project.code, submitPayload, source, attemptId, projectToken);
       if (res.success) {
         clearSubmissionAttempt(project.code);
         onSuccess();
@@ -276,7 +278,7 @@ export function ReviewSection({
 
     setPreUploadStatus('uploading');
     preUploadPromise.current = getReadyFormData()
-      .then(fd => preUploadAssets(project.code, fd))
+      .then(fd => preUploadAssets(project.code, fd, projectToken))
       .then(() => {
         preUploadDone.current = true;
         setPreUploadStatus('ready');

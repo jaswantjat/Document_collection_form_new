@@ -1269,9 +1269,8 @@ function ProjectTableRow({
     setOpeningForm(true);
 
     try {
-      await loadProjectDetail(project.code);
-
-      const formUrl = buildProjectUrl(project.code, 'assessor');
+      const detailProject = await loadProjectDetail(project.code);
+      const formUrl = buildProjectUrl(project.code, 'assessor', detailProject?.accessToken ?? project.accessToken);
       if (popup) {
         popup.location.href = formUrl;
       } else {

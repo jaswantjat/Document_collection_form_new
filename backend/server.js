@@ -330,10 +330,51 @@ function saveDB() {
 const database = loadDB();
 
 // ── IDOR: Validate project access ───────────────────────────────────────────
+function normalizeProjectToken(value) {
+  if (Array.isArray(value)) {
+    return normalizeProjectToken(value[0]);
+  }
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function getCustomerAccessToken(req) {
+  const queryToken = normalizeProjectToken(req.query?.token);
+  const headerToken = normalizeProjectToken(req.get('x-project-token'));
+  if (queryToken && headerToken && queryToken !== headerToken) {
+    return { token: null, mismatch: true };
+  }
+  return { token: queryToken || headerToken, mismatch: false };
+}
+
+function buildCustomerProjectUrl(code, accessToken) {
+  const params = new URLSearchParams({ code });
+  if (accessToken) params.set('token', accessToken);
+  return `/?${params.toString()}`;
+}
+
 function requireProject(req, res, next) {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+
+  const { token, mismatch } = getCustomerAccessToken(req);
+  if (mismatch || !token) {
+    return res.status(401).json({
+      success: false,
+      error: mismatch ? 'INVALID_TOKEN' : 'UNAUTHORIZED',
+      message: 'Este enlace no tiene autorización para acceder al proyecto.',
+    });
+  }
+
+  if (!project.accessToken || token !== project.accessToken) {
+    return res.status(401).json({
+      success: false,
+      error: 'INVALID_TOKEN',
+      message: 'Este enlace no tiene autorización para acceder al proyecto.',
+    });
+  }
 
   req.project = project;
   next();
@@ -863,6 +904,22 @@ app.post('/api/project/create', (req, res) => {
   saveDB();
 
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
+});
+
+app.post('/api/dashboard/project/:code/secure-link', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  project.accessToken = uuidv4();
+  saveDB();
+
+  res.json({
+    success: true,
+    project: serializeProject(project, { includeAccessToken: true }),
+    customerUrl: buildCustomerProjectUrl(project.code, project.accessToken),
+  });
 });
 
 // ── Helper: Check if Catalonia PDFs can be generated ───────────────────────────────
@@ -2959,7 +3016,7 @@ const primaryServer = app.listen(PORT, () => {
     console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec) | ELT20250005 (ec-flow)');
     console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004 | +34666000005');
     availableTestProjects.forEach((project) => {
-      console.log(`🔗 ${project.code}: /?code=${project.code}`);
+      console.log(`🔗 ${project.code}: ${buildCustomerProjectUrl(project.code, project.accessToken)}`);
     });
   }
 });

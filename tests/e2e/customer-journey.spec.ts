@@ -93,6 +93,25 @@ async function seedLocalBackup(page: Page, projectCode: string, formData: unknow
   );
 }
 
+async function loginDashboard(request: any) {
+  const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
+    data: { password: 'eltex2025' },
+  });
+  expect(loginRes.ok()).toBeTruthy();
+  const loginJson = await loginRes.json();
+  return loginJson.token as string;
+}
+
+async function getProjectToken(request: any, code: string) {
+  const dashboardToken = await loginDashboard(request);
+  const detailRes = await request.get(`${API_BASE}/api/dashboard/project/${code}`, {
+    headers: { 'x-dashboard-token': dashboardToken },
+  });
+  expect(detailRes.ok()).toBeTruthy();
+  const detailJson = await detailRes.json();
+  return detailJson.project.accessToken as string;
+}
+
 test.describe('Customer Journey Regressions', () => {
   test('deleted stale link recovers cleanly and the same phone can create a fresh project', async ({ page, request }) => {
     const localPhone = `6${String(Date.now() % 100_000_000).padStart(8, '0')}`;
@@ -110,6 +129,7 @@ test.describe('Customer Journey Regressions', () => {
     const created = await createRes.json();
     expect(created.success).toBeTruthy();
     const staleCode = created.project.code as string;
+    const staleToken = created.project.accessToken as string;
 
     const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
       data: { password: 'eltex2025' },
@@ -123,7 +143,7 @@ test.describe('Customer Journey Regressions', () => {
     });
     expect(deleteRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${staleCode}`);
+    await page.goto(`/?code=${staleCode}&token=${encodeURIComponent(staleToken)}`);
     await expect(page.locator('h1').first()).toContainText('Teléfono del cliente');
 
     await page.locator('input[type="tel"]').fill(localPhone);
@@ -135,11 +155,12 @@ test.describe('Customer Journey Regressions', () => {
     await page.getByRole('button', { name: /crear expediente/i }).click();
 
     await expect(page.locator('h1').first()).toContainText('Documentos');
-    await expect(page).toHaveURL(/\/\?code=ELT\d+/);
+    await expect(page).toHaveURL(/\/\?code=ELT\d+&token=/);
 
     const recreatedUrl = new URL(page.url());
     const recreatedCode = recreatedUrl.searchParams.get('code');
     expect(recreatedCode).toBeTruthy();
+    expect(recreatedUrl.searchParams.get('token')).toBeTruthy();
 
     const lookupRes = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(e164Phone)}`);
     expect(lookupRes.ok()).toBeTruthy();
@@ -183,10 +204,10 @@ test.describe('Customer Journey Regressions', () => {
     await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
     await page.getByRole('button', { name: /certificado energético/i }).click();
     await expect(page.locator('h1').first()).toContainText('Certificado energético');
-    await expect(page).toHaveURL(/code=ELT20250005/);
+    await expect(page).toHaveURL(/code=ELT20250005&token=/);
   });
 
-  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page }) => {
+  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page, request }) => {
     const projectCode = 'ELT20250001';
 
     await seedLocalBackup(page, projectCode, {
@@ -211,14 +232,16 @@ test.describe('Customer Journey Regressions', () => {
       energyCertificate: makeEnergyCertificateState(),
       signatures: { customerSignature: null, repSignature: null },
     });
+    const projectToken = await getProjectToken(request, projectCode);
 
-    await page.goto(`/?code=${projectCode}`);
+    await page.goto(`/?code=${projectCode}&token=${encodeURIComponent(projectToken)}`);
+    const continueButton = page.getByTestId('representation-continue-btn');
+    await expect(continueButton).toBeVisible();
     await expect(page.locator('h1').first()).toContainText('Documentos para firmar');
 
     await page.waitForFunction(() => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function');
     await page.evaluate(() => (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature?.());
 
-    const continueButton = page.getByTestId('representation-continue-btn');
     await expect(continueButton).toHaveAttribute('data-signed', 'true');
     await continueButton.click();
 
