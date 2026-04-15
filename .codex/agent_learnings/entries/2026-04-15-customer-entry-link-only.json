@@ -1,0 +1,5 @@
+{
+  "ts_utc": "2026-04-15T00:00:00Z",
+  "category": "architecture",
+  "text": "Public customer entry on the form root must stay link-only.\nIf a customer URL is missing or invalid, the UI should stop at the contact-advisor state instead of redirecting back into a phone lookup flow.\nAssessor phone lookup can remain behind an explicit source gate, but it should never be reachable from the customer root."
+}

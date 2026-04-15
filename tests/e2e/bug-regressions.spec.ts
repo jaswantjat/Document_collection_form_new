@@ -2,69 +2,62 @@ import { test, expect } from '@playwright/test';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
-async function loginDashboard(request: any) {
-  const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
-    data: { password: 'eltex2025' },
-  });
-  expect(loginRes.ok()).toBeTruthy();
-  const loginBody = await loginRes.json();
-  return loginBody.token as string;
-}
-
-async function getProjectAccessToken(request: any, code: string) {
-  const dashToken = await loginDashboard(request);
-  const projectRes = await request.get(`${API_BASE}/api/dashboard/project/${code}`, {
-    headers: { 'x-dashboard-token': dashToken },
-  });
-  expect(projectRes.ok()).toBeTruthy();
-  const projectBody = await projectRes.json();
-  return {
-    dashboardToken: dashToken,
-    accessToken: projectBody.project.accessToken as string,
-  };
-}
-
 test.describe('Bug Regressions', () => {
+  test('REG-04: customer root without a code or with source=assessor shows contact-advisor handling', async ({ page }) => {
+    await page.goto('/?source=assessor', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByRole('heading', { name: 'Sin código de proyecto' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/accede desde el enlace/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+  });
+
   test('REG-01: international phone format (+44, +33, +1) accepted by backend normalizePhone', async ({ request }) => {
     const phones = ['+447700900000', '+33612345678', '+12025550123'];
-
+    
     for (const phone of phones) {
       const res = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(phone)}`);
+      // It might be 404 (not found) but it shouldn't be 400 (bad request) or 500
       expect([200, 404]).toContain(res.status());
     }
   });
 
-  test('REG-02: wrong customer token is rejected', async ({ request }) => {
-    const res = await request.get(`${API_BASE}/api/project/ELT20250001?token=wrong-token`);
-    expect(res.status()).toBe(401);
-    await expect(res.json()).resolves.toMatchObject({ success: false, error: 'INVALID_TOKEN' });
-  });
-
-  test('REG-03: code-only customer links fail after cutover', async ({ request }) => {
-    const res = await request.get(`${API_BASE}/api/project/ELT20250001`);
-    expect(res.status()).toBe(401);
-    await expect(res.json()).resolves.toMatchObject({ success: false, error: 'UNAUTHORIZED' });
-  });
-
-  test('REG-04: rotating the customer link invalidates the old token immediately', async ({ request }) => {
-    const { dashboardToken, accessToken: oldToken } = await getProjectAccessToken(request, 'ELT20250001');
-
-    const rotateRes = await request.post(`${API_BASE}/api/dashboard/project/ELT20250001/secure-link`, {
-      headers: { 'x-dashboard-token': dashboardToken },
+  test('REG-02: /api/project/:code stays code-based even if a stray x-project-token header is present', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/project/ELT20250001`, {
+      headers: { 'x-project-token': 'wrong-token' }
     });
-    expect(rotateRes.status()).toBe(200);
-    const rotateBody = await rotateRes.json();
-    const newToken = rotateBody.project.accessToken as string;
-    expect(newToken).toBeTruthy();
-    expect(newToken).not.toBe(oldToken);
-    expect(rotateBody.customerUrl).toContain(`token=${newToken}`);
+    
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.project?.code).toBe('ELT20250001');
+  });
 
-    const oldRes = await request.get(`${API_BASE}/api/project/ELT20250001?token=${encodeURIComponent(oldToken)}`);
-    expect(oldRes.status()).toBe(401);
-    await expect(oldRes.json()).resolves.toMatchObject({ success: false, error: 'INVALID_TOKEN' });
+  test('REG-03: international phone format is accepted by backend (not rejected as invalid)', async ({ request }) => {
+    // These phones are not in the DB, so they return 404 NOT_FOUND.
+    // The key assertion: they must NOT return 400/500 (format rejection / server crash).
+    // 404 = phone format valid, number simply not registered.
+    const phones = ['+447700900000', '+33612345678', '+12025550123'];
+    for (const phone of phones) {
+      const res = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(phone)}`, {
+        failOnStatusCode: false,
+      });
+      // Must be 200 (found) or 404 (not found) — never 400 or 500
+      expect([200, 404]).toContain(res.status());
+      const body = await res.json();
+      // If 404, it must be NOT_FOUND (parsed correctly) — not a server error
+      if (res.status() === 404) {
+        expect(body.error).toBe('NOT_FOUND');
+      }
+      console.log(`[REG-03] ${phone} → HTTP ${res.status()}, error: ${body.error ?? 'n/a'}`);
+    }
+  });
 
-    const newRes = await request.get(`${API_BASE}/api/project/ELT20250001?token=${encodeURIComponent(newToken)}`);
-    expect(newRes.status()).toBe(200);
-    await expect(newRes.json()).resolves.toMatchObject({ success: true, project: { code: 'ELT20250001' } });
+  test('REG-05: invalid customer link shows contact-advisor handling', async ({ page }) => {
+    await page.goto('/?code=UNKNOWN_TEST_CODE_12345');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
+    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 });

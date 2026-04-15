@@ -73,11 +73,13 @@ test.describe('Energy Certificate PRD Tests', () => {
     await expect(loginHeading).toBeVisible();
   });
 
-  test('EC-04: invalid project code gracefully returns to the phone entry flow', async ({ page }) => {
+  test('EC-04: invalid project code shows contact-advisor handling', async ({ page }) => {
     await page.goto('/?code=INVALID_123');
     await page.waitForLoadState('networkidle');
     
-    await expect(page.locator('h1').first()).toContainText('Teléfono del cliente');
+    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
+    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 
   test.describe('Conditional Field Visibility (COND fixes)', () => {
