@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-04-15T15:44:34Z",
+  "category": "architecture",
+  "text": "Dashboard quick-download rows should keep the visible label stable and carry review state separately.\nDo not encode manual-review status into filenames or asset labels, or you will break downloads and Spanish-only presentation.\nUse an explicit badge/state field for review cues instead.",
+  "issue": "#16",
+  "pointers": [
+    "app/src/lib/dashboardProject.ts",
+    "app/src/pages/Dashboard.tsx",
+    "app/src/sections/property-docs/AdditionalBankDocumentEntryCard.tsx"
+  ]
+}
