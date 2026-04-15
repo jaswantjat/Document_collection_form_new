@@ -1,0 +1,10 @@
+{
+  "ts_utc": "2026-04-15T00:00:00Z",
+  "category": "owner-preference",
+  "text": "When a reviewer points out that one fixture covers multiple branches, split the test into separate branch-specific cases instead of keeping a combined assertion.\nThis makes regressions easier to localize and keeps future review comments focused on real behavior changes.",
+  "issue": "issue #16",
+  "pointers": [
+    "app/src/lib/dashboardProject.test.ts",
+    "PR #19"
+  ]
+}

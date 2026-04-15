@@ -193,6 +193,21 @@ function makeAdditionalBankDocuments() {
         timestamp: 1,
         sizeBytes: 100,
       }],
+      extraction: {
+        extractedData: {
+          summary: 'Declaración presentada ante AEAT.',
+        },
+        confidence: 0.93,
+        isCorrectDocument: true,
+        documentTypeDetected: 'Declaración de la renta',
+        needsManualReview: true,
+        confirmedByUser: true,
+      },
+      issue: {
+        code: 'manual-review',
+        message: 'Hemos guardado el documento, pero conviene revisarlo antes de tramitarlo.',
+        updatedAt: '2026-04-15T10:00:00Z',
+      },
     },
   ];
 }
@@ -470,6 +485,8 @@ test.describe('Dashboard QA', () => {
     await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
     await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('IRPF 2024')).toBeVisible();
+    await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
+    await expect(modal.getByText('Declaración presentada ante AEAT.')).toHaveCount(0);
 
     const bankDocDownload = page.waitForEvent('download');
     await modal.getByTitle('Descargar Documento adicional').click();
