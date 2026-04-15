@@ -94,13 +94,12 @@ async function seedLocalBackup(page: Page, projectCode: string, formData: unknow
 }
 
 test.describe('Customer Journey Regressions', () => {
-  test('deleted stale link recovers cleanly and the same phone can create a fresh project', async ({ page, request }) => {
-    const localPhone = `6${String(Date.now() % 100_000_000).padStart(8, '0')}`;
-    const e164Phone = `+34${localPhone}`;
+  test('deleted stale link shows contact-advisor handling instead of phone recovery', async ({ page, request }) => {
+    const phone = `+346${String(Date.now() % 100_000_000).padStart(8, '0')}`;
 
     const createRes = await request.post(`${API_BASE}/api/project/create`, {
       data: {
-        phone: e164Phone,
+        phone,
         assessor: 'QA Recovery',
         productType: 'solar',
       },
@@ -124,31 +123,12 @@ test.describe('Customer Journey Regressions', () => {
     expect(deleteRes.ok()).toBeTruthy();
 
     await page.goto(`/?code=${staleCode}`);
-    await expect(page.locator('h1').first()).toContainText('Teléfono del cliente');
-
-    await page.locator('input[type="tel"]').fill(localPhone);
-    await page.getByRole('button', { name: /continuar/i }).click();
-
-    await expect(page.locator('h1').first()).toContainText('Nuevo expediente');
-    await page.getByRole('button', { name: /solar/i }).click();
-    await page.getByPlaceholder('Nombre completo').fill('QA Recovery');
-    await page.getByRole('button', { name: /crear expediente/i }).click();
-
-    await expect(page.locator('h1').first()).toContainText('Documentos');
-    await expect(page).toHaveURL(/\/\?code=ELT\d+/);
-
-    const recreatedUrl = new URL(page.url());
-    const recreatedCode = recreatedUrl.searchParams.get('code');
-    expect(recreatedCode).toBeTruthy();
-
-    const lookupRes = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(e164Phone)}`);
-    expect(lookupRes.ok()).toBeTruthy();
-    const lookupJson = await lookupRes.json();
-    expect(lookupJson.success).toBeTruthy();
-    expect(lookupJson.project.code).toBe(recreatedCode);
+    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
+    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 
-  test('resume by phone restores local backup and routes to the resumed step', async ({ page, request }) => {
+  test('assessor phone lookup restores local backup and routes to the resumed step', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
 
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
@@ -176,7 +156,7 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto('/');
+    await page.goto('/?source=assessor');
     await page.locator('input[type="tel"]').fill('666000005');
     await page.getByRole('button', { name: /continuar/i }).click();
 

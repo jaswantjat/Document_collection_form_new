@@ -7,7 +7,6 @@ import { buildPhone, getPhoneError, formatLocalNumber } from '@/lib/phone';
 
 interface Props {
   onPhoneConfirmed: (phone: string, project: ProjectData) => void;
-  onContinue: () => void;
 }
 
 // ── Country Picker Sheet ─────────────────────────────────────────────────────

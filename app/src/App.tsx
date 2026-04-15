@@ -315,22 +315,22 @@ function FormApp() {
           return;
         }
 
-        // Project was deleted or never existed — clear stale local data and go back
-        // to the phone entry screen rather than showing a dead-end error page.
-        // The assessor can then re-enter the phone number and create a new project.
+        // Project was deleted or never existed — clear stale local data and keep
+        // the customer on the contact-advisor handling instead of dropping back
+        // into the public entry flow.
         if (urlCode) clearLocalBackup(urlCode);
         setProject(null);
-        navigate('/', { replace: true });
+        setLoadError('PROJECT_NOT_FOUND');
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;
 
-        // Gracefully handle "Project Not Found" (404) by redirecting to phone entry.
-        // This fixes the "stale code" issue where a deleted project shows an error screen.
+        // Gracefully handle "Project Not Found" (404) without routing customers
+        // back into the public phone entry flow.
         if (err?.message === 'PROJECT_NOT_FOUND' || err?.status === 404) {
           if (urlCode) clearLocalBackup(urlCode);
           setProject(null);
-          navigate('/', { replace: true });
+          setLoadError('PROJECT_NOT_FOUND');
           return;
         }
 
@@ -503,11 +503,22 @@ function FormApp() {
   };
 
   const renderSection = () => {
+    if (!urlCode) {
+      if (source === 'assessor') {
+        return (
+          <PhoneSection
+            onPhoneConfirmed={handlePhoneConfirmed}
+          />
+        );
+      }
+
+      return <ErrorSection error="INVALID_CODE" />;
+    }
+
     if (activeSection === 'phone') {
       return (
         <PhoneSection
           onPhoneConfirmed={handlePhoneConfirmed}
-          onContinue={() => { }}
         />
       );
     }

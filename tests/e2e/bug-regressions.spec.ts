@@ -3,6 +3,14 @@ import { test, expect } from '@playwright/test';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 test.describe('Bug Regressions', () => {
+  test('REG-04: customer root without a code shows contact-advisor handling', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('heading', { name: /sin código de proyecto/i })).toBeVisible();
+    await expect(page.getByText(/accede desde el enlace/i)).toBeVisible();
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+  });
 
   test('REG-01: international phone format (+44, +33, +1) accepted by backend normalizePhone', async ({ request }) => {
     const phones = ['+447700900000', '+33612345678', '+12025550123'];
@@ -43,5 +51,14 @@ test.describe('Bug Regressions', () => {
       }
       console.log(`[REG-03] ${phone} → HTTP ${res.status()}, error: ${body.error ?? 'n/a'}`);
     }
+  });
+
+  test('REG-05: invalid customer link shows contact-advisor handling', async ({ page }) => {
+    await page.goto('/?code=UNKNOWN_TEST_CODE_12345');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
+    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 });
