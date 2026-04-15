@@ -478,7 +478,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
 
     expect(assets).toHaveLength(2);
     expect(assets[0]).toMatchObject({
-      label: 'Certificado de titularidad bancaria',
+      label: 'Documento adicional',
       mimeType: 'application/pdf',
     });
     expect(assets[1]).toMatchObject({

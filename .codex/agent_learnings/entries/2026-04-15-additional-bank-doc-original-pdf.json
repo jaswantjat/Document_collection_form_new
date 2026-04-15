@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-04-15T15:56:58Z",
+  "category": "architecture",
+  "text": "The generic Documento adicional flow may expand PDFs into page images for validation, but customer storage should still keep the original uploaded PDF as one stored file per entry.\nThat preserves auditability, keeps dashboard export faithful, and avoids inventing synthetic child documents.\nUse the derived pages only for AI extraction, not for persistence.",
+  "issue": "#13",
+  "pointers": ["app/src/lib/additionalBankDocumentProcessing.ts", "app/src/lib/photoValidation.ts", "app/src/services/api.ts"]
+}

@@ -6,19 +6,18 @@ import type {
   DocumentIssue,
 } from '@/types';
 
+const GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL = 'Documento adicional';
+
 const ADDITIONAL_BANK_DOCUMENT_LABELS: Record<AdditionalBankDocumentType, string> = {
-  'bank-ownership-certificate': 'Certificado de titularidad bancaria',
-  payroll: 'Nómina',
-  'bank-statements': 'Extractos bancarios',
-  'employment-contract': 'Contrato laboral',
-  'tax-return': 'Declaración de la renta',
-  other: 'Otro documento',
+  'bank-ownership-certificate': GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
+  payroll: GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
+  'bank-statements': GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
+  'employment-contract': GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
+  'tax-return': GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
+  other: GENERIC_ADDITIONAL_BANK_DOCUMENT_LABEL,
 };
 
 export const ADDITIONAL_BANK_DOCUMENT_ASSET_PREFIX = 'bankDocument';
-export const ADDITIONAL_BANK_DOCUMENT_OPTIONS = Object.entries(ADDITIONAL_BANK_DOCUMENT_LABELS).map(
-  ([value, label]) => ({ value: value as AdditionalBankDocumentType, label }),
-);
 
 export function createAdditionalBankDocumentId(): string {
   return `additional-bank-document-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

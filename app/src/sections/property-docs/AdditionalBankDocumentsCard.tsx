@@ -1,17 +1,10 @@
 import { useCallback, useState } from 'react';
 import { Building2, Plus } from 'lucide-react';
 
-import {
-  ADDITIONAL_BANK_DOCUMENT_OPTIONS,
-  createAdditionalBankDocumentId,
-  normalizeAdditionalBankDocuments,
-} from '@/lib/additionalBankDocuments';
+import { createAdditionalBankDocumentId, normalizeAdditionalBankDocuments } from '@/lib/additionalBankDocuments';
 import { buildValidatedAdditionalBankDocumentEntry } from '@/lib/additionalBankDocumentProcessing';
 import { AdditionalBankDocumentEntryCard } from '@/sections/property-docs/AdditionalBankDocumentEntryCard';
-import type {
-  AdditionalBankDocumentEntry,
-  AdditionalBankDocumentType,
-} from '@/types';
+import type { AdditionalBankDocumentEntry } from '@/types';
 
 interface Props {
   documents: AdditionalBankDocumentEntry[];
@@ -28,14 +21,35 @@ function formatFileSize(sizeBytes: number): string {
   return `${sizeBytes} B`;
 }
 
+async function buildAdditionalBankEntriesFromFiles(
+  files: File[],
+  createId: (index: number) => string,
+): Promise<{ entries: AdditionalBankDocumentEntry[]; messages: string[] }> {
+  const settled = await Promise.allSettled(
+    files.map((file, index) => buildValidatedAdditionalBankDocumentEntry([file], 'other', '', createId(index)))
+  );
+
+  const entries: AdditionalBankDocumentEntry[] = [];
+  const messages: string[] = [];
+
+  for (const item of settled) {
+    if (item.status === 'fulfilled') {
+      entries.push(item.value);
+      continue;
+    }
+
+    messages.push(item.reason instanceof Error ? item.reason.message : 'No se pudo validar el archivo.');
+  }
+
+  return { entries, messages };
+}
+
 export function AdditionalBankDocumentsCard({
   documents,
   onAddDocuments,
   onRemoveDocument,
   onReplaceDocument,
 }: Props) {
-  const [documentType, setDocumentType] = useState<AdditionalBankDocumentType>('bank-ownership-certificate');
-  const [customLabel, setCustomLabel] = useState('');
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -47,20 +61,18 @@ export function AdditionalBankDocumentsCard({
     setBusyKey('new');
     setError('');
     try {
-      const entry = await buildValidatedAdditionalBankDocumentEntry(
+      const { entries, messages } = await buildAdditionalBankEntriesFromFiles(
         files,
-        documentType,
-        customLabel,
-        createAdditionalBankDocumentId(),
+        () => createAdditionalBankDocumentId(),
       );
-      onAddDocuments([entry]);
-      if (documentType === 'other') setCustomLabel('');
+      if (entries.length > 0) onAddDocuments(entries);
+      if (messages.length > 0) setError(messages[0]);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'No se pudieron validar los archivos.');
     } finally {
       setBusyKey(null);
     }
-  }, [customLabel, documentType, onAddDocuments]);
+  }, [onAddDocuments]);
 
   const handleReplace = useCallback(async (entry: AdditionalBankDocumentEntry, files: File[]) => {
     if (files.length === 0) return;
@@ -68,19 +80,21 @@ export function AdditionalBankDocumentsCard({
     setBusyKey(entry.id);
     setError('');
     try {
-      const replacement = await buildValidatedAdditionalBankDocumentEntry(
+      const { entries, messages } = await buildAdditionalBankEntriesFromFiles(
         files,
-        entry.type,
-        entry.customLabel || '',
-        entry.id,
+        (index) => (index === 0 ? entry.id : createAdditionalBankDocumentId()),
       );
-      onReplaceDocument(entry.id, replacement);
+      if (entries.length > 0) {
+        onReplaceDocument(entry.id, entries[0]);
+        if (entries.length > 1) onAddDocuments(entries.slice(1));
+      }
+      if (messages.length > 0) setError(messages[0]);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'No se pudieron validar los archivos.');
     } finally {
       setBusyKey(null);
     }
-  }, [onReplaceDocument]);
+  }, [onAddDocuments, onReplaceDocument]);
 
   return (
     <div
@@ -92,43 +106,14 @@ export function AdditionalBankDocumentsCard({
           <Building2 className="h-5 w-5 text-gray-500" />
         </div>
         <div className="space-y-1">
-          <p className="font-semibold text-gray-900">Documentos bancarios adicionales</p>
+          <p className="font-semibold text-gray-900">Documento adicional</p>
           <p className="text-xs text-gray-500">
-            Opcional. Los validamos automáticamente y, si algo no cuadra, te lo indicamos antes de enviarlo.
+            Opcional. Sube cualquier documento adicional; la validación puede tardar unos segundos.
           </p>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <div className="space-y-3">
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-gray-500">Tipo de documento</span>
-            <select
-              data-testid="additional-bank-doc-type"
-              value={documentType}
-              onChange={(event) => setDocumentType(event.target.value as AdditionalBankDocumentType)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-eltex-blue"
-            >
-              {ADDITIONAL_BANK_DOCUMENT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-
-          {documentType === 'other' && (
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-gray-500">Etiqueta opcional</span>
-              <input
-                data-testid="additional-bank-doc-other-label"
-                value={customLabel}
-                onChange={(event) => setCustomLabel(event.target.value)}
-                placeholder="Ej. IRPF 2024"
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-eltex-blue"
-              />
-            </label>
-          )}
-        </div>
-
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white px-4 py-4 text-sm font-medium text-gray-600 transition-colors hover:border-eltex-blue hover:text-eltex-blue">
           <input
             type="file"
@@ -155,7 +140,7 @@ export function AdditionalBankDocumentsCard({
 
       {normalizedDocuments.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-4 text-sm text-gray-500">
-          No has añadido documentos bancarios extra.
+          No has añadido documentos adicionales.
         </div>
       ) : (
         <div data-testid="additional-bank-documents-list" className="space-y-3">
