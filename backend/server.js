@@ -36,6 +36,7 @@ const {
   isAdditionalBankDocumentType,
   normalizeAdditionalBankDocumentExtraction,
 } = require('./lib/additionalBankDocumentExtraction');
+const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -2941,7 +2942,9 @@ app.use((err, req, res, next) => {
   }
 });
 
-app.listen(PORT, () => {
+const servers = [];
+
+const primaryServer = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   if (isProduction) {
     console.log('✅ Production mode: serving frontend from dist/');
@@ -2960,6 +2963,7 @@ app.listen(PORT, () => {
     });
   }
 });
+servers.push(primaryServer);
 
 if (isProduction && PORT !== LEGACY_COMPAT_PORT) {
   const compatServer = app.listen(LEGACY_COMPAT_PORT, () => {
@@ -2968,4 +2972,7 @@ if (isProduction && PORT !== LEGACY_COMPAT_PORT) {
   compatServer.on('error', (error) => {
     console.warn(`⚠️  Failed to bind legacy compatibility port ${LEGACY_COMPAT_PORT}: ${error.message}`);
   });
+  servers.push(compatServer);
 }
+
+registerGracefulShutdown({ servers });
