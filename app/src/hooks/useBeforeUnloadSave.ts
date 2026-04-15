@@ -69,5 +69,5 @@ export function useBeforeUnloadSave(
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [projectCode, token]);
+  }, [projectCode, source, token]);
 }
