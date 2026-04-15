@@ -478,13 +478,80 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
 
     expect(assets).toHaveLength(2);
     expect(assets[0]).toMatchObject({
-      label: 'Certificado de titularidad bancaria',
+      label: 'Documento adicional',
       mimeType: 'application/pdf',
     });
     expect(assets[1]).toMatchObject({
       label: 'IRPF 2024',
       dataUrl: '/uploads/assets/ELT001/bank-doc-other.png',
       mimeType: 'image/png',
+    });
+  });
+
+  it('flags manual-review from issue.code without changing the generic label', () => {
+    const assets = getDashboardAdditionalBankDocumentAssets({
+      formData: {
+        additionalBankDocuments: [
+          {
+            id: 'payroll',
+            type: 'payroll',
+            files: [{
+              id: 'payroll-file',
+              filename: 'payroll.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+            issue: {
+              code: 'manual-review',
+              message: 'Revisar',
+              updatedAt: '2026-04-15T00:00:00Z',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(assets).toHaveLength(1);
+    expect(assets[0]).toMatchObject({
+      label: 'Documento adicional',
+      needsManualReview: true,
+    });
+  });
+
+  it('flags manual-review from extraction.needsManualReview without changing the generic label', () => {
+    const assets = getDashboardAdditionalBankDocumentAssets({
+      formData: {
+        additionalBankDocuments: [
+          {
+            id: 'payroll',
+            type: 'payroll',
+            files: [{
+              id: 'payroll-file',
+              filename: 'payroll.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+            extraction: {
+              extractedData: { summary: 'AI summary' },
+              confidence: 0.9,
+              isCorrectDocument: true,
+              documentTypeDetected: 'Payroll',
+              needsManualReview: true,
+              confirmedByUser: true,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(assets).toHaveLength(1);
+    expect(assets[0]).toMatchObject({
+      label: 'Documento adicional',
+      needsManualReview: true,
     });
   });
 

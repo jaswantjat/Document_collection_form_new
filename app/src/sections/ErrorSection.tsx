@@ -21,6 +21,14 @@ const errorMessages: Record<string, { title: string; description: string }> = {
     title: 'Enlace no válido',
     description: 'Este enlace no tiene autorización para acceder al proyecto. Asegúrate de usar el enlace completo que te ha enviado tu asesor de Eltex.',
   },
+  UNAUTHORIZED: {
+    title: 'Enlace no válido',
+    description: 'Este enlace no tiene autorización para acceder al proyecto. Asegúrate de usar el enlace completo que te ha enviado tu asesor de Eltex.',
+  },
+  INVALID_TOKEN: {
+    title: 'Enlace no válido',
+    description: 'Este enlace no tiene autorización para acceder al proyecto. Asegúrate de usar el enlace completo que te ha enviado tu asesor de Eltex.',
+  },
   UNKNOWN_ERROR: {
     title: 'Error inesperado',
     description: 'Ha ocurrido un error inesperado. Por favor, recarga la página o contacta con tu asesor.',

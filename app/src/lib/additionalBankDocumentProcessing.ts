@@ -113,13 +113,13 @@ async function extractValidationResult(
           : response.isUnreadable
             ? 'unreadable'
             : 'temporary-error';
-      if (reason !== 'temporary-error') {
+      if (reason !== 'temporary-error' && reason !== 'unreadable') {
         throw new HardValidationError(response.message || 'El archivo no pudo validarse automáticamente.');
       }
       return {
         extraction: null,
         issue: createDocumentIssue(
-          'temporary-error',
+          'manual-review',
           response.message || 'Hemos guardado el documento, pero la lectura automática no pudo completarse.'
         ),
       };
@@ -137,17 +137,17 @@ async function extractValidationResult(
         ? createDocumentIssue('manual-review', 'Hemos guardado el documento, pero conviene revisarlo antes de tramitarlo.')
         : null,
     };
-  } catch (error) {
-    if (error instanceof HardValidationError) throw error;
-    return {
-      extraction: null,
-      issue: createDocumentIssue(
-        'temporary-error',
-        'Hemos guardado el documento, pero la lectura automática falló por conexión.'
-      ),
-    };
+    } catch (error) {
+      if (error instanceof HardValidationError) throw error;
+      return {
+        extraction: null,
+        issue: createDocumentIssue(
+          'manual-review',
+          'Hemos guardado el documento, pero la lectura automática falló por conexión.'
+        ),
+      };
+    }
   }
-}
 
 export async function buildValidatedAdditionalBankDocumentEntry(
   files: File[],

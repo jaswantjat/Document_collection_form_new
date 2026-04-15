@@ -39,6 +39,7 @@ function getDefaultProjects({ isProduction, seedSampleData }) {
       productType: 'solar',
       assessor: 'Carlos Ruiz',
       assessorId: 'ASR001',
+      accessToken: 'customer-token-20250001',
       formData: null,
       submissions: [],
       lastActivity: null,
@@ -52,6 +53,7 @@ function getDefaultProjects({ isProduction, seedSampleData }) {
       productType: 'aerothermal',
       assessor: 'Ana López',
       assessorId: 'ASR002',
+      accessToken: 'customer-token-20250002',
       formData: null,
       submissions: [],
       lastActivity: null,
@@ -65,6 +67,7 @@ function getDefaultProjects({ isProduction, seedSampleData }) {
       productType: 'solar',
       assessor: 'Pedro Sánchez',
       assessorId: 'ASR003',
+      accessToken: 'customer-token-20250003',
       formData: null,
       submissions: [],
       lastActivity: null,
@@ -109,9 +112,16 @@ function ensureDefaultTestProjects(database, { isProduction, seedSampleData }) {
 
   let changed = false;
   for (const code of DEFAULT_TEST_CODES) {
-    if (database.projects[code]) continue;
-    database.projects[code] = clone(defaults[code]);
-    changed = true;
+    if (!database.projects[code]) {
+      database.projects[code] = clone(defaults[code]);
+      changed = true;
+      continue;
+    }
+
+    if (!database.projects[code].accessToken) {
+      database.projects[code].accessToken = defaults[code].accessToken;
+      changed = true;
+    }
   }
   return changed;
 }

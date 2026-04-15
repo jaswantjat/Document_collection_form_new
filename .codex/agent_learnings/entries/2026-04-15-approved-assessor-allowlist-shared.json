@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-04-15T16:17:54Z",
+  "category": "architecture",
+  "text": "The dashboard assessor allowlist is sourced from the same shared JSON file on both the frontend and backend.\nThis keeps the select options and backend validation in lockstep and prevents silent drift between UI and API behavior.\nIf the approved names change, update the shared JSON once and prove both layers with tests.",
+  "issue": 14,
+  "pointers": [
+    "app/src/shared/approvedAssessors.json",
+    "app/src/lib/approvedAssessors.ts",
+    "backend/lib/approvedAssessors.js"
+  ]
+}

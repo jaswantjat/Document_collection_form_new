@@ -1,6 +1,5 @@
 import { AlertTriangle, CheckCircle, FileText, RefreshCcw, Trash2 } from 'lucide-react';
 
-import { getAdditionalBankDocumentSummaryRows } from '@/lib/additionalBankDocumentProcessing';
 import { getAdditionalBankDocumentLabel } from '@/lib/additionalBankDocuments';
 import type { AdditionalBankDocumentEntry } from '@/types';
 
@@ -47,9 +46,6 @@ export function AdditionalBankDocumentEntryCard({
   onRemove,
   onReplace,
 }: Props) {
-  const rows = getAdditionalBankDocumentSummaryRows(entry);
-  const detectedLabel = entry.extraction?.documentTypeDetected?.trim();
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -90,26 +86,6 @@ export function AdditionalBankDocumentEntryCard({
       </div>
 
       {entry.issue?.message && <IssueNotice message={entry.issue.message} />}
-
-      {(detectedLabel || rows.length > 0) && (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 space-y-2" data-testid="additional-bank-doc-summary">
-          {detectedLabel && (
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Detectado: <span className="font-semibold text-gray-700">{detectedLabel}</span>
-            </p>
-          )}
-          {rows.length > 0 && (
-            <dl className="grid gap-2 sm:grid-cols-2">
-              {rows.map((row) => (
-                <div key={`${row.label}-${row.value}`} className="space-y-0.5">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{row.label}</dt>
-                  <dd className="text-sm text-gray-700 break-words">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-      )}
 
       <div className="space-y-2">
         {entry.files.map((file) => (

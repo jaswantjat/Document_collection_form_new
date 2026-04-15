@@ -29,8 +29,19 @@ import {
   Upload,
   Zap,
   Scissors,
+  Send,
 } from 'lucide-react';
-import { dashboardLogout, deleteProject, fetchDashboard, fetchDashboardProject, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
+import {
+  dashboardLogout,
+  deleteProject,
+  fetchDashboard,
+  fetchDashboardProject,
+  extractDocument,
+  extractDocumentBatch,
+  adminUpdateFormData,
+  resendDashboardProjectLink,
+  type DashboardProjectActionResult,
+} from '@/services/api';
 import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
@@ -53,6 +64,7 @@ import {
   getDocumentAssetsFromProject, getElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
 import { downloadProjectZip } from '@/lib/dashboardExport';
+import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
 
 function ProductBadge({ type }: { type: string }) {
   const isSolar = type?.toLowerCase() === 'solar';
@@ -1246,6 +1258,7 @@ function ProjectTableRow({
   loadProjectDetail,
   onRefresh,
   onDelete,
+  onResendLink,
 }: {
   project: any;
   summary: DashboardProjectSummary;
@@ -1253,9 +1266,11 @@ function ProjectTableRow({
   loadProjectDetail: (projectCode: string) => Promise<any>;
   onRefresh: () => void;
   onDelete: (code: string) => void;
+  onResendLink: (code: string) => Promise<void>;
 }) {
   const [downloading, setDownloading] = useState(false);
   const [openingForm, setOpeningForm] = useState(false);
+  const [resendingLink, setResendingLink] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
@@ -1269,9 +1284,8 @@ function ProjectTableRow({
     setOpeningForm(true);
 
     try {
-      await loadProjectDetail(project.code);
-
-      const formUrl = buildProjectUrl(project.code, 'assessor');
+      const detailProject = await loadProjectDetail(project.code);
+      const formUrl = buildProjectUrl(project.code, 'assessor', detailProject?.accessToken ?? project.accessToken);
       if (popup) {
         popup.location.href = formUrl;
       } else {
@@ -1312,6 +1326,18 @@ function ProjectTableRow({
     } catch {
       setDeleteState('idle');
       alert('Error de conexión al intentar eliminar el expediente.');
+    }
+  };
+
+  const handleResendLink = async () => {
+    setResendingLink(true);
+    try {
+      await onResendLink(project.code);
+    } catch (err) {
+      console.error('Resend project link failed:', err);
+      alert(err instanceof Error ? err.message : 'No se pudo reenviar el enlace.');
+    } finally {
+      setResendingLink(false);
     }
   };
 
@@ -1417,6 +1443,16 @@ function ProjectTableRow({
             className="px-2 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center truncate"
           >
             {openingForm ? 'Abriendo...' : 'Formulario'}
+          </button>
+          <button
+            type="button"
+            data-testid="dashboard-row-resend-link-btn"
+            onClick={() => { void handleResendLink(); }}
+            disabled={resendingLink}
+            className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
+          >
+            <Send className="w-3 h-3 shrink-0" />
+            {resendingLink ? 'Rotando...' : 'Reenviar'}
           </button>
           <button
             type="button"
@@ -2083,7 +2119,19 @@ export function DownloadGroupsSection({
             <div className="mt-3 space-y-2">
               {group.items.map((asset) => (
                 <div key={asset.key} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs text-gray-700 truncate">{asset.label}</span>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <span className="block truncate text-xs text-gray-700">{asset.label}</span>
+                    {asset.needsManualReview && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+                        title="Revisión manual requerida"
+                        data-testid="additional-bank-doc-review-badge"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Revisar
+                      </span>
+                    )}
+                  </div>
                   <AssetButtons asset={asset} projectCode={projectCode} compact />
                 </div>
               ))}
@@ -2102,6 +2150,7 @@ interface DashboardProps {
 
 export function Dashboard({ token, onLogout }: DashboardProps) {
   const [projects, setProjects] = useState<any[]>([]);
+  const [actionResult, setActionResult] = useState<DashboardProjectActionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'submitted' | 'pending'>('all');
@@ -2159,6 +2208,34 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     detailCacheRef.current.delete(code);
     setProjects((prev) => prev.filter((p) => p.code !== code));
   }, []);
+
+  const handleProjectActionResult = useCallback(async (result: DashboardProjectActionResult) => {
+    detailCacheRef.current.delete(result.project.code);
+    setActionResult(result);
+    setFilter('all');
+    setSearch(result.project.code);
+    await load();
+  }, [load]);
+
+  const handleResendProjectLink = useCallback(async (projectCode: string) => {
+    const response = await resendDashboardProjectLink(projectCode, token);
+    if (response.success && response.project && response.customerLink) {
+      await handleProjectActionResult({
+        action: 'resent',
+        existing: false,
+        project: response.project,
+        customerLink: response.customerLink,
+      });
+      return;
+    }
+
+    if (isDashboardAuthError(response.error)) {
+      await handleLogout();
+      throw new Error(response.message || 'La sesión del dashboard ha caducado.');
+    }
+
+    throw new Error(response.message || response.error || 'No se pudo reenviar el enlace.');
+  }, [handleLogout, handleProjectActionResult, token]);
 
   useEffect(() => {
     void load();
@@ -2259,6 +2336,12 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           ))}
         </div>
 
+        <DashboardProjectManagementCard
+          token={token}
+          actionResult={actionResult}
+          onActionResult={handleProjectActionResult}
+        />
+
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -2337,6 +2420,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                           loadProjectDetail={loadProjectDetail}
                           onRefresh={load}
                           onDelete={handleDeleteProject}
+                          onResendLink={handleResendProjectLink}
                         />
                       ))}
                     </tbody>

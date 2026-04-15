@@ -7,6 +7,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  createDashboardProject,
+  resendDashboardProjectLink,
   fetchProject,
   lookupByPhone,
   dashboardLogin,
@@ -66,6 +68,15 @@ describe('fetchProject', () => {
       expect.stringContaining('/api/project/ELT001'),
       expect.anything(),
     );
+  });
+
+  it('sends the customer token in the request URL and header when provided', async () => {
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    await fetchProject('ELT001', { token: 'customer-token-20250001' });
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 
   it('returns error payload on project-not-found (404 body)', async () => {
@@ -201,6 +212,74 @@ describe('fetchDashboardProject', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// createDashboardProject
+// ─────────────────────────────────────────────────────────────────────────────
+describe('createDashboardProject', () => {
+  it('posts to the dashboard project endpoint and returns the secure link payload', async () => {
+    mockFetch({
+      success: true,
+      existing: false,
+      customerLink: '/?code=ELT001&token=token-123',
+      project: { code: 'ELT001' },
+    });
+
+    const result = await createDashboardProject({
+      phone: '+34612345678',
+      assessor: 'Sergi Guillen Cavero',
+      productType: 'solar',
+    }, 'dash-token');
+
+    expect(result.success).toBe(true);
+    expect(result.customerLink).toBe('/?code=ELT001&token=token-123');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/dashboard/project');
+    expect(fetchMock.mock.calls[0][1].headers['x-dashboard-token']).toBe('dash-token');
+  });
+
+  it('returns backend validation errors for invalid assessor selections', async () => {
+    mockFetch({ success: false, message: 'Selecciona un asesor de la lista aprobada.' }, 400);
+
+    const result = await createDashboardProject({
+      phone: '+34612345678',
+      assessor: 'QA Bot',
+    }, 'dash-token');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('asesor');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resendDashboardProjectLink
+// ─────────────────────────────────────────────────────────────────────────────
+describe('resendDashboardProjectLink', () => {
+  it('posts to the resend endpoint and returns the rotated customer link', async () => {
+    mockFetch({
+      success: true,
+      customerLink: '/?code=ELT001&token=rotated-token',
+      project: { code: 'ELT001' },
+    });
+
+    const result = await resendDashboardProjectLink('ELT001', 'dash-token');
+
+    expect(result.success).toBe(true);
+    expect(result.customerLink).toBe('/?code=ELT001&token=rotated-token');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/dashboard/project/ELT001/resend');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+  });
+
+  it('returns not-found payloads for missing dashboard projects', async () => {
+    mockFetch({ success: false, error: 'PROJECT_NOT_FOUND' }, 404);
+    const result = await resendDashboardProjectLink('ELT404', 'dash-token');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('PROJECT_NOT_FOUND');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // saveProgress — bad data conditions
 // ─────────────────────────────────────────────────────────────────────────────
 describe('saveProgress', () => {
@@ -231,6 +310,15 @@ describe('saveProgress', () => {
   it('propagates network error on save failure', async () => {
     mockFetchNetworkError('Server down');
     await expect(saveProgress('ELT001', minimalFormData)).rejects.toThrow('Server down');
+  });
+
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true });
+    await saveProgress('ELT001', minimalFormData, 'customer', 'customer-token-20250001');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 
   it('rejects non-OK HTTP responses instead of treating them as saved', async () => {
@@ -267,6 +355,15 @@ describe('submitForm', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.source).toBe('assessor');
     expect(body.attemptId).toBe('attempt-2');
+  });
+
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true });
+    await submitForm('ELT001', formData, 'customer', 'attempt-token', 'customer-token-20250001');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 
   it('propagates server error', async () => {
@@ -435,6 +532,17 @@ describe('preUploadAssets', () => {
     const entries = Array.from(requestBody.entries());
 
     expect(entries).toEqual([['activeKeys', '["bankDocument_0"]']]);
+  });
+
+  it('includes the customer token when provided', async () => {
+    mockFetch({ success: true, savedKeys: ['dniFront'] });
+
+    await preUploadAssets('ELT-UPLOAD-007', makeFormData(), 'customer-token-20250001');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    expect(String(calledUrl)).toContain('token=customer-token-20250001');
+    expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
 });
 

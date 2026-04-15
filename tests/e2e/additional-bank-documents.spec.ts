@@ -219,7 +219,7 @@ test('additional bank documents persist across reload and remain optional for su
       confidence: 0.96,
       isCorrectDocument: true,
       documentTypeDetected: 'Declaración de la renta',
-      needsManualReview: false,
+      needsManualReview: true,
     },
   });
 
@@ -230,23 +230,24 @@ test('additional bank documents persist across reload and remain optional for su
   await expect(page.locator('h1').first()).toContainText('Documentos');
   await expect(page.getByTestId('additional-bank-documents-card')).toBeVisible();
 
-  await page.getByTestId('additional-bank-doc-type').selectOption('tax-return');
   await page.getByTestId('additional-bank-documents-input').setInputFiles(BANK_DOCUMENT_UPLOAD);
 
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Declaración de la renta');
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ana Pérez López');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ejercicio 2024');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('250 EUR a devolver');
+  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Documento adicional');
+  await expect(page.getByText('Revisar', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ana Pérez López');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ejercicio 2024');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('250 EUR a devolver');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Declaración de la renta presentada ante AEAT.');
 
   await expect.poll(async () => {
     const project = await readProjectState(request, projectCode);
     return {
       documents: project?.formData.additionalBankDocuments?.length ?? 0,
       asset: Boolean(project?.assetFiles?.bankDocument_0),
-      holderName: project?.formData.additionalBankDocuments?.[0]?.extraction?.extractedData?.holderName ?? null,
+      documentNumber: project?.formData.additionalBankDocuments?.[0]?.extraction?.extractedData?.documentNumber ?? null,
     };
-  }).toEqual({ documents: 1, asset: true, holderName: 'Ana Pérez López' });
+  }).toEqual({ documents: 1, asset: true, documentNumber: 'MODEL100' });
 
   await clearDeviceBackup(page, projectCode);
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -255,10 +256,11 @@ test('additional bank documents persist across reload and remain optional for su
   await page.getByRole('button', { name: /Factura de luz/i }).click();
   await expect(page.locator('h1').first()).toContainText('Documentos');
 
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Declaración de la renta');
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ana Pérez López');
-  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Ejercicio 2024');
+  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Documento adicional');
+  await expect(page.getByText('Revisar', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ana Pérez López');
+  await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ejercicio 2024');
 
   await expect.poll(async () => {
     const project = await readProjectState(request, projectCode);
@@ -302,11 +304,11 @@ test('additional bank documents reject a wrong document before saving it', async
     message: 'Documento incorrecto. Por favor sube la nómina.',
   });
 
-  await page.goto(`/?code=${projectCode}`, { waitUntil: 'networkidle' });
+  await page.goto(`/?code=${projectCode}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('button', { name: /Factura de luz/i })).toBeVisible({ timeout: 20000 });
   await page.getByRole('button', { name: /Factura de luz/i }).click();
   await expect(page.locator('h1').first()).toContainText('Documentos');
 
-  await page.getByTestId('additional-bank-doc-type').selectOption('payroll');
   await page.getByTestId('additional-bank-documents-input').setInputFiles(BANK_DOCUMENT_IMAGE_UPLOAD);
 
   await expect(page.getByText('Documento incorrecto. Por favor sube la nómina.')).toBeVisible();
@@ -316,4 +318,62 @@ test('additional bank documents reject a wrong document before saving it', async
     const project = await readProjectState(request, projectCode);
     return project?.formData.additionalBankDocuments?.length ?? 0;
   }).toBe(0);
+});
+
+test('additional bank documents save with manual review when AI result is temporary or ambiguous', async ({ page, request }) => {
+  const createRes = await request.post(`${API_BASE}/api/project/create`, {
+    data: {
+      phone: uniquePhone(),
+      assessor: 'QA Bot',
+      assessorId: 'QA-BOT',
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const createBody = await createRes.json();
+  const projectCode = createBody.project.code as string;
+
+  const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: { formData: buildReviewReadyFormData(), source: 'customer' },
+  });
+  expect(saveRes.ok()).toBeTruthy();
+
+  await mockAdditionalBankDocumentValidation(page, {
+    success: false,
+    needsManualReview: true,
+    reason: 'temporary-error',
+    message: 'No se pudo validar el documento de forma concluyente.',
+  });
+
+  await page.goto(`/?code=${projectCode}`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: /Factura de luz/i }).click();
+  await expect(page.locator('h1').first()).toContainText('Documentos');
+
+  await page.getByTestId('additional-bank-documents-input').setInputFiles([
+    BANK_DOCUMENT_UPLOAD,
+    BANK_DOCUMENT_IMAGE_UPLOAD,
+  ]);
+
+  await expect(page.getByText('No se pudo validar el documento de forma concluyente.').first()).toBeVisible();
+  await expect(page.getByTestId('additional-bank-documents-list').locator('> div')).toHaveCount(2);
+  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
+  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('nomina.jpg');
+  await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Documento adicional');
+
+  await expect.poll(async () => {
+    const project = await readProjectState(request, projectCode);
+    return {
+      documents: project?.formData.additionalBankDocuments?.length ?? 0,
+      asset0: Boolean(project?.assetFiles?.bankDocument_0),
+      asset1: Boolean(project?.assetFiles?.bankDocument_1),
+      issueCodes: (project?.formData.additionalBankDocuments ?? []).map(
+        (document: { issue?: { code?: string } | null }) => document.issue?.code ?? null,
+      ),
+    };
+  }).toEqual({
+    documents: 2,
+    asset0: true,
+    asset1: true,
+    issueCodes: ['manual-review', 'manual-review'],
+  });
 });

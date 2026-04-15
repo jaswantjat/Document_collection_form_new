@@ -36,6 +36,13 @@ const {
   isAdditionalBankDocumentType,
   normalizeAdditionalBankDocumentExtraction,
 } = require('./lib/additionalBankDocumentExtraction');
+const {
+  createDashboardProjectRecord,
+  findProjectByNormalizedPhone,
+  normalizeDashboardCreateInput,
+  serializeDashboardProjectAction,
+  validateDashboardCreateInput,
+} = require('./lib/dashboardProjectManagement');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
 const app = express();
@@ -330,10 +337,51 @@ function saveDB() {
 const database = loadDB();
 
 // ── IDOR: Validate project access ───────────────────────────────────────────
+function normalizeProjectToken(value) {
+  if (Array.isArray(value)) {
+    return normalizeProjectToken(value[0]);
+  }
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function getCustomerAccessToken(req) {
+  const queryToken = normalizeProjectToken(req.query?.token);
+  const headerToken = normalizeProjectToken(req.get('x-project-token'));
+  if (queryToken && headerToken && queryToken !== headerToken) {
+    return { token: null, mismatch: true };
+  }
+  return { token: queryToken || headerToken, mismatch: false };
+}
+
+function buildCustomerProjectUrl(code, accessToken) {
+  const params = new URLSearchParams({ code });
+  if (accessToken) params.set('token', accessToken);
+  return `/?${params.toString()}`;
+}
+
 function requireProject(req, res, next) {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+
+  const { token, mismatch } = getCustomerAccessToken(req);
+  if (mismatch || !token) {
+    return res.status(401).json({
+      success: false,
+      error: mismatch ? 'INVALID_TOKEN' : 'UNAUTHORIZED',
+      message: 'Este enlace no tiene autorización para acceder al proyecto.',
+    });
+  }
+
+  if (!project.accessToken || token !== project.accessToken) {
+    return res.status(401).json({
+      success: false,
+      error: 'INVALID_TOKEN',
+      message: 'Este enlace no tiene autorización para acceder al proyecto.',
+    });
+  }
 
   req.project = project;
   next();
@@ -865,6 +913,22 @@ app.post('/api/project/create', (req, res) => {
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
 });
 
+app.post('/api/dashboard/project/:code/secure-link', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  project.accessToken = uuidv4();
+  saveDB();
+
+  res.json({
+    success: true,
+    project: serializeProject(project, { includeAccessToken: true }),
+    customerUrl: buildCustomerProjectUrl(project.code, project.accessToken),
+  });
+});
+
 // ── Helper: Check if Catalonia PDFs can be generated ───────────────────────────────
 function checkCataloniaPDFs(formData) {
   if (!formData) return { canGenerateRepresentacio: false, canGeneratePoder: false };
@@ -1265,12 +1329,60 @@ app.get('/api/dashboard', requireDashboardAuth, (req, res) => {
   res.json({ success: true, projects });
 });
 
+app.post('/api/dashboard/project', requireDashboardAuth, (req, res) => {
+  const input = normalizeDashboardCreateInput(req.body, normalizePhone);
+  const validationError = validateDashboardCreateInput(input);
+  if (validationError) {
+    return res.status(400).json({ success: false, message: validationError });
+  }
+
+  const existing = findProjectByNormalizedPhone(database.projects, input.normalizedPhone, normalizePhone);
+  if (existing) {
+    return res.json({
+      success: true,
+      existing: true,
+      ...serializeDashboardProjectAction(existing, serializeProject),
+    });
+  }
+
+  const project = createDashboardProjectRecord(
+    input,
+    generateProjectCode,
+    uuidv4,
+    new Date().toISOString(),
+  );
+
+  database.projects[project.code] = project;
+  saveDB();
+
+  return res.json({
+    success: true,
+    existing: false,
+    ...serializeDashboardProjectAction(project, serializeProject),
+  });
+});
+
 app.get('/api/dashboard/project/:code', requireDashboardAuth, (req, res) => {
   const project = database.projects[req.params.code];
   if (!project) {
     return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
   }
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
+});
+
+app.post('/api/dashboard/project/:code/resend', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  project.accessToken = uuidv4();
+  saveDB();
+
+  return res.json({
+    success: true,
+    ...serializeDashboardProjectAction(project, serializeProject),
+  });
 });
 
 // ── Delete a project (admin only) ─────────────────────────────────────────────
@@ -2959,7 +3071,7 @@ const primaryServer = app.listen(PORT, () => {
     console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec) | ELT20250005 (ec-flow)');
     console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004 | +34666000005');
     availableTestProjects.forEach((project) => {
-      console.log(`🔗 ${project.code}: /?code=${project.code}`);
+      console.log(`🔗 ${project.code}: ${buildCustomerProjectUrl(project.code, project.accessToken)}`);
     });
   }
 });
