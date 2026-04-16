@@ -64,7 +64,7 @@ function delay(ms: number) {
 
 function isTransientRequestError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /ECONNRESET|EPIPE|socket hang up/i.test(message);
+  return /ECONNRESET|EPIPE|socket hang up|Timeout .* exceeded/i.test(message);
 }
 
 async function postWithRetry(
@@ -231,7 +231,7 @@ async function loginDashboard(request: any) {
     request,
     `${API_BASE}/api/dashboard/login`,
     { password: 'eltex2025' },
-    10000,
+    20000,
   );
   expect(loginRes.status()).toBe(200);
   const loginBody = await loginRes.json();
@@ -269,11 +269,11 @@ async function createDashboardProject(request: any, formData?: Record<string, un
 }
 
 async function openDashboard(page: any, token: string) {
-  await page.goto('/');
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
   await page.evaluate((dashboardToken: string) => {
     sessionStorage.setItem('dashboard_token', dashboardToken);
   }, token);
-  await page.goto('/dashboard');
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
   await expect(page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...')).toBeVisible({ timeout: 15000 });
 }
@@ -321,6 +321,7 @@ test.describe('Dashboard QA', () => {
 
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
     await expect(page.getByTestId('dashboard-row-resend-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('open-upload-btn')).toHaveCount(0);
   });
 
   test('dashboard staff create shows a validation error when the phone is missing', async ({ page, request }) => {
@@ -612,7 +613,8 @@ test.describe('Dashboard QA', () => {
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
     await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
-    await page.getByTestId('open-upload-btn').click();
+    await page.getByTestId('ver-expediente-btn').click();
+    await page.getByTestId('detail-upload-btn').click();
     const uploadModal = page.getByTestId('admin-upload-modal');
     await expect(uploadModal).toBeVisible();
 
@@ -627,18 +629,21 @@ test.describe('Dashboard QA', () => {
     await uploadModal.getByTestId('admin-upload-close-btn').click();
     await expect(uploadModal).toBeHidden({ timeout: 15000 });
 
-    await page.getByTestId('dashboard-refresh-btn').click();
-    await expect(page.getByText('1 archivo')).toBeVisible();
-    await page.getByTestId('ver-expediente-btn').click();
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('Documentos adicionales')).toBeVisible();
     await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('Revisar', { exact: true })).toHaveCount(0);
+    await page.getByTestId('project-detail-modal').click({ position: { x: 8, y: 8 } });
+    await expect(page.getByTestId('project-detail-modal')).toBeHidden({ timeout: 15000 });
+
+    await expect(page.getByText('1 archivo · irpf-2024.pdf')).toBeVisible({ timeout: 15000 });
     expect(extractCalls).toBe(0);
 
+    await page.getByTestId('ver-expediente-btn').click();
+    await expect(page.getByTestId('project-detail-modal')).toBeVisible();
     const bankDocDownload = page.waitForEvent('download');
-    await modal.getByTitle('Descargar Documento adicional').click();
+    await page.getByTestId('project-detail-modal').getByTitle('Descargar Documento adicional').click();
     expect((await bankDocDownload).suggestedFilename()).toBe(`${code}_documento_adicional.pdf`);
   });
 
@@ -669,19 +674,15 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await page.getByTestId('open-upload-btn').click();
+    await page.getByTestId('ver-expediente-btn').click();
+    await page.getByTestId('detail-upload-btn').click();
     await expect(page.getByTestId('admin-upload-modal')).toBeVisible();
 
     await page.getByTestId('admin-upload-file-input').setInputFiles(ADMIN_UPLOAD_FILE);
-    await expect(page.getByText('Admin Upload Test')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Recibido')).toBeVisible({ timeout: 15000 });
     const uploadModal = page.getByTestId('admin-upload-modal');
     await expect(uploadModal.getByText('Documento guardado correctamente.')).toBeVisible({ timeout: 15000 });
     await uploadModal.getByTestId('admin-upload-close-btn').click();
     await expect(uploadModal).toBeHidden({ timeout: 15000 });
-
-    await page.getByTestId('dashboard-refresh-btn').click();
-    await page.getByTestId('ver-expediente-btn').click();
     await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();
   });
 

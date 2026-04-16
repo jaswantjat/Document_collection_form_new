@@ -815,13 +815,20 @@ function AdditionalDocumentsTableCell({
   }
 
   const manualReview = items.filter((item) => item.needsManualReview).length;
+  const firstFilename = items[0]?.filename?.trim() || items[0]?.label || 'Documento adicional';
+  const summaryLabel = items.length === 1
+    ? `1 archivo · ${firstFilename}`
+    : `${items.length} archivos · ${firstFilename} +${items.length - 1}`;
 
   return (
-    <div className="space-y-1.5 min-w-[130px]">
-      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle className="w-3 h-3" />
-        {items.length} archivo{items.length !== 1 ? 's' : ''}
-      </div>
+    <div className="space-y-1 min-w-[210px]">
+      <p
+        className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+        title={summaryLabel}
+      >
+        <CheckCircle className="w-3 h-3 shrink-0" />
+        <span className="truncate">{summaryLabel}</span>
+      </p>
       {manualReview > 0 && (
         <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
           <AlertTriangle className="w-3 h-3" />
@@ -1057,7 +1064,7 @@ function AdminUploadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[260] bg-black/60 flex items-center justify-center p-4"
       data-testid="admin-upload-modal"
       onClick={() => {
         if (!isBusy) onClose();
@@ -1184,16 +1191,19 @@ function ProjectDetailModal({
   projectCode,
   token,
   loadProjectDetail,
+  onRefresh,
   onClose,
 }: {
   projectCode: string;
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
+  onRefresh: () => Promise<void> | void;
   onClose: () => void;
 }) {
   const [project, setProject] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1223,7 +1233,14 @@ function ProjectDetailModal({
     [project]
   );
 
+  const refreshProject = useCallback(async () => {
+    await onRefresh();
+    const detail = await loadProjectDetail(projectCode);
+    setProject(detail);
+  }, [loadProjectDetail, onRefresh, projectCode]);
+
   return (
+    <>
     <div className="fixed inset-0 z-[220] bg-black/60 flex items-center justify-center p-4" data-testid="project-detail-modal" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col"
@@ -1246,6 +1263,17 @@ function ProjectDetailModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {project && (
+              <button
+                type="button"
+                data-testid="detail-upload-btn"
+                onClick={() => setShowUpload(true)}
+                className="h-9 rounded-lg px-3 inline-flex items-center gap-2 border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="text-sm font-semibold">Subir docs</span>
+              </button>
+            )}
             {project && (
               <button
                 type="button"
@@ -1331,6 +1359,17 @@ function ProjectDetailModal({
         </div>
       </div>
     </div>
+    {showUpload && createPortal(
+      <AdminUploadModal
+        projectCode={projectCode}
+        token={token}
+        loadProjectDetail={loadProjectDetail}
+        onClose={() => setShowUpload(false)}
+        onRefresh={refreshProject}
+      />,
+      document.body
+    )}
+    </>
   );
 }
 
@@ -1351,7 +1390,6 @@ function ProjectTableRow({
 }) {
   const [downloading, setDownloading] = useState(false);
   const [openingForm, setOpeningForm] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1517,15 +1555,6 @@ function ProjectTableRow({
           </button>
           <button
             type="button"
-            data-testid="open-upload-btn"
-            onClick={() => setShowUpload(true)}
-            className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
-          >
-            <Upload className="w-3 h-3 shrink-0" />
-            Subir docs
-          </button>
-          <button
-            type="button"
             disabled={downloading}
             onClick={async () => {
               setDownloading(true);
@@ -1576,21 +1605,12 @@ function ProjectTableRow({
         </div>
       </td>
     </tr>
-    {showUpload && createPortal(
-      <AdminUploadModal
-        projectCode={project.code}
-        token={token}
-        loadProjectDetail={loadProjectDetail}
-        onClose={() => setShowUpload(false)}
-        onRefresh={onRefresh}
-      />,
-      document.body
-    )}
     {showDetail && createPortal(
       <ProjectDetailModal
         projectCode={project.code}
         token={token}
         loadProjectDetail={loadProjectDetail}
+        onRefresh={onRefresh}
         onClose={() => setShowDetail(false)}
       />,
       document.body

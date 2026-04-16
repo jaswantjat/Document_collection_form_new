@@ -585,6 +585,7 @@ function getDashboardAdditionalDocuments(formData) {
       label: files.length > 1 ? `${baseLabel} ${fileIndex + 1}` : baseLabel,
       dataUrl: '',
       mimeType: typeof file?.mimeType === 'string' ? file.mimeType : null,
+      filename: typeof file?.filename === 'string' && file.filename.trim() ? file.filename.trim() : null,
       needsManualReview,
     }));
   });

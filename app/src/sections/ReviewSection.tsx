@@ -66,7 +66,8 @@ export function ReviewSection({
   const preUploadPromise = useRef<Promise<boolean> | null>(null);
   const preUploadDone = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const [preUploadStatus, setPreUploadStatus] = useState<PreUploadStatus>('uploading');
+  const [, setPreUploadStatus] = useState<PreUploadStatus>('uploading');
+  const [showUploadWaitModal, setShowUploadWaitModal] = useState(false);
 
   const signaturesOk = hasRequiredSignatures(formData);
   const locationVar = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
@@ -193,18 +194,33 @@ export function ReviewSection({
   const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((resolvedCount / totalCount) * 100);
-  const preUploadMessage = preUploadStatus === 'uploading'
-    ? 'Subiendo archivos en segundo plano para que el envío final sea más rápido.'
-    : preUploadStatus === 'retrying'
-      ? 'Reintentando la subida de archivos antes de enviar.'
-      : preUploadStatus === 'ready'
-        ? 'Archivos preparados. El envío final ya puede completarse.'
-        : 'Algunos archivos no se han subido todavía. Reintentaremos la subida al enviar.';
+  const waitForPendingUploads = async (renderedFormData: FormData) => {
+    if (preUploadDone.current) return;
+
+    setShowUploadWaitModal(true);
+    try {
+      const preUploadSuccess = await (preUploadPromise.current ?? Promise.resolve(false));
+      if (preUploadSuccess) {
+        preUploadDone.current = true;
+        setPreUploadStatus('ready');
+        return;
+      }
+
+      setPreUploadStatus('retrying');
+      await preUploadAssets(project.code, renderedFormData, projectToken);
+      preUploadDone.current = true;
+      setPreUploadStatus('ready');
+    } catch {
+      setPreUploadStatus('error');
+      throw new Error('No hemos podido terminar de subir tus archivos. Inténtalo de nuevo.');
+    } finally {
+      setShowUploadWaitModal(false);
+    }
+  };
 
   const submit = async () => {
     if (submitInProgress.current) return;
     submitInProgress.current = true;
-    setSubmitting(true);
     setSubmitError('');
     try {
       const attemptId = getOrCreateSubmissionAttempt(project.code);
@@ -225,14 +241,9 @@ export function ReviewSection({
         };
       }
 
-      const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
-      if (!preUploadSuccess) {
-        setPreUploadStatus('retrying');
-        await preUploadAssets(project.code, renderedFormData, projectToken);
-        preUploadDone.current = true;
-        setPreUploadStatus('ready');
-      }
+      await waitForPendingUploads(renderedFormData);
 
+      setSubmitting(true);
       const submitPayload = stripAllBinaryData(renderedFormData);
       const res = await submitForm(project.code, submitPayload, source, attemptId, projectToken);
       if (res.success) {
@@ -250,6 +261,7 @@ export function ReviewSection({
     } finally {
       submitInProgress.current = false;
       setSubmitting(false);
+      setShowUploadWaitModal(false);
     }
   };
 
@@ -465,35 +477,6 @@ export function ReviewSection({
           </div>
         )}
 
-        <div
-          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
-            preUploadStatus === 'ready'
-              ? 'border-emerald-200 bg-emerald-50'
-              : preUploadStatus === 'error'
-                ? 'border-amber-200 bg-amber-50'
-                : 'border-blue-100 bg-blue-50'
-          }`}
-        >
-          {preUploadStatus === 'ready' ? (
-            <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-          ) : preUploadStatus === 'error' ? (
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-          ) : (
-            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-          )}
-          <p
-            className={`text-sm ${
-              preUploadStatus === 'ready'
-                ? 'text-emerald-800'
-                : preUploadStatus === 'error'
-                  ? 'text-amber-800'
-                  : 'text-eltex-blue'
-            }`}
-          >
-            {preUploadMessage}
-          </p>
-        </div>
-
         {/* ── Error ── */}
         {submitError && (
           <div className="space-y-3">
@@ -582,6 +565,23 @@ export function ReviewSection({
         )}
 
       </div>
+
+      {showUploadWaitModal && (
+        <div
+          className="fixed inset-0 z-50 bg-gray-900/45 backdrop-blur-[1px] flex items-center justify-center p-6"
+          data-testid="review-upload-wait-modal"
+        >
+          <div className="w-full max-w-xs rounded-3xl border border-gray-100 bg-white px-5 py-6 shadow-2xl text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+              <Loader2 className="h-6 w-6 animate-spin text-eltex-blue" />
+            </div>
+            <p className="mt-4 text-base font-semibold text-gray-900">Subiendo archivos</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              Estamos subiendo tus archivos. Espera un momento, por favor.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

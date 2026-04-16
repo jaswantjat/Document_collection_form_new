@@ -37,6 +37,7 @@ export interface DashboardAssetItem {
   label: string;
   dataUrl: string;
   mimeType: string | null;
+  filename?: string | null;
   needsManualReview?: boolean;
 }
 
@@ -426,6 +427,7 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
         label: typeof item.label === 'string' && item.label.trim() ? item.label : 'Documento adicional',
         dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : '',
         mimeType: typeof item.mimeType === 'string' ? item.mimeType : null,
+        filename: typeof item.filename === 'string' && item.filename.trim() ? item.filename.trim() : null,
         needsManualReview: Boolean(item.needsManualReview),
       }));
   }
@@ -440,6 +442,9 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
       label: getAdditionalBankDocumentFileLabel(entry, index),
       dataUrl: source,
       mimeType: resolveAdditionalBankDocumentMimeType(file, source, assetFiles),
+      filename: typeof file.filename === 'string' && file.filename.trim()
+        ? file.filename.trim()
+        : getAdditionalBankDocumentFileLabel(entry, index),
       needsManualReview,
     }];
   }));

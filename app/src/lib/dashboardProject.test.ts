@@ -576,6 +576,9 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
     });
 
     expect(summary.additionalDocuments).toHaveLength(1);
+    expect(summary.additionalDocuments[0]).toMatchObject({
+      filename: 'payroll.pdf',
+    });
     expect(summary.downloadGroups).toContainEqual(
       expect.objectContaining({
         key: 'additional-bank-documents',
@@ -594,6 +597,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
             label: 'Documento adicional',
             dataUrl: '',
             mimeType: 'application/pdf',
+            filename: 'nomina-marzo.pdf',
             needsManualReview: false,
           },
         ],
@@ -605,6 +609,7 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
     expect(summary.additionalDocuments[0]).toMatchObject({
       key: 'additional-1',
       label: 'Documento adicional',
+      filename: 'nomina-marzo.pdf',
     });
   });
 });
