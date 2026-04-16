@@ -46,6 +46,7 @@ export function ProvinceSelectionSection({
 
   const data = representationData;
   const update = (patch: Partial<RepresentationData>) => onRepresentationChange(patch);
+  const holderTypeSelected = !!data.holderTypeConfirmed;
 
   const confirmLocation = (loc: LocationRegion) => {
     onLocationSelect(loc);
@@ -57,6 +58,7 @@ export function ProvinceSelectionSection({
   const canContinue =
     locationConfirmed &&
     selectedLocation !== null &&
+    holderTypeSelected &&
     (!data.isCompany || (data.companyName.trim() !== '' && data.companyNIF.trim() !== ''));
 
   return (
@@ -66,7 +68,7 @@ export function ProvinceSelectionSection({
         <div className="pt-2 pb-2">
           <h1 className="text-2xl font-bold text-gray-900">Ubicación</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Confirma tu provincia e indica si el titular es una empresa.
+            Confirma tu provincia y dinos si el titular del contrato está a nombre de una persona o de una empresa.
           </p>
         </div>
 
@@ -183,21 +185,36 @@ export function ProvinceSelectionSection({
           <div className="space-y-3">
             <label className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-eltex-blue" />
-              ¿El titular es una empresa?
+              ¿A nombre de quién está el contrato o la factura?
             </label>
+            <p className="text-sm text-gray-500">
+              Elige una opción para que preparemos los documentos correctos.
+            </p>
             <div className="space-y-2">
               {[
-                { val: false, label: 'No, es particular', description: 'El titular es una persona física', icon: <User className="w-5 h-5" /> },
-                { val: true, label: 'Sí, es empresa', description: 'El titular es una persona jurídica', icon: <Building2 className="w-5 h-5" /> },
+                {
+                  val: false,
+                  label: 'Una persona particular',
+                  description: 'El contrato está a nombre de una persona, por ejemplo Juan Pérez.',
+                  icon: <User className="w-5 h-5" />,
+                },
+                {
+                  val: true,
+                  label: 'Una empresa',
+                  description: 'El contrato está a nombre de una sociedad o negocio y te pediremos sus datos fiscales.',
+                  icon: <Building2 className="w-5 h-5" />,
+                },
               ].map(opt => {
-                const selected = data.isCompany === opt.val;
+                const selected = holderTypeSelected && data.isCompany === opt.val;
                 return (
                   <button
                     key={String(opt.val)}
+                    data-testid={`holder-type-option-${opt.val ? 'company' : 'individual'}`}
                     type="button"
                     onClick={() =>
                       update({
                         isCompany: opt.val,
+                        holderTypeConfirmed: true,
                         ...(!opt.val ? { companyName: '', companyNIF: '', companyAddress: '', companyMunicipality: '', companyPostalCode: '' } : {}),
                       })
                     }
@@ -224,6 +241,14 @@ export function ProvinceSelectionSection({
                 );
               })}
             </div>
+            {!holderTypeSelected && (
+              <p
+                data-testid="holder-type-helper"
+                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              >
+                Elige si el titular es una persona o una empresa para continuar.
+              </p>
+            )}
 
             {data.isCompany && (
               <div className="space-y-3 bg-gray-50 rounded-2xl p-4 border border-gray-100">

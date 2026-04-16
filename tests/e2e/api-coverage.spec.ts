@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { APPROVED_ASSESSOR } from './helpers/projectAccess';
@@ -41,6 +41,28 @@ function makeStoredPdf(payload: string) {
     timestamp: 1,
     sizeBytes: payload.length,
   };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ECONNRESET|EPIPE|socket hang up|Timeout .* exceeded/i.test(message);
+}
+
+async function getWithRetry(request: APIRequestContext, url: string, timeout = 15000) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await request.get(url, { timeout });
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === 1) throw error;
+      await delay(250);
+    }
+  }
+
+  throw new Error(`GET retry exhausted for ${url}`);
 }
 
 async function parseZipEntries(buffer: Buffer) {
@@ -151,9 +173,7 @@ async function loginDashboard(request: any) {
 
 test.describe('API Coverage', () => {
   test('API-01: GET /api/project/:code stays public and code-based', async ({ request }) => {
-    const res = await request.get(`${BASE}/api/project/${VALID_CODE}`, {
-      timeout: 15000,
-    });
+    const res = await getWithRetry(request, `${BASE}/api/project/${VALID_CODE}`);
     expect(res.status()).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ success: true, project: { code: VALID_CODE } });
   });

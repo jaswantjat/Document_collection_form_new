@@ -150,6 +150,7 @@ export const initialFormData: FormData = {
   representation: {
     location: null,
     isCompany: false,
+    holderTypeConfirmed: false,
     companyName: '',
     companyNIF: '',
     companyAddress: '',
@@ -174,6 +175,30 @@ function mergeDocSlot(base: DocSlot, slot?: Partial<DocSlot> | null): DocSlot {
     photo: slot?.photo ?? base.photo,
     extraction: slot?.extraction ?? base.extraction,
   };
+}
+
+function inferHolderTypeConfirmed(savedRepresentation: Partial<RepresentationData> | null | undefined): boolean {
+  if (!savedRepresentation) return false;
+  if (typeof savedRepresentation.holderTypeConfirmed === 'boolean') {
+    return savedRepresentation.holderTypeConfirmed;
+  }
+
+  return Boolean(
+    savedRepresentation.isCompany
+    || savedRepresentation.companyName?.trim()
+    || savedRepresentation.companyNIF?.trim()
+    || savedRepresentation.companyAddress?.trim()
+    || savedRepresentation.companyMunicipality?.trim()
+    || savedRepresentation.companyPostalCode?.trim()
+    || savedRepresentation.postalCode?.trim()
+    || savedRepresentation.ivaPropertyAddress?.trim()
+    || savedRepresentation.ivaCertificateSignature
+    || savedRepresentation.representacioSignature
+    || savedRepresentation.generalitatSignature
+    || savedRepresentation.poderRepresentacioSignature
+    || savedRepresentation.ivaCertificateEsSignature
+    || Object.keys(savedRepresentation.renderedDocuments ?? {}).length > 0
+  );
 }
 
 export function normalizeFormData(savedFormData?: FormData | null): FormData {
@@ -215,6 +240,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
     rawEc.status === 'completed' && !isEnergyCertificateReadyToComplete(rawEc)
       ? { ...rawEc, status: 'in-progress' as const }
       : rawEc;
+  const holderTypeConfirmed = inferHolderTypeConfirmed(savedFormData?.representation);
 
   return {
     ...initialFormData,
@@ -254,6 +280,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       ...initialFormData.representation,
       ...savedFormData?.representation,
       location: normalizedLocation,
+      holderTypeConfirmed,
       renderedDocuments: savedFormData?.representation?.renderedDocuments ?? initialFormData.representation.renderedDocuments,
     },
   };
