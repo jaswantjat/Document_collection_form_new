@@ -164,6 +164,25 @@ async function getDashboardProject(request: any, code: string) {
   };
 }
 
+async function createCustomerProject(request: any) {
+  const dashboardToken = await loginDashboard(request);
+  const response = await request.post(`${BASE}/api/dashboard/project`, {
+    headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
+    data: {
+      phone: uniquePhone(),
+      assessor: APPROVED_ASSESSOR,
+    },
+    timeout: 15000,
+  });
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  return {
+    dashboardToken,
+    code: body.project.code as string,
+    accessToken: body.project.accessToken as string,
+  };
+}
+
 test.describe('API Coverage', () => {
   test('API-01: GET /api/project/:code rejects missing customer token', async ({ request }) => {
     const res = await request.get(`${BASE}/api/project/${VALID_CODE}`, {
@@ -266,18 +285,7 @@ test.describe('API Coverage', () => {
   });
 
   test('API-10: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {
-    const createRes = await request.post(`${BASE}/api/project/create`, {
-      data: {
-        phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
-      },
-      timeout: 15000,
-    });
-    expect(createRes.status()).toBe(200);
-    const createBody = await createRes.json();
-    const code = createBody.project.code as string;
-    const accessToken = createBody.project.accessToken as string;
+    const { code, accessToken } = await createCustomerProject(request);
 
     const saveRes = await request.post(`${BASE}/api/project/${code}/save?token=${encodeURIComponent(accessToken)}`, {
       headers: {
@@ -316,18 +324,7 @@ test.describe('API Coverage', () => {
   });
 
   test('API-11: upload-assets prunes stale asset keys when the active manifest shrinks', async ({ request }) => {
-    const createRes = await request.post(`${BASE}/api/project/create`, {
-      data: {
-        phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
-      },
-      timeout: 15000,
-    });
-    expect(createRes.status()).toBe(200);
-    const createBody = await createRes.json();
-    const code = createBody.project.code as string;
-    const accessToken = createBody.project.accessToken as string;
+    const { code, accessToken } = await createCustomerProject(request);
     expect(code).toBeTruthy();
 
     const firstUpload = await request.post(`${BASE}/api/project/${code}/upload-assets?token=${encodeURIComponent(accessToken)}`, {

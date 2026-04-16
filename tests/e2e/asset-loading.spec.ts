@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { getProjectAccess } from './helpers/projectAccess';
 
 test.describe('Customer asset loading', () => {
-  test('ASSET-01: initial customer load avoids downstream section and PDF assets', async ({ page }) => {
+  test('ASSET-01: initial customer load avoids downstream section and PDF assets', async ({ page, request }) => {
     const loadedUrls: string[] = [];
+    const { customerUrl } = await getProjectAccess(request, 'ELT20250001');
 
     page.on('requestfinished', (request) => {
       const url = request.url();
@@ -11,7 +13,7 @@ test.describe('Customer asset loading', () => {
       }
     });
 
-    await page.goto('/?code=ELT20250001', {
+    await page.goto(customerUrl, {
       waitUntil: 'networkidle',
       timeout: 30000,
     });

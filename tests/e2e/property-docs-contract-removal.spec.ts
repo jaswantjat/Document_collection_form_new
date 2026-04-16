@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { getProjectAccess } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const PROJECT_CODE = 'ELT20250005';
@@ -7,8 +8,9 @@ test.describe('Property docs contract removal', () => {
   test('initial intake no longer shows the contract upload or counts it in progress', async ({ page, request }) => {
     const resetRes = await request.post(`${API_BASE}/api/test/reset-property-docs/${PROJECT_CODE}`);
     expect(resetRes.ok()).toBeTruthy();
+    const { customerUrl } = await getProjectAccess(request, PROJECT_CODE);
 
-    await page.goto(`/?code=${PROJECT_CODE}`);
+    await page.goto(customerUrl);
 
     await expect(page.locator('h1').first()).toContainText('Documentos');
     await expect(page.getByTestId('contract-card')).toHaveCount(0);
@@ -19,8 +21,9 @@ test.describe('Property docs contract removal', () => {
   test('customers can progress past intake with no contract data present', async ({ page, request }) => {
     const restoreRes = await request.post(`${API_BASE}/api/test/restore-base-flow/${PROJECT_CODE}`);
     expect(restoreRes.ok()).toBeTruthy();
+    const { customerUrl } = await getProjectAccess(request, PROJECT_CODE);
 
-    await page.goto(`/?code=${PROJECT_CODE}`);
+    await page.goto(customerUrl);
 
     await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
     await expect(page.getByText('Contrato Eltex', { exact: true })).toHaveCount(0);

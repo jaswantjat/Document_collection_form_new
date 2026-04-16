@@ -868,22 +868,24 @@ app.get('/api/project/:code', requireProject, (req, res) => {
   res.json({ success: true, project: serializeProject(req.project) });
 });
 
-// Look up project by phone number
-app.get('/api/lookup/phone/:phone', (req, res) => {
+// Legacy staff-only lookup route retained for non-UI tooling.
+app.get('/api/lookup/phone/:phone', requireDashboardAuth, (req, res) => {
   const needle = normalizePhone(decodeURIComponent(req.params.phone));
   const project = Object.values(database.projects).find(p => normalizePhone(p.phone) === needle);
   if (!project) return res.status(404).json({ success: false, error: 'NOT_FOUND', message: 'No encontramos ningún proyecto con ese teléfono. Contacta con tu asesor.' });
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
 });
 
-// Create new project (SSR flow — phone number not yet in system)
-app.post('/api/project/create', (req, res) => {
-  const { phone, customerName, email, productType, assessor, assessorId } = req.body;
+// Legacy staff-only create route retained for non-UI tooling.
+app.post('/api/project/create', requireDashboardAuth, (req, res) => {
+  const { customerName, assessorId } = req.body;
+  const input = normalizeDashboardCreateInput(req.body, normalizePhone);
+  const validationError = validateDashboardCreateInput(input);
+  if (validationError) {
+    return res.status(400).json({ success: false, message: validationError });
+  }
 
-  if (!phone) return res.status(400).json({ success: false, message: 'El número de teléfono es obligatorio.' });
-  if (!assessor || !assessor.trim()) return res.status(400).json({ success: false, message: 'El nombre del asesor es obligatorio.' });
-
-  const normalizedPhone = normalizePhone(phone);
+  const normalizedPhone = input.normalizedPhone;
 
   // Check for duplicate
   const existing = Object.values(database.projects).find(p => normalizePhone(p.phone) === normalizedPhone);
@@ -897,10 +899,10 @@ app.post('/api/project/create', (req, res) => {
     accessToken: uuidv4(),
     customerName: customerName || 'Cliente nuevo',
     phone: normalizedPhone,
-    email: email || '',
-    productType: productType || 'solar',
-    assessor: assessor.trim(),
-    assessorId: assessorId ? assessorId.trim() : assessor.trim(),
+    email: input.email,
+    productType: input.productType,
+    assessor: input.assessor,
+    assessorId: assessorId ? String(assessorId).trim() : input.assessor,
     formData: null,
     submissions: [],
     lastActivity: null,

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { APPROVED_ASSESSOR, loginDashboard } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_JPEG_BASE64 = readFileSync(
@@ -178,9 +179,11 @@ async function clearDeviceBackup(page: Page, projectCode: string) {
   }, { code: projectCode });
 }
 
-async function readProjectState(request: APIRequestContext, projectCode: string) {
+async function readProjectState(request: APIRequestContext, projectCode: string, accessToken: string) {
   try {
-    const res = await request.get(`${API_BASE}/api/project/${projectCode}`);
+    const res = await request.get(`${API_BASE}/api/project/${projectCode}?token=${encodeURIComponent(accessToken)}`, {
+      headers: { 'x-project-token': accessToken },
+    });
     const body = await res.json();
     return body.project;
   } catch {
@@ -188,23 +191,41 @@ async function readProjectState(request: APIRequestContext, projectCode: string)
   }
 }
 
-test('additional bank documents persist across reload and remain optional for submit', async ({ page, request }) => {
-  const createRes = await request.post(`${API_BASE}/api/project/create`, {
+async function createReviewReadyProject(request: APIRequestContext) {
+  const dashboardToken = await loginDashboard(request);
+  const createRes = await request.post(`${API_BASE}/api/dashboard/project`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'x-dashboard-token': dashboardToken,
+    },
     data: {
       phone: uniquePhone(),
-      assessor: 'QA Bot',
-      assessorId: 'QA-BOT',
+      assessor: APPROVED_ASSESSOR,
     },
   });
   expect(createRes.ok()).toBeTruthy();
   const createBody = await createRes.json();
   const projectCode = createBody.project.code as string;
+  const accessToken = createBody.project.accessToken as string;
 
-  const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save`, {
-    headers: { 'Content-Type': 'application/json' },
+  const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save?token=${encodeURIComponent(accessToken)}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'x-project-token': accessToken,
+    },
     data: { formData: buildReviewReadyFormData(), source: 'customer' },
   });
   expect(saveRes.ok()).toBeTruthy();
+
+  return {
+    projectCode,
+    accessToken,
+    customerUrl: `/?code=${projectCode}&token=${encodeURIComponent(accessToken)}`,
+  };
+}
+
+test('additional bank documents persist across reload and remain optional for submit', async ({ page, request }) => {
+  const { projectCode, accessToken, customerUrl } = await createReviewReadyProject(request);
 
   await mockAdditionalBankDocumentValidation(page, {
     success: true,
@@ -223,7 +244,7 @@ test('additional bank documents persist across reload and remain optional for su
     },
   });
 
-  await page.goto(`/?code=${projectCode}`, { waitUntil: 'networkidle' });
+  await page.goto(customerUrl, { waitUntil: 'networkidle' });
   await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
 
   await page.getByRole('button', { name: /Factura de luz/i }).click();
@@ -241,7 +262,7 @@ test('additional bank documents persist across reload and remain optional for su
   await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Declaración de la renta presentada ante AEAT.');
 
   await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode);
+    const project = await readProjectState(request, projectCode, accessToken);
     return {
       documents: project?.formData.additionalBankDocuments?.length ?? 0,
       asset: Boolean(project?.assetFiles?.bankDocument_0),
@@ -263,7 +284,7 @@ test('additional bank documents persist across reload and remain optional for su
   await expect(page.getByTestId('additional-bank-documents-list')).not.toContainText('Ejercicio 2024');
 
   await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode);
+    const project = await readProjectState(request, projectCode, accessToken);
     return Boolean(project?.assetFiles?.bankDocument_0);
   }).toBe(true);
 
@@ -271,7 +292,7 @@ test('additional bank documents persist across reload and remain optional for su
   await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
 
   await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode);
+    const project = await readProjectState(request, projectCode, accessToken);
     return Boolean(project?.assetFiles?.bankDocument_0);
   }).toBe(true);
 
@@ -280,22 +301,7 @@ test('additional bank documents persist across reload and remain optional for su
 });
 
 test('additional bank documents reject a wrong document before saving it', async ({ page, request }) => {
-  const createRes = await request.post(`${API_BASE}/api/project/create`, {
-    data: {
-      phone: uniquePhone(),
-      assessor: 'QA Bot',
-      assessorId: 'QA-BOT',
-    },
-  });
-  expect(createRes.ok()).toBeTruthy();
-  const createBody = await createRes.json();
-  const projectCode = createBody.project.code as string;
-
-  const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save`, {
-    headers: { 'Content-Type': 'application/json' },
-    data: { formData: buildReviewReadyFormData(), source: 'customer' },
-  });
-  expect(saveRes.ok()).toBeTruthy();
+  const { projectCode, accessToken, customerUrl } = await createReviewReadyProject(request);
 
   await mockAdditionalBankDocumentValidation(page, {
     success: false,
@@ -304,7 +310,7 @@ test('additional bank documents reject a wrong document before saving it', async
     message: 'Documento incorrecto. Por favor sube la nómina.',
   });
 
-  await page.goto(`/?code=${projectCode}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(customerUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: /Factura de luz/i })).toBeVisible({ timeout: 20000 });
   await page.getByRole('button', { name: /Factura de luz/i }).click();
   await expect(page.locator('h1').first()).toContainText('Documentos');
@@ -315,28 +321,13 @@ test('additional bank documents reject a wrong document before saving it', async
   await expect(page.getByTestId('additional-bank-documents-list')).toHaveCount(0);
 
   await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode);
+    const project = await readProjectState(request, projectCode, accessToken);
     return project?.formData.additionalBankDocuments?.length ?? 0;
   }).toBe(0);
 });
 
 test('additional bank documents save with manual review when AI result is temporary or ambiguous', async ({ page, request }) => {
-  const createRes = await request.post(`${API_BASE}/api/project/create`, {
-    data: {
-      phone: uniquePhone(),
-      assessor: 'QA Bot',
-      assessorId: 'QA-BOT',
-    },
-  });
-  expect(createRes.ok()).toBeTruthy();
-  const createBody = await createRes.json();
-  const projectCode = createBody.project.code as string;
-
-  const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save`, {
-    headers: { 'Content-Type': 'application/json' },
-    data: { formData: buildReviewReadyFormData(), source: 'customer' },
-  });
-  expect(saveRes.ok()).toBeTruthy();
+  const { projectCode, accessToken, customerUrl } = await createReviewReadyProject(request);
 
   await mockAdditionalBankDocumentValidation(page, {
     success: false,
@@ -345,7 +336,7 @@ test('additional bank documents save with manual review when AI result is tempor
     message: 'No se pudo validar el documento de forma concluyente.',
   });
 
-  await page.goto(`/?code=${projectCode}`, { waitUntil: 'networkidle' });
+  await page.goto(customerUrl, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Factura de luz/i }).click();
   await expect(page.locator('h1').first()).toContainText('Documentos');
 
@@ -361,7 +352,7 @@ test('additional bank documents save with manual review when AI result is tempor
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Documento adicional');
 
   await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode);
+    const project = await readProjectState(request, projectCode, accessToken);
     return {
       documents: project?.formData.additionalBankDocuments?.length ?? 0,
       asset0: Boolean(project?.assetFiles?.bankDocument_0),

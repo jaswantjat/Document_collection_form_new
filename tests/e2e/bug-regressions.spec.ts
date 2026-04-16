@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { getProjectAccess, loginDashboard } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -11,44 +12,42 @@ test.describe('Bug Regressions', () => {
     await expect(page.locator('input[type="tel"]')).toHaveCount(0);
   });
 
-  test('REG-01: international phone format (+44, +33, +1) accepted by backend normalizePhone', async ({ request }) => {
-    const phones = ['+447700900000', '+33612345678', '+12025550123'];
-    
-    for (const phone of phones) {
-      const res = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(phone)}`);
-      // It might be 404 (not found) but it shouldn't be 400 (bad request) or 500
-      expect([200, 404]).toContain(res.status());
-    }
+  test('REG-01: public phone lookup is blocked without a dashboard session', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent('+34612345678')}`, {
+      failOnStatusCode: false,
+    });
+    expect(res.status()).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      error: 'UNAUTHORIZED',
+    });
   });
 
-  test('REG-02: /api/project/:code stays code-based even if a stray x-project-token header is present', async ({ request }) => {
+  test('REG-02: /api/project/:code rejects a stray wrong token instead of allowing code-only access', async ({ request }) => {
     const res = await request.get(`${API_BASE}/api/project/ELT20250001`, {
       headers: { 'x-project-token': 'wrong-token' }
     });
-    
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    expect(body.success).toBe(true);
-    expect(body.project?.code).toBe('ELT20250001');
+
+    expect(res.status()).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      error: 'INVALID_TOKEN',
+    });
   });
 
-  test('REG-03: international phone format is accepted by backend (not rejected as invalid)', async ({ request }) => {
-    // These phones are not in the DB, so they return 404 NOT_FOUND.
-    // The key assertion: they must NOT return 400/500 (format rejection / server crash).
-    // 404 = phone format valid, number simply not registered.
+  test('REG-03: international phone format is accepted by staff lookup when dashboard-authenticated', async ({ request }) => {
+    const dashboardToken = await loginDashboard(request);
     const phones = ['+447700900000', '+33612345678', '+12025550123'];
     for (const phone of phones) {
       const res = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(phone)}`, {
+        headers: { 'x-dashboard-token': dashboardToken },
         failOnStatusCode: false,
       });
-      // Must be 200 (found) or 404 (not found) — never 400 or 500
       expect([200, 404]).toContain(res.status());
       const body = await res.json();
-      // If 404, it must be NOT_FOUND (parsed correctly) — not a server error
       if (res.status() === 404) {
         expect(body.error).toBe('NOT_FOUND');
       }
-      console.log(`[REG-03] ${phone} → HTTP ${res.status()}, error: ${body.error ?? 'n/a'}`);
     }
   });
 
@@ -59,5 +58,17 @@ test.describe('Bug Regressions', () => {
     await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible();
     await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible();
     await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+  });
+
+  test('REG-06: valid customer link still works when both query token and header token are present', async ({ request }) => {
+    const { accessToken } = await getProjectAccess(request, 'ELT20250001');
+    const res = await request.get(`${API_BASE}/api/project/ELT20250001?token=${encodeURIComponent(accessToken)}`, {
+      headers: { 'x-project-token': accessToken },
+    });
+    expect(res.status()).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      success: true,
+      project: { code: 'ELT20250001' },
+    });
   });
 });

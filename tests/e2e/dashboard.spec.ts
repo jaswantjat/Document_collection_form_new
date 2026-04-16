@@ -71,11 +71,12 @@ async function postWithRetry(
   request: any,
   url: string,
   data: unknown,
-  timeout: number
+  timeout: number,
+  headers?: Record<string, string>,
 ) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await request.post(url, { data, timeout });
+      return await request.post(url, { data, timeout, headers });
     } catch (error) {
       if (!isTransientRequestError(error) || attempt === 1) throw error;
       await delay(250);
@@ -238,24 +239,26 @@ async function loginDashboard(request: any) {
 }
 
 async function createDashboardProject(request: any, formData?: Record<string, unknown>) {
+  const dashboardToken = await loginDashboard(request);
   const createRes = await postWithRetry(
     request,
-    `${API_BASE}/api/project/create`,
+    `${API_BASE}/api/dashboard/project`,
     {
       phone: uniquePhone(),
-      assessor: 'QA Bot',
-      assessorId: 'QA-BOT',
+      assessor: APPROVED_ASSESSOR,
     },
     15000,
+    { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
   );
   expect(createRes.status()).toBe(200);
   const createBody = await createRes.json();
   const code = createBody.project.code as string;
+  const accessToken = createBody.project.accessToken as string;
 
   if (formData) {
     const saveRes = await postWithRetry(
       request,
-      `${API_BASE}/api/project/${code}/save`,
+      `${API_BASE}/api/project/${code}/save?token=${encodeURIComponent(accessToken)}`,
       { formData, source: 'customer' },
       15000,
     );
@@ -308,7 +311,7 @@ test.describe('Dashboard QA', () => {
     await page.getByTestId('dashboard-open-project-btn').click();
     const popup = await popupPromise;
     await popup.waitForLoadState('domcontentloaded');
-    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&source=assessor`));
+    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&token=.*&source=assessor`));
     await popup.close();
 
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
@@ -417,17 +420,19 @@ test.describe('Dashboard QA', () => {
   });
 
   test('refresh pulls in new projects and keeps the newest activity first', async ({ page, request }) => {
-    const assessor = `Refresh Sort ${Date.now()}`;
+    const customerName = `Refresh Sort ${Date.now()}`;
     const createProject = async () => {
+      const dashboardToken = await loginDashboard(request);
       const createRes = await postWithRetry(
         request,
-        `${API_BASE}/api/project/create`,
+        `${API_BASE}/api/dashboard/project`,
         {
           phone: uniquePhone(),
-          assessor,
-          assessorId: assessor,
+          assessor: APPROVED_ASSESSOR,
+          customerName,
         },
         15000,
+        { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
       );
       expect(createRes.status()).toBe(200);
       const createBody = await createRes.json();
@@ -438,7 +443,7 @@ test.describe('Dashboard QA', () => {
     const token = await loginDashboard(request);
 
     await openDashboard(page, token);
-    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(assessor);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(customerName);
     const filteredRows = page.locator('tbody tr');
     await expect(filteredRows).toHaveCount(1);
     await expect(filteredRows.first()).toContainText(firstCode);

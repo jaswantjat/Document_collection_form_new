@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { getProjectAccess } from './helpers/projectAccess';
 
 const EC04_CODE = 'ELT20250004';
 const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
@@ -20,8 +21,9 @@ test.describe('Energy Certificate PRD Tests', () => {
   
   test('EC-01: skip path — can reach and click skip on energy-certificate step', async ({ page, request }) => {
     await resetEC(request, EC04_CODE);
+    const { customerUrl } = await getProjectAccess(request, EC04_CODE);
     // Follow-up users now land on review first, then explicitly open the EC step.
-    await page.goto(`/?code=${EC04_CODE}`);
+    await page.goto(customerUrl);
     await page.waitForLoadState('networkidle');
 
     await openEnergyCertificateFromReview(page);
@@ -83,8 +85,6 @@ test.describe('Energy Certificate PRD Tests', () => {
   });
 
   test.describe('Conditional Field Visibility (COND fixes)', () => {
-    const URL = `/?code=${EC04_CODE}`;
-
     test.beforeEach(async ({ request }) => {
       await resetEC(request, EC04_CODE);
     });
@@ -132,8 +132,9 @@ test.describe('Energy Certificate PRD Tests', () => {
       await page.getByRole('button', { name: /siguiente/i }).click();
     }
 
-    test('COND-01 (Housing): shutterWindowCount visibility', async ({ page }) => {
-      await page.goto(URL);
+    test('COND-01 (Housing): shutterWindowCount visibility', async ({ page, request }) => {
+      const { customerUrl } = await getProjectAccess(request, EC04_CODE);
+      await page.goto(customerUrl);
       await page.waitForLoadState('networkidle');
       await openEnergyCertificateFromReview(page);
 
@@ -151,8 +152,9 @@ test.describe('Energy Certificate PRD Tests', () => {
       await expect(page.getByLabel('Nº ventanas con persianas')).toBeVisible();
     });
 
-    test('COND-02 (Thermal): airConditioning visibility', async ({ page }) => {
-      await page.goto(URL);
+    test('COND-02 (Thermal): airConditioning visibility', async ({ page, request }) => {
+      const { customerUrl } = await getProjectAccess(request, EC04_CODE);
+      await page.goto(customerUrl);
       await page.waitForLoadState('networkidle');
       await openEnergyCertificateFromReview(page);
 
@@ -173,8 +175,9 @@ test.describe('Energy Certificate PRD Tests', () => {
       await expect(page.getByText('¿Tipo de Bomba?')).toBeVisible();
     });
 
-    test('COND-03 (Additional): solarPanelDetails visibility', async ({ page }) => {
-      await page.goto(URL);
+    test('COND-03 (Additional): solarPanelDetails visibility', async ({ page, request }) => {
+      const { customerUrl } = await getProjectAccess(request, EC04_CODE);
+      await page.goto(customerUrl);
       await page.waitForLoadState('networkidle');
       await openEnergyCertificateFromReview(page);
 

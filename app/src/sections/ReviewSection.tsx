@@ -7,8 +7,6 @@ import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 import { getCustomerEnergyFlowStatus } from '@/lib/energyCertificateFlow';
-import { FinancingCtaCard } from '@/components/FinancingCtaCard';
-import { resolveFinancingCta } from '@/lib/financing';
 
 interface Props {
   project: ProjectData;
@@ -195,7 +193,6 @@ export function ReviewSection({
   const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((resolvedCount / totalCount) * 100);
-  const financingCta = resolveFinancingCta({ project, formData });
   const preUploadMessage = preUploadStatus === 'uploading'
     ? 'Subiendo archivos en segundo plano para que el envío final sea más rápido.'
     : preUploadStatus === 'retrying'
@@ -496,8 +493,6 @@ export function ReviewSection({
             {preUploadMessage}
           </p>
         </div>
-
-        <FinancingCtaCard cta={financingCta} />
 
         {/* ── Error ── */}
         {submitError && (

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APPROVED_ASSESSOR, getProjectAccess, loginDashboard } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -96,11 +97,16 @@ async function seedLocalBackup(page: Page, projectCode: string, formData: unknow
 test.describe('Customer Journey Regressions', () => {
   test('deleted stale link shows contact-advisor handling instead of phone recovery', async ({ page, request }) => {
     const phone = `+346${String(Date.now() % 100_000_000).padStart(8, '0')}`;
+    const dashboardToken = await loginDashboard(request);
 
-    const createRes = await request.post(`${API_BASE}/api/project/create`, {
+    const createRes = await request.post(`${API_BASE}/api/dashboard/project`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dashboard-token': dashboardToken,
+      },
       data: {
         phone,
-        assessor: 'QA Recovery',
+        assessor: APPROVED_ASSESSOR,
         productType: 'solar',
       },
     });
@@ -109,13 +115,6 @@ test.describe('Customer Journey Regressions', () => {
     const created = await createRes.json();
     expect(created.success).toBeTruthy();
     const staleCode = created.project.code as string;
-
-    const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
-      data: { password: 'eltex2025' },
-    });
-    expect(loginRes.ok()).toBeTruthy();
-    const loginJson = await loginRes.json();
-    const dashboardToken = loginJson.token as string;
 
     const deleteRes = await request.delete(`${API_BASE}/api/dashboard/project/${staleCode}`, {
       headers: { 'x-dashboard-token': dashboardToken },
@@ -130,6 +129,7 @@ test.describe('Customer Journey Regressions', () => {
 
   test('code-bearing assessor link restores local backup and routes to the resumed step', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
+    const { assessorUrl } = await getProjectAccess(request, projectCode);
 
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
 
@@ -156,15 +156,17 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto(`/?code=${projectCode}&source=assessor`, { waitUntil: 'domcontentloaded' });
+    await page.goto(assessorUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Confirma tu documentación' })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /certificado energético/i }).click();
     await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
     await expect(page).toHaveURL(/code=ELT20250005/);
+    await expect(page).toHaveURL(/token=/);
   });
 
-  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page }) => {
+  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page, request }) => {
     const projectCode = 'ELT20250001';
+    const { customerUrl } = await getProjectAccess(request, projectCode);
 
     await seedLocalBackup(page, projectCode, {
       dni: {
@@ -189,7 +191,7 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto(`/?code=${projectCode}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(customerUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Documentos para firmar' })).toBeVisible({ timeout: 15000 });
 
     await page.waitForFunction(

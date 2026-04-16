@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { getProjectAccess } from './helpers/projectAccess';
 
 test.describe('Mobile Viewport', () => {
-  test('E2E-MOBILE-01: form is usable on 375×667 (iPhone SE) viewport', async ({ page }) => {
+  test('E2E-MOBILE-01: form is usable on 375×667 (iPhone SE) viewport', async ({ page, request }) => {
     await page.setViewportSize({ width: 375, height: 667 });
+    const { customerUrl } = await getProjectAccess(request, 'ELT20250002');
 
-    await page.goto('/?code=ELT20250002', {
+    await page.goto(customerUrl, {
       waitUntil: 'networkidle',
       timeout: 30000,
     });

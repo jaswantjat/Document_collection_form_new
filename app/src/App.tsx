@@ -268,7 +268,7 @@ function FormApp() {
       }
     }, 12000);
 
-    fetchProject(urlCode, { signal: controller.signal })
+    fetchProject(urlCode, { signal: controller.signal, token: urlToken || undefined })
       .then(async (res) => {
         if (controller.signal.aborted) return;
 
@@ -388,13 +388,17 @@ function FormApp() {
     activeProject?.code ?? null,
     activeProject?.productType ?? 'solar',
     activeProject?.formData ?? null,
-    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow, source }
+    {
+      preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow,
+      source,
+      projectToken: urlToken || undefined,
+    }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
-  useBeforeUnloadSave(activeProject?.code ?? null, formData, source);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData, source, urlToken || undefined);
   const nextLikelySection = getLikelyNextSection(activeSection, formData, followUpDocumentFlow);
   const hasSkippedInitialPrefetch = useRef(false);
 
@@ -576,6 +580,7 @@ function FormApp() {
             project={activeProject}
             formData={formData}
             source={source}
+            projectToken={urlToken || undefined}
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}

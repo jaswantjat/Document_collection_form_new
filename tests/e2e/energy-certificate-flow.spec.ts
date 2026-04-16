@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { getProjectAccess } from './helpers/projectAccess';
 
 const EC05_CODE = 'ELT20250005';
 const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
@@ -36,8 +37,9 @@ test.describe('Energy Certificate Flow Tests', () => {
     }
   });
 
-  test('E2E-FLOW-01: EC section loads with all steps and skip button', async ({ page }) => {
-    await page.goto(`/?code=${EC05_CODE}`);
+  test('E2E-FLOW-01: EC section loads with all steps and skip button', async ({ page, request }) => {
+    const { customerUrl } = await getProjectAccess(request, EC05_CODE);
+    await page.goto(customerUrl);
     await page.waitForLoadState('networkidle');
 
     await openEnergyCertificate(page);
@@ -56,8 +58,9 @@ test.describe('Energy Certificate Flow Tests', () => {
     await expect(nextBtn).toBeVisible();
   });
 
-  test('E2E-FLOW-02: EC skip path — clicking Saltar routes to review section', async ({ page }) => {
-    await page.goto(`/?code=${EC05_CODE}`);
+  test('E2E-FLOW-02: EC skip path — clicking Saltar routes to review section', async ({ page, request }) => {
+    const { customerUrl } = await getProjectAccess(request, EC05_CODE);
+    await page.goto(customerUrl);
     await page.waitForLoadState('networkidle');
 
     await openEnergyCertificate(page);
@@ -80,7 +83,8 @@ test.describe('Energy Certificate Flow Tests', () => {
     expect(seedRes.ok()).toBeTruthy();
 
     // Open form — should route to review first, then into EC on demand
-    await page.goto(`/?code=${EC05_CODE}`);
+    const { customerUrl } = await getProjectAccess(request, EC05_CODE);
+    await page.goto(customerUrl);
     await page.waitForLoadState('networkidle');
 
     await openEnergyCertificate(page);
@@ -96,7 +100,8 @@ test.describe('Energy Certificate Flow Tests', () => {
     const clearRes = await postWithRetry(request, `${BACKEND}/api/test/reset-property-docs/${EC05_CODE}`);
     expect(clearRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${EC05_CODE}`);
+    let access = await getProjectAccess(request, EC05_CODE);
+    await page.goto(access.customerUrl);
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('h1, h2').first()).toContainText('Documentos');
@@ -114,7 +119,8 @@ test.describe('Energy Certificate Flow Tests', () => {
     const restoreRes = await postWithRetry(request, `${BACKEND}/api/test/restore-base-flow/${EC05_CODE}`);
     expect(restoreRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${EC05_CODE}`);
+    access = await getProjectAccess(request, EC05_CODE);
+    await page.goto(access.customerUrl);
     await page.waitForLoadState('networkidle');
 
     await openEnergyCertificate(page);

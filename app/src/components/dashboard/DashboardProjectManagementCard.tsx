@@ -50,8 +50,8 @@ function openCustomerLink(customerLink: string): void {
   window.open(customerLink, '_blank', 'noopener,noreferrer');
 }
 
-function openAssessorProject(projectCode: string): void {
-  window.open(buildProjectUrl(projectCode, 'assessor'), '_blank', 'noopener,noreferrer');
+function openAssessorProject(projectCode: string, accessToken?: string): void {
+  window.open(buildProjectUrl(projectCode, 'assessor', accessToken), '_blank', 'noopener,noreferrer');
 }
 
 export function DashboardProjectManagementCard({
@@ -255,7 +255,7 @@ export function DashboardProjectManagementCard({
               <button
                 type="button"
                 data-testid="dashboard-open-project-btn"
-                onClick={() => openAssessorProject(actionResult.project.code)}
+                onClick={() => openAssessorProject(actionResult.project.code, actionResult.project.accessToken)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
               >
                 <ExternalLink className="h-4 w-4" />
