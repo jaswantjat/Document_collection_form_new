@@ -22,6 +22,7 @@ const {
   completeSubmissionAttempt,
   failSubmissionAttempt,
 } = require('./lib/submissionAttempts');
+const { getSpaFallbackResponseKind } = require('./lib/spaFallback');
 const {
   DEFAULT_TEST_CODES,
   RESETTABLE_TEST_CODES,
@@ -2919,7 +2920,16 @@ if (isProduction) {
   // Production: Serve static files from built frontend
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    const fallbackKind = getSpaFallbackResponseKind(req.path);
+    if (fallbackKind === 'spa') {
+      res.sendFile(path.join(distPath, 'index.html'));
+      return;
+    }
+    if (fallbackKind === 'api-404') {
+      res.status(404).json({ success: false, error: 'Not found' });
+      return;
+    }
+    res.status(404).type('text/plain').send('Not found');
   });
 } else {
   // Development: Proxy to Vite dev server
