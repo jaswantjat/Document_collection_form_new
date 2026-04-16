@@ -216,6 +216,14 @@ function normalizeLoadedProject(project: ProjectData): ProjectData {
   };
 }
 
+function hasDashboardSession(): boolean {
+  try {
+    return Boolean(sessionStorage.getItem('dashboard_token'));
+  } catch {
+    return false;
+  }
+}
+
 // ── Main Form App ─────────────────────────────────────────────────────────────
 function FormApp() {
   const [searchParams] = useSearchParams();
@@ -466,6 +474,10 @@ function FormApp() {
   }, [activeSection, followUpDocumentFlow]);
 
   const renderSection = () => {
+    if (!urlCode && (source === 'assessor' || hasDashboardSession())) {
+      return <Navigate to="/dashboard" replace />;
+    }
+
     if (!urlCode) {
       return <ErrorSection error="INVALID_CODE" />;
     }

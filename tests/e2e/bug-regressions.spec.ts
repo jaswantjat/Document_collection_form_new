@@ -4,12 +4,22 @@ import { getProjectAccess, loginDashboard } from './helpers/projectAccess';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
 test.describe('Bug Regressions', () => {
-  test('REG-04: customer root without a code or with source=assessor shows contact-advisor handling', async ({ page }) => {
+  test('REG-04: customer root without a code shows link-only handling with a dashboard escape hatch', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByRole('heading', { name: 'Enlace incompleto' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/usa el enlace completo/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('link', { name: 'Abrir dashboard' })).toHaveAttribute('href', '/dashboard');
+    await expect(page.getByRole('button', { name: 'Reintentar' })).toHaveCount(0);
+    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+  });
+
+  test('REG-04b: assessor source without a code redirects straight to the dashboard login', async ({ page }) => {
     await page.goto('/?source=assessor', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: 'Sin código de proyecto' })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/accede desde el enlace/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('input[type="password"]')).toHaveCount(1);
   });
 
   test('REG-01: public phone lookup is blocked without a dashboard session', async ({ request }) => {
