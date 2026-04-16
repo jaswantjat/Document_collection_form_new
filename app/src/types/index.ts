@@ -161,6 +161,7 @@ export interface RenderedDocumentAsset {
 export interface RepresentationData {
   location: LocationRegion | null;
   isCompany: boolean;
+  holderTypeConfirmed?: boolean;
   companyName: string;
   companyNIF: string;
   companyAddress: string;

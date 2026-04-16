@@ -109,6 +109,10 @@ function hasRepresentationDone(formData: FormData | null, location: string | nul
   return false;
 }
 
+function hasHolderTypeConfirmed(formData: FormData | null): boolean {
+  return !!formData?.representation?.holderTypeConfirmed;
+}
+
 function hasExistingRepresentationFlow(formData: FormData | null): boolean {
   if (!formData) return false;
   const location = formData.location ?? formData.representation?.location ?? null;
@@ -123,6 +127,7 @@ function getInitialSection(
 
   const fd = project.formData;
   const location = fd?.location ?? fd?.representation?.location ?? null;
+  const holderTypeConfirmed = hasHolderTypeConfirmed(fd);
   const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
   const hasEnergyDecision = hasEnergyCertificateDecision(fd?.energyCertificate);
 
@@ -149,6 +154,7 @@ function getInitialSection(
   if (followUpDocumentFlow) return 'review';
   if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
   if (location === 'other') return hasEnergyDecision ? 'review' : 'energy-certificate';
+  if (location && !holderTypeConfirmed) return 'province-selection';
   if (location) return 'representation';
   if (hasPropertyDocsDone(fd)) return 'province-selection';
   return 'property-docs';
@@ -160,6 +166,7 @@ function getLikelyNextSection(
   followUpDocumentFlow: boolean
 ): Section | null {
   const location = formData.location ?? formData.representation?.location ?? null;
+  const holderTypeConfirmed = hasHolderTypeConfirmed(formData);
   switch (currentSection) {
     case 'property-docs':
       if (followUpDocumentFlow) {
@@ -168,6 +175,7 @@ function getLikelyNextSection(
           : 'energy-certificate';
       }
       if (!location) return 'province-selection';
+      if (!holderTypeConfirmed) return 'province-selection';
       return location === 'other'
         ? (
           hasEnergyCertificateDecision(formData.energyCertificate)

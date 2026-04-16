@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -10,6 +10,30 @@ const APPROVED_ASSESSORS = JSON.parse(
 function uniquePhone() {
   const suffix = Date.now().toString().slice(-8);
   return `699 ${suffix.slice(0, 3)} ${suffix.slice(3, 6)}`;
+}
+
+function makePhoto(id: string) {
+  return {
+    id,
+    preview: `data:image/jpeg;base64,${id}`,
+    timestamp: Date.now(),
+    sizeBytes: 128,
+  };
+}
+
+async function createPublicProject(request: APIRequestContext) {
+  const res = await request.post(`${API_BASE}/api/project/create`, {
+    data: {
+      phone: `+34${uniquePhone().replace(/\s+/g, '')}`,
+      assessor: APPROVED_ASSESSORS[0],
+      assessorId: APPROVED_ASSESSORS[0],
+    },
+    timeout: 15000,
+  });
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.success).toBe(true);
+  return body.project.code as string;
 }
 
 test.describe('Bug Regressions', () => {
@@ -63,5 +87,68 @@ test.describe('Bug Regressions', () => {
         expect(body.error).toBe('NOT_FOUND');
       }
     }
+  });
+
+  test('REG-05: province step requires an explicit person-or-company choice with clear copy', async ({ page, request }) => {
+    const code = await createPublicProject(request);
+
+    const saveRes = await request.post(`${API_BASE}/api/project/${code}/save`, {
+      data: {
+        source: 'customer',
+        formData: {
+          dni: {
+            front: { photo: makePhoto('dni-front'), extraction: null },
+            back: { photo: makePhoto('dni-back'), extraction: null },
+          },
+          ibi: {
+            pages: [makePhoto('ibi-1')],
+          },
+          electricityBill: {
+            pages: [{ photo: makePhoto('bill-1'), extraction: null }],
+          },
+          representation: {
+            location: null,
+            isCompany: false,
+            holderTypeConfirmed: false,
+            companyName: '',
+            companyNIF: '',
+            companyAddress: '',
+            companyMunicipality: '',
+            companyPostalCode: '',
+            postalCode: '',
+            ivaPropertyAddress: '',
+            ivaCertificateSignature: null,
+            representacioSignature: null,
+            generalitatRole: 'titular',
+            generalitatSignature: null,
+            poderRepresentacioSignature: null,
+            ivaCertificateEsSignature: null,
+            renderedDocuments: {},
+          },
+        },
+      },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
+    await page.goto(`/?code=${code}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('h1').first()).toContainText('Ubicación', { timeout: 20000 });
+
+    await page.getByTestId('select-province-btn').click();
+    await page.getByTestId('province-btn-cataluna').click();
+
+    await expect(page.getByText('¿A nombre de quién está el contrato o la factura?')).toBeVisible();
+    await expect(page.getByText('Elige una opción para que preparemos los documentos correctos.')).toBeVisible();
+    await expect(page.getByTestId('province-continue-btn')).toBeDisabled();
+
+    await page.getByTestId('holder-type-option-company').click();
+    await expect(page.getByText('El contrato está a nombre de una sociedad o negocio y te pediremos sus datos fiscales.')).toBeVisible();
+    await expect(page.getByText('Datos de la empresa')).toBeVisible();
+    await expect(page.getByTestId('province-continue-btn')).toBeDisabled();
+
+    await page.getByTestId('holder-type-option-individual').click();
+    await expect(page.getByText('El contrato está a nombre de una persona, por ejemplo Juan Pérez.')).toBeVisible();
+    await expect(page.getByText('Datos de la empresa')).toHaveCount(0);
+    await expect(page.getByTestId('province-continue-btn')).toBeEnabled();
   });
 });

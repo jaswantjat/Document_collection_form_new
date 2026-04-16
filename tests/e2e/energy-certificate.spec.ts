@@ -1,11 +1,35 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { getProjectAccess } from './helpers/projectAccess';
 
 const EC04_CODE = 'ELT20250004';
 const BACKEND = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
-async function resetEC(request: any, code: string) {
-  const res = await request.post(`${BACKEND}/api/test/reset-ec/${code}`);
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ECONNRESET|EPIPE|socket hang up|Timeout .* exceeded/i.test(message);
+}
+
+async function resetEC(request: APIRequestContext, code: string) {
+  let res: Awaited<ReturnType<APIRequestContext['post']>> | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      res = await request.post(`${BACKEND}/api/test/reset-ec/${code}`, { timeout: 15000 });
+      break;
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === 1) throw error;
+      await delay(250);
+    }
+  }
+
+  if (!res) {
+    throw new Error(`Failed to reset EC fixture for ${code}`);
+  }
+
   if (!res.ok()) {
     console.warn(`[RESET] Failed to reset ${code}:`, await res.text());
   }

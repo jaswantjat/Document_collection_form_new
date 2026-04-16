@@ -56,6 +56,7 @@ function makeRepresentation(location: 'other' | 'cataluna') {
   return {
     location,
     isCompany: false,
+    holderTypeConfirmed: true,
     companyName: '',
     companyNIF: '',
     companyAddress: '',
