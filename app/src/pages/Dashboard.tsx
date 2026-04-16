@@ -821,13 +821,13 @@ function AdditionalDocumentsTableCell({
     : `${items.length} archivos · ${firstFilename} +${items.length - 1}`;
 
   return (
-    <div className="space-y-1 min-w-[210px]">
+    <div className="max-w-[220px] min-w-0 space-y-1">
       <p
-        className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+        className="flex w-full max-w-full min-w-0 items-center gap-1 overflow-hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
         title={summaryLabel}
       >
         <CheckCircle className="w-3 h-3 shrink-0" />
-        <span className="truncate">{summaryLabel}</span>
+        <span className="min-w-0 truncate">{summaryLabel}</span>
       </p>
       {manualReview > 0 && (
         <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
@@ -2456,7 +2456,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="table-fixed w-[1850px]">
+                  <table className="table-fixed w-[1940px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
@@ -2466,8 +2466,8 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">DNI / NIE</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">Docs adicionales</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Signed PDFs</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[240px]">Docs adicionales</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[190px]">Signed PDFs</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Status</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Actions</th>
                       </tr>
