@@ -31,6 +31,8 @@ export function isChunkLoadError(error: Pick<Error, 'message' | 'name'>): boolea
     msg.includes('importing a module script failed') ||
     msg.includes('failed to load module script') ||
     msg.includes('load failed for the module') ||
+    msg.includes("unexpected token '<'") ||
+    msg.includes("expected expression, got '<'") ||
     msg === 'load failed' ||
     msg.includes('importerror') ||
     error.name === 'ChunkLoadError'
