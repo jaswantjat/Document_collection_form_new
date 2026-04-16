@@ -1,0 +1,7 @@
+{
+  "ts_utc": "2026-04-15T16:00:00Z",
+  "category": "workflow",
+  "text": "A PASSing QA result does not guarantee a PR is mergeable if `staging` moved after the last sync.\nAlways fetch the base branch and re-check mergeability before merging, especially on long-running issue branches.\nThis avoids late surprises from conflict-only drift.",
+  "issue": "#13",
+  "pointers": ["https://github.com/jaswantjat/Document_collection_form_new/pull/23", "git fetch origin staging", "gh pr view 23 --json mergeable,mergeStateStatus,statusCheckRollup"]
+}

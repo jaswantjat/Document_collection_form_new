@@ -1,0 +1,6 @@
+{
+  "ts_utc": "2026-04-15T15:35:19Z",
+  "category": "architecture",
+  "text": "For the generic Documento adicional flow, keep the original uploaded file as the stored document entry.\nAny derived page images are analysis-only and must not become child documents or replace the original PDF.\nThis preserves auditability and keeps the customer-visible unit aligned with the file they uploaded.",
+  "issue": "#13"
+}

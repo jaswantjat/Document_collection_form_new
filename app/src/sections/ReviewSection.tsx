@@ -7,13 +7,12 @@ import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 import { getCustomerEnergyFlowStatus } from '@/lib/energyCertificateFlow';
-import { FinancingCtaCard } from '@/components/FinancingCtaCard';
-import { resolveFinancingCta } from '@/lib/financing';
 
 interface Props {
   project: ProjectData;
   formData: FormData;
   source: 'customer' | 'assessor';
+  projectToken?: string;
   canSubmit: boolean;
   hasBlockingDocumentProcessing: boolean;
   followUpMode?: boolean;
@@ -52,6 +51,7 @@ export function ReviewSection({
   project,
   formData,
   source,
+  projectToken,
   hasBlockingDocumentProcessing,
   followUpMode = false,
   onEdit,
@@ -66,7 +66,8 @@ export function ReviewSection({
   const preUploadPromise = useRef<Promise<boolean> | null>(null);
   const preUploadDone = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const [preUploadStatus, setPreUploadStatus] = useState<PreUploadStatus>('uploading');
+  const [, setPreUploadStatus] = useState<PreUploadStatus>('uploading');
+  const [showUploadWaitModal, setShowUploadWaitModal] = useState(false);
 
   const signaturesOk = hasRequiredSignatures(formData);
   const locationVar = (formData.location ?? formData.representation?.location ?? null) as LocationRegion | null;
@@ -193,19 +194,33 @@ export function ReviewSection({
   const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((resolvedCount / totalCount) * 100);
-  const financingCta = resolveFinancingCta({ project, formData });
-  const preUploadMessage = preUploadStatus === 'uploading'
-    ? 'Subiendo archivos en segundo plano para que el envío final sea más rápido.'
-    : preUploadStatus === 'retrying'
-      ? 'Reintentando la subida de archivos antes de enviar.'
-      : preUploadStatus === 'ready'
-        ? 'Archivos preparados. El envío final ya puede completarse.'
-        : 'Algunos archivos no se han subido todavía. Reintentaremos la subida al enviar.';
+  const waitForPendingUploads = async (renderedFormData: FormData) => {
+    if (preUploadDone.current) return;
+
+    setShowUploadWaitModal(true);
+    try {
+      const preUploadSuccess = await (preUploadPromise.current ?? Promise.resolve(false));
+      if (preUploadSuccess) {
+        preUploadDone.current = true;
+        setPreUploadStatus('ready');
+        return;
+      }
+
+      setPreUploadStatus('retrying');
+      await preUploadAssets(project.code, renderedFormData, projectToken);
+      preUploadDone.current = true;
+      setPreUploadStatus('ready');
+    } catch {
+      setPreUploadStatus('error');
+      throw new Error('No hemos podido terminar de subir tus archivos. Inténtalo de nuevo.');
+    } finally {
+      setShowUploadWaitModal(false);
+    }
+  };
 
   const submit = async () => {
     if (submitInProgress.current) return;
     submitInProgress.current = true;
-    setSubmitting(true);
     setSubmitError('');
     try {
       const attemptId = getOrCreateSubmissionAttempt(project.code);
@@ -226,16 +241,11 @@ export function ReviewSection({
         };
       }
 
-      const preUploadSuccess = preUploadDone.current || await (preUploadPromise.current ?? Promise.resolve(false));
-      if (!preUploadSuccess) {
-        setPreUploadStatus('retrying');
-        await preUploadAssets(project.code, renderedFormData);
-        preUploadDone.current = true;
-        setPreUploadStatus('ready');
-      }
+      await waitForPendingUploads(renderedFormData);
 
+      setSubmitting(true);
       const submitPayload = stripAllBinaryData(renderedFormData);
-      const res = await submitForm(project.code, submitPayload, source, attemptId);
+      const res = await submitForm(project.code, submitPayload, source, attemptId, projectToken);
       if (res.success) {
         clearSubmissionAttempt(project.code);
         onSuccess();
@@ -251,6 +261,7 @@ export function ReviewSection({
     } finally {
       submitInProgress.current = false;
       setSubmitting(false);
+      setShowUploadWaitModal(false);
     }
   };
 
@@ -276,7 +287,7 @@ export function ReviewSection({
 
     setPreUploadStatus('uploading');
     preUploadPromise.current = getReadyFormData()
-      .then(fd => preUploadAssets(project.code, fd))
+      .then(fd => preUploadAssets(project.code, fd, projectToken))
       .then(() => {
         preUploadDone.current = true;
         setPreUploadStatus('ready');
@@ -466,37 +477,6 @@ export function ReviewSection({
           </div>
         )}
 
-        <div
-          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
-            preUploadStatus === 'ready'
-              ? 'border-emerald-200 bg-emerald-50'
-              : preUploadStatus === 'error'
-                ? 'border-amber-200 bg-amber-50'
-                : 'border-blue-100 bg-blue-50'
-          }`}
-        >
-          {preUploadStatus === 'ready' ? (
-            <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-          ) : preUploadStatus === 'error' ? (
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-          ) : (
-            <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-          )}
-          <p
-            className={`text-sm ${
-              preUploadStatus === 'ready'
-                ? 'text-emerald-800'
-                : preUploadStatus === 'error'
-                  ? 'text-amber-800'
-                  : 'text-eltex-blue'
-            }`}
-          >
-            {preUploadMessage}
-          </p>
-        </div>
-
-        <FinancingCtaCard cta={financingCta} />
-
         {/* ── Error ── */}
         {submitError && (
           <div className="space-y-3">
@@ -554,7 +534,7 @@ export function ReviewSection({
                     type="button"
                     onClick={submit}
                     disabled={hasBlockingDocumentProcessing}
-                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-40"
+                    className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-40"
                   >
                     Sí, enviar incompleto
                   </button>
@@ -565,7 +545,7 @@ export function ReviewSection({
                 type="button"
                 onClick={() => setConfirmingIncomplete(true)}
                 disabled={hasBlockingDocumentProcessing}
-                className="w-full border-2 border-gray-200 text-gray-500 font-medium py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors hover:border-gray-300 disabled:opacity-40"
+                className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-40 shadow-sm"
               >
                 Enviar igualmente (incompleto)
               </button>
@@ -585,6 +565,23 @@ export function ReviewSection({
         )}
 
       </div>
+
+      {showUploadWaitModal && (
+        <div
+          className="fixed inset-0 z-50 bg-gray-900/45 backdrop-blur-[1px] flex items-center justify-center p-6"
+          data-testid="review-upload-wait-modal"
+        >
+          <div className="w-full max-w-xs rounded-3xl border border-gray-100 bg-white px-5 py-6 shadow-2xl text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+              <Loader2 className="h-6 w-6 animate-spin text-eltex-blue" />
+            </div>
+            <p className="mt-4 text-base font-semibold text-gray-900">Subiendo archivos</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              Estamos subiendo tus archivos. Espera un momento, por favor.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

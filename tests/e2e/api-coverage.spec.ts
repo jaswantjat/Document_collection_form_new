@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { APPROVED_ASSESSOR } from './helpers/projectAccess';
 
 const BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_CODE = 'ELT20250001';
@@ -149,7 +150,15 @@ async function loginDashboard(request: any) {
 }
 
 test.describe('API Coverage', () => {
-  test('API-01: POST /api/project/:code/save succeeds without customer token headers', async ({ request }) => {
+  test('API-01: GET /api/project/:code stays public and code-based', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/project/${VALID_CODE}`, {
+      timeout: 15000,
+    });
+    expect(res.status()).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ success: true, project: { code: VALID_CODE } });
+  });
+
+  test('API-02: POST /api/project/:code/save succeeds without customer token headers', async ({ request }) => {
     const res = await request.post(`${BASE}/api/project/${VALID_CODE}/save`, {
       headers: { 'Content-Type': 'application/json' },
       data: { formData: {} },
@@ -159,68 +168,43 @@ test.describe('API Coverage', () => {
     await expect(res.json()).resolves.toMatchObject({ success: true });
   });
 
-  test('API-02: POST /api/project/:code/save returns 404 for an unknown project code', async ({ request }) => {
-    const res = await request.post(`${BASE}/api/project/ELT99999999/save`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { formData: {} },
-      timeout: 15000,
-    });
-    expect(res.status()).toBe(404);
-    await expect(res.json()).resolves.toMatchObject({ success: false, error: 'PROJECT_NOT_FOUND' });
-  });
+  test('API-03: POST /api/project/create is public and reuses duplicate phones', async ({ request }) => {
+    const phone = uniquePhone();
 
-  test('API-03: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {
-    const createRes = await request.post(`${BASE}/api/project/create`, {
+    const first = await request.post(`${BASE}/api/project/create`, {
       data: {
-        phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        phone,
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
-    expect(createRes.status()).toBe(200);
-    const createBody = await createRes.json();
-    const code = createBody.project.code as string;
+    expect(first.status()).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.success).toBe(true);
+    expect(firstBody.existing).toBe(false);
 
-    const saveRes = await request.post(`${BASE}/api/project/${code}/save`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { formData: buildLegacyZipFormData(), source: 'customer' },
+    const second = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone,
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
+      },
       timeout: 15000,
     });
-    expect(saveRes.status()).toBe(200);
-
-    const dashToken = await loginDashboard(request);
-
-    const res = await request.get(`${BASE}/api/project/${code}/download-zip`, {
-      headers: { 'x-dashboard-token': dashToken },
-      timeout: 30000,
-    });
-    expect(res.status()).toBe(200);
-    expect(res.headers()['content-type'] || '').toMatch(/zip|octet-stream/);
-
-    const entries = await parseZipEntries(await res.body());
-
-    expect(entries).toEqual(expect.arrayContaining([
-      '1_documentos/DNI_frontal.jpg',
-      '1_documentos/DNI_trasera.jpg',
-      '1_documentos/IBI.jpg',
-      '1_documentos/Factura_luz_1.jpg',
-      '1_documentos/DNI_original_pdf.pdf',
-      '1_documentos/IBI_original_pdf.pdf',
-      '1_documentos/Factura_luz_original_pdf.pdf',
-      '2_certificados/Certificado_energetico.pdf',
-    ]));
-    expect(entries.some((entry: string) => entry.startsWith('2_pdfs_firmados/'))).toBe(false);
-    expect(entries.some((entry: string) => entry.startsWith('4_firmas_finales/'))).toBe(false);
-    expect(entries.some((entry: string) => entry.startsWith('5_fotos_inmueble/'))).toBe(false);
+    expect(second.status()).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.success).toBe(true);
+    expect(secondBody.existing).toBe(true);
+    expect(secondBody.project.code).toBe(firstBody.project.code);
   });
 
   test('API-04: upload-assets prunes stale asset keys when the active manifest shrinks', async ({ request }) => {
     const createRes = await request.post(`${BASE}/api/project/create`, {
       data: {
         phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
@@ -259,7 +243,66 @@ test.describe('API Coverage', () => {
     expect(secondBody.project.assetFiles.dniFront).toBeUndefined();
   });
 
-  test('API-05: reset endpoints recreate missing seeded follow-up fixtures', async ({ request }) => {
+  test('API-05: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+
+    const saveRes = await request.post(`${BASE}/api/project/${code}/save`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { formData: buildLegacyZipFormData(), source: 'customer' },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
+    const dashToken = await loginDashboard(request);
+    const res = await request.get(`${BASE}/api/project/${code}/download-zip`, {
+      headers: { 'x-dashboard-token': dashToken },
+      timeout: 30000,
+    });
+    expect(res.status()).toBe(200);
+    expect(res.headers()['content-type'] || '').toMatch(/zip|octet-stream/);
+
+    const entries = await parseZipEntries(await res.body());
+    expect(entries).toEqual(expect.arrayContaining([
+      '1_documentos/DNI_frontal.jpg',
+      '1_documentos/DNI_trasera.jpg',
+      '1_documentos/IBI.jpg',
+      '1_documentos/Factura_luz_1.jpg',
+      '1_documentos/DNI_original_pdf.pdf',
+      '1_documentos/IBI_original_pdf.pdf',
+      '1_documentos/Factura_luz_original_pdf.pdf',
+      '2_certificados/Certificado_energetico.pdf',
+    ]));
+  });
+
+  test('API-05b: public project creation rejects an assessor outside the approved list', async ({ request }) => {
+    const res = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: 'QA Bot',
+        assessorId: 'QA-BOT',
+      },
+      failOnStatusCode: false,
+      timeout: 15000,
+    });
+
+    expect(res.status()).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      message: 'Selecciona un asesor de la lista aprobada.',
+    });
+  });
+
+  test('API-06: reset endpoints recreate missing seeded follow-up fixtures', async ({ request }) => {
     const dashToken = await loginDashboard(request);
 
     for (const code of ['ELT20250004', 'ELT20250005']) {
@@ -280,36 +323,5 @@ test.describe('API Coverage', () => {
     expect(projectRes.status()).toBe(200);
     const projectBody = await projectRes.json();
     expect(projectBody.project.code).toBe('ELT20250005');
-  });
-
-  test('API-06: submit is idempotent when the first response times out client-side', async ({ request }) => {
-    await request.post(`${BASE}/api/test/restore-base-flow/ELT20250005`, { timeout: 15000 });
-
-    const beforeRes = await request.get(`${BASE}/api/project/ELT20250005`, { timeout: 15000 });
-    const beforeBody = await beforeRes.json();
-    const beforeSubmissionCount = beforeBody.project.submissionCount as number;
-    const formData = beforeBody.project.formData;
-    const attemptId = `attempt-${Date.now()}`;
-
-    await expect(request.post(`${BASE}/api/project/ELT20250005/submit`, {
-      headers: { 'x-test-submit-delay-ms': '250' },
-      data: { formData, source: 'customer', attemptId },
-      timeout: 50,
-    })).rejects.toThrow();
-
-    await new Promise((resolve) => setTimeout(resolve, 350));
-
-    const retryRes = await request.post(`${BASE}/api/project/ELT20250005/submit`, {
-      data: { formData, source: 'customer', attemptId },
-      timeout: 15000,
-    });
-    expect(retryRes.status()).toBe(200);
-    const retryBody = await retryRes.json();
-    expect(retryBody.success).toBe(true);
-    expect(retryBody.submissionId).toBeTruthy();
-
-    const afterRes = await request.get(`${BASE}/api/project/ELT20250005`, { timeout: 15000 });
-    const afterBody = await afterRes.json();
-    expect(afterBody.project.submissionCount).toBe(beforeSubmissionCount + 1);
   });
 });

@@ -30,7 +30,16 @@ import {
   Zap,
   Scissors,
 } from 'lucide-react';
-import { dashboardLogout, deleteProject, fetchDashboard, fetchDashboardProject, extractDocument, extractDocumentBatch, adminUpdateFormData } from '@/services/api';
+import {
+  dashboardLogout,
+  deleteProject,
+  fetchDashboard,
+  fetchDashboardProject,
+  extractDocument,
+  extractDocumentBatch,
+  adminUpdateFormData,
+  type DashboardProjectActionResult,
+} from '@/services/api';
 import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
@@ -52,7 +61,9 @@ import {
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
   getDocumentAssetsFromProject, getElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
+import { buildDashboardAdditionalBankDocumentPatch } from '@/lib/dashboardAdditionalBankDocuments';
 import { downloadProjectZip } from '@/lib/dashboardExport';
+import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
 
 function ProductBadge({ type }: { type: string }) {
   const isSolar = type?.toLowerCase() === 'solar';
@@ -789,13 +800,58 @@ function ElectricityTableCell({
   );
 }
 
-type AdminDocType = 'dni-front' | 'dni-back' | 'ibi' | 'electricity-bill';
+function AdditionalDocumentsTableCell({
+  items,
+}: {
+  items: DashboardAssetItem[];
+}) {
+  if (items.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+        <FileText className="w-3 h-3" />
+        Sin docs
+      </span>
+    );
+  }
+
+  const manualReview = items.filter((item) => item.needsManualReview).length;
+  const firstFilename = items[0]?.filename?.trim() || items[0]?.label || 'Documento adicional';
+  const summaryLabel = items.length === 1
+    ? `1 archivo · ${firstFilename}`
+    : `${items.length} archivos · ${firstFilename} +${items.length - 1}`;
+
+  return (
+    <div className="max-w-[220px] min-w-0 space-y-1">
+      <p
+        className="flex w-full max-w-full min-w-0 items-center gap-1 overflow-hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+        title={summaryLabel}
+      >
+        <CheckCircle className="w-3 h-3 shrink-0" />
+        <span className="min-w-0 truncate">{summaryLabel}</span>
+      </p>
+      {manualReview > 0 && (
+        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
+          <AlertTriangle className="w-3 h-3" />
+          {manualReview} revisar
+        </div>
+      )}
+    </div>
+  );
+}
+
+type AdminDocType =
+  | 'dni-front'
+  | 'dni-back'
+  | 'ibi'
+  | 'electricity-bill'
+  | 'additional-bank-document';
 
 const ADMIN_DOC_TABS: { key: AdminDocType; label: string }[] = [
   { key: 'dni-front', label: 'DNI frontal' },
   { key: 'dni-back', label: 'DNI trasera' },
   { key: 'ibi', label: 'IBI / Escritura' },
   { key: 'electricity-bill', label: 'Factura luz' },
+  { key: 'additional-bank-document', label: 'Documento adicional' },
 ];
 
 function AdminUploadModal({
@@ -809,7 +865,7 @@ function AdminUploadModal({
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   const [activeTab, setActiveTab] = useState<AdminDocType>('dni-front');
   const [status, setStatus] = useState<'idle' | 'extracting' | 'uploading' | 'done' | 'error'>('idle');
@@ -818,6 +874,7 @@ function AdminUploadModal({
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const isBusy = status === 'extracting' || status === 'uploading';
 
   useEffect(() => {
     let cancelled = false;
@@ -855,15 +912,46 @@ function AdminUploadModal({
       return;
     }
 
-    const hasPdf = files.some((file) => file.type === 'application/pdf');
-    setStatus('extracting');
-    setStatusMsg(hasPdf
-      ? 'Convirtiendo PDF en imágenes...'
-      : files.length > 1
-        ? 'Preparando imágenes...'
-        : 'Preparando imagen...');
-
     try {
+      if (activeTab === 'additional-bank-document') {
+        setStatus('uploading');
+        setStatusMsg(files.length > 1 ? 'Guardando documentos adicionales...' : 'Guardando documento adicional...');
+
+        const formDataPatch = await buildDashboardAdditionalBankDocumentPatch(
+          project.formData?.additionalBankDocuments,
+          files,
+        );
+
+        const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
+        if (!saveRes.success) {
+          setStatus('error');
+          setStatusMsg(saveRes.message || 'Error al guardar.');
+          return;
+        }
+
+        setProject((prev: any) => prev ? {
+          ...prev,
+          formData: saveRes.formData ?? {
+            ...(prev.formData ?? {}),
+            ...formDataPatch,
+          },
+        } : prev);
+        await onRefresh();
+        setStatus('done');
+        setStatusMsg(files.length > 1
+          ? 'Documentos adicionales guardados correctamente.'
+          : 'Documento adicional guardado correctamente.');
+        return;
+      }
+
+      const hasPdf = files.some((file) => file.type === 'application/pdf');
+      setStatus('extracting');
+      setStatusMsg(hasPdf
+        ? 'Convirtiendo PDF en imágenes...'
+        : files.length > 1
+          ? 'Preparando imágenes...'
+          : 'Preparando imagen...');
+
       const { pages: preparedPages, originalPdfs } = await prepareAdminUploadPages(files);
       setStatusMsg('Extrayendo datos con IA...');
 
@@ -872,6 +960,7 @@ function AdminUploadModal({
         'dni-back': 'dniBack',
         'ibi': 'ibi',
         'electricity-bill': 'electricity',
+        'additional-bank-document': 'other',
       };
 
       const res = activeTab === 'electricity-bill'
@@ -950,9 +1039,16 @@ function AdminUploadModal({
         return;
       }
 
+      setProject((prev: any) => prev ? {
+        ...prev,
+        formData: saveRes.formData ?? {
+          ...(prev.formData ?? {}),
+          ...formDataPatch,
+        },
+      } : prev);
+      await onRefresh();
       setStatus('done');
       setStatusMsg('Documento guardado correctamente.');
-      onRefresh();
     } catch (err) {
       console.error('Admin upload failed:', err);
       setStatus('error');
@@ -968,9 +1064,11 @@ function AdminUploadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[260] bg-black/60 flex items-center justify-center p-4"
       data-testid="admin-upload-modal"
-      onClick={onClose}
+      onClick={() => {
+        if (!isBusy) onClose();
+      }}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
@@ -981,7 +1079,10 @@ function AdminUploadModal({
           <button
             type="button"
             data-testid="admin-upload-close-btn"
-            onClick={onClose}
+            onClick={() => {
+              if (!isBusy) onClose();
+            }}
+            disabled={isBusy}
             className="text-gray-400 hover:text-gray-700 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -1016,6 +1117,7 @@ function AdminUploadModal({
                 key={tab.key}
                 type="button"
                 onClick={() => { setActiveTab(tab.key); reset(); }}
+                disabled={isBusy}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeTab === tab.key
                     ? 'bg-eltex-blue text-white'
@@ -1089,16 +1191,19 @@ function ProjectDetailModal({
   projectCode,
   token,
   loadProjectDetail,
+  onRefresh,
   onClose,
 }: {
   projectCode: string;
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
+  onRefresh: () => Promise<void> | void;
   onClose: () => void;
 }) {
   const [project, setProject] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1128,7 +1233,14 @@ function ProjectDetailModal({
     [project]
   );
 
+  const refreshProject = useCallback(async () => {
+    await onRefresh();
+    const detail = await loadProjectDetail(projectCode);
+    setProject(detail);
+  }, [loadProjectDetail, onRefresh, projectCode]);
+
   return (
+    <>
     <div className="fixed inset-0 z-[220] bg-black/60 flex items-center justify-center p-4" data-testid="project-detail-modal" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col"
@@ -1151,6 +1263,17 @@ function ProjectDetailModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {project && (
+              <button
+                type="button"
+                data-testid="detail-upload-btn"
+                onClick={() => setShowUpload(true)}
+                className="h-9 rounded-lg px-3 inline-flex items-center gap-2 border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="text-sm font-semibold">Subir docs</span>
+              </button>
+            )}
             {project && (
               <button
                 type="button"
@@ -1236,6 +1359,17 @@ function ProjectDetailModal({
         </div>
       </div>
     </div>
+    {showUpload && createPortal(
+      <AdminUploadModal
+        projectCode={projectCode}
+        token={token}
+        loadProjectDetail={loadProjectDetail}
+        onClose={() => setShowUpload(false)}
+        onRefresh={refreshProject}
+      />,
+      document.body
+    )}
+    </>
   );
 }
 
@@ -1256,7 +1390,6 @@ function ProjectTableRow({
 }) {
   const [downloading, setDownloading] = useState(false);
   const [openingForm, setOpeningForm] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1269,9 +1402,8 @@ function ProjectTableRow({
     setOpeningForm(true);
 
     try {
-      await loadProjectDetail(project.code);
-
-      const formUrl = buildProjectUrl(project.code, 'assessor');
+      const detailProject = await loadProjectDetail(project.code);
+      const formUrl = buildProjectUrl(project.code, 'assessor', detailProject?.accessToken ?? project.accessToken);
       if (popup) {
         popup.location.href = formUrl;
       } else {
@@ -1385,6 +1517,9 @@ function ProjectTableRow({
           onOpenDetail={() => setShowDetail(true)}
         />
       </td>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <AdditionalDocumentsTableCell items={summary.additionalDocuments} />
+      </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <SignedPdfsTableCell projectCode={project.code} items={summary.signedDocuments} loadProjectDetail={loadProjectDetail} energyCertificate={summary.energyCertificate} />
@@ -1417,15 +1552,6 @@ function ProjectTableRow({
             className="px-2 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center truncate"
           >
             {openingForm ? 'Abriendo...' : 'Formulario'}
-          </button>
-          <button
-            type="button"
-            data-testid="open-upload-btn"
-            onClick={() => setShowUpload(true)}
-            className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
-          >
-            <Upload className="w-3 h-3 shrink-0" />
-            Subir docs
           </button>
           <button
             type="button"
@@ -1479,21 +1605,12 @@ function ProjectTableRow({
         </div>
       </td>
     </tr>
-    {showUpload && createPortal(
-      <AdminUploadModal
-        projectCode={project.code}
-        token={token}
-        loadProjectDetail={loadProjectDetail}
-        onClose={() => setShowUpload(false)}
-        onRefresh={onRefresh}
-      />,
-      document.body
-    )}
     {showDetail && createPortal(
       <ProjectDetailModal
         projectCode={project.code}
         token={token}
         loadProjectDetail={loadProjectDetail}
+        onRefresh={onRefresh}
         onClose={() => setShowDetail(false)}
       />,
       document.body
@@ -2083,7 +2200,19 @@ export function DownloadGroupsSection({
             <div className="mt-3 space-y-2">
               {group.items.map((asset) => (
                 <div key={asset.key} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs text-gray-700 truncate">{asset.label}</span>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <span className="block truncate text-xs text-gray-700">{asset.label}</span>
+                    {asset.needsManualReview && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+                        title="Revisión manual requerida"
+                        data-testid="additional-bank-doc-review-badge"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Revisar
+                      </span>
+                    )}
+                  </div>
                   <AssetButtons asset={asset} projectCode={projectCode} compact />
                 </div>
               ))}
@@ -2102,6 +2231,7 @@ interface DashboardProps {
 
 export function Dashboard({ token, onLogout }: DashboardProps) {
   const [projects, setProjects] = useState<any[]>([]);
+  const [actionResult, setActionResult] = useState<DashboardProjectActionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'submitted' | 'pending'>('all');
@@ -2160,12 +2290,20 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     setProjects((prev) => prev.filter((p) => p.code !== code));
   }, []);
 
+  const handleProjectActionResult = useCallback(async (result: DashboardProjectActionResult) => {
+    detailCacheRef.current.delete(result.project.code);
+    setActionResult(result);
+    setFilter('all');
+    setSearch(result.project.code);
+    await load();
+  }, [load]);
+
   useEffect(() => {
     void load();
   }, [load]);
 
   const projectsWithSummary = useMemo(
-    () => projects.map((project) => ({ project, summary: project.summary as DashboardProjectSummary })),
+    () => projects.map((project) => ({ project, summary: getDashboardProjectSummary(project) })),
     [projects]
   );
 
@@ -2259,6 +2397,13 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           ))}
         </div>
 
+        <DashboardProjectManagementCard
+          token={token}
+          actionResult={actionResult}
+          onActionResult={handleProjectActionResult}
+          onUnauthorized={handleLogout}
+        />
+
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -2312,7 +2457,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="table-fixed w-[1690px]">
+                  <table className="table-fixed w-[1940px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
@@ -2322,7 +2467,8 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">DNI / NIE</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Signed PDFs</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[240px]">Docs adicionales</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[190px]">Signed PDFs</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Status</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Actions</th>
                       </tr>

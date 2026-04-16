@@ -1,0 +1,12 @@
+{
+  "ts_utc": "2026-04-16T07:24:27Z",
+  "category": "technical-gotcha",
+  "text": "Secure-link work in this repo must be verified through the full customer runtime path, not just the backend middleware.\nThe URL token needs to flow into initial fetch, autosave, asset pre-upload, and submit, or the feature looks implemented while first load and background saves still fail.\nPreferred action: thread the URL token through App-level hooks/components any time customer access is hardened.",
+  "issue": "#11",
+  "pointers": [
+    "app/src/App.tsx",
+    "app/src/hooks/useFormState.ts",
+    "app/src/hooks/useBeforeUnloadSave.ts",
+    "app/src/sections/ReviewSection.tsx"
+  ]
+}

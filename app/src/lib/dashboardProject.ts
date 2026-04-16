@@ -37,6 +37,8 @@ export interface DashboardAssetItem {
   label: string;
   dataUrl: string;
   mimeType: string | null;
+  filename?: string | null;
+  needsManualReview?: boolean;
 }
 
 export interface DashboardAssetGroup {
@@ -77,6 +79,7 @@ export interface DashboardProjectSummary {
   signedDocuments: DashboardSignedPdfItem[];
   energyCertificate: DashboardEnergyCertificateSummary;
   finalSignatures: DashboardAssetItem[];
+  additionalDocuments: DashboardAssetItem[];
   photoGroups: DashboardAssetGroup[];
   downloadGroups: DashboardAssetGroup[];
   warnings: DashboardWarning[];
@@ -416,15 +419,33 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
   const assetFiles = project?.assetFiles || {};
   const documents = normalizeAdditionalBankDocuments(project?.formData?.additionalBankDocuments);
 
+  if (documents.length === 0 && Array.isArray(project?.summary?.additionalDocuments)) {
+    return project.summary.additionalDocuments
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any, index: number) => ({
+        key: typeof item.key === 'string' ? item.key : `additional-document-${index}`,
+        label: typeof item.label === 'string' && item.label.trim() ? item.label : 'Documento adicional',
+        dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : '',
+        mimeType: typeof item.mimeType === 'string' ? item.mimeType : null,
+        filename: typeof item.filename === 'string' && item.filename.trim() ? item.filename.trim() : null,
+        needsManualReview: Boolean(item.needsManualReview),
+      }));
+  }
+
   return documents.flatMap((entry) => entry.files.flatMap((file, index) => {
     const source = resolveAdditionalBankDocumentSource(file, assetFiles);
     if (!source) return [];
+    const needsManualReview = Boolean(entry.issue?.code === 'manual-review' || entry.extraction?.needsManualReview);
 
     return [{
       key: file.id || `${entry.id}-${index}`,
       label: getAdditionalBankDocumentFileLabel(entry, index),
       dataUrl: source,
       mimeType: resolveAdditionalBankDocumentMimeType(file, source, assetFiles),
+      filename: typeof file.filename === 'string' && file.filename.trim()
+        ? file.filename.trim()
+        : getAdditionalBankDocumentFileLabel(entry, index),
+      needsManualReview,
     }];
   }));
 }
@@ -499,7 +520,7 @@ export function getDashboardDownloadGroups(project: any): DashboardAssetGroup[] 
 
   return [
     { key: 'documents', label: 'Documentos', items: [...primaryDocuments, ...ibiItems, ...electricityItems] },
-    { key: 'additional-bank-documents', label: 'Documentos bancarios adicionales', items: additionalBankDocuments },
+    { key: 'additional-bank-documents', label: 'Documentos adicionales', items: additionalBankDocuments },
     { key: 'photos', label: 'Fotos del inmueble', items: photoGroups.flatMap((group) => group.items) },
     { key: 'final-signatures', label: 'Firmas finales', items: finalSignatures },
   ].filter((group) => group.items.length > 0);
@@ -579,6 +600,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const signedDocuments = getDashboardSignedPdfItems(project);
   const energyCertificate = getDashboardEnergyCertificateSummary(project);
   const finalSignatures = getDashboardFinalSignatureAssets(project);
+  const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
   const photoGroups = getDashboardPhotoGroups(project);
   const downloadGroups = getDashboardDownloadGroups(project);
   const snapshot = getSnapshot(project);
@@ -611,6 +633,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     signedDocuments,
     energyCertificate,
     finalSignatures,
+    additionalDocuments,
     photoGroups,
     downloadGroups,
     warnings,

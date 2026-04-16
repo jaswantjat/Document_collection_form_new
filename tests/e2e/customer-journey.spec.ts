@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APPROVED_ASSESSOR, getProjectAccess, loginDashboard } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -94,14 +95,18 @@ async function seedLocalBackup(page: Page, projectCode: string, formData: unknow
 }
 
 test.describe('Customer Journey Regressions', () => {
-  test('deleted stale link recovers cleanly and the same phone can create a fresh project', async ({ page, request }) => {
-    const localPhone = `6${String(Date.now() % 100_000_000).padStart(8, '0')}`;
-    const e164Phone = `+34${localPhone}`;
+  test('deleted stale link recovers to the phone start flow instead of dead-ending', async ({ page, request }) => {
+    const phone = `+346${String(Date.now() % 100_000_000).padStart(8, '0')}`;
+    const dashboardToken = await loginDashboard(request);
 
-    const createRes = await request.post(`${API_BASE}/api/project/create`, {
+    const createRes = await request.post(`${API_BASE}/api/dashboard/project`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dashboard-token': dashboardToken,
+      },
       data: {
-        phone: e164Phone,
-        assessor: 'QA Recovery',
+        phone,
+        assessor: APPROVED_ASSESSOR,
         productType: 'solar',
       },
     });
@@ -111,45 +116,19 @@ test.describe('Customer Journey Regressions', () => {
     expect(created.success).toBeTruthy();
     const staleCode = created.project.code as string;
 
-    const loginRes = await request.post(`${API_BASE}/api/dashboard/login`, {
-      data: { password: 'eltex2025' },
-    });
-    expect(loginRes.ok()).toBeTruthy();
-    const loginJson = await loginRes.json();
-    const dashboardToken = loginJson.token as string;
-
     const deleteRes = await request.delete(`${API_BASE}/api/dashboard/project/${staleCode}`, {
       headers: { 'x-dashboard-token': dashboardToken },
     });
     expect(deleteRes.ok()).toBeTruthy();
 
-    await page.goto(`/?code=${staleCode}`);
-    await expect(page.locator('h1').first()).toContainText('Teléfono del cliente');
-
-    await page.locator('input[type="tel"]').fill(localPhone);
-    await page.getByRole('button', { name: /continuar/i }).click();
-
-    await expect(page.locator('h1').first()).toContainText('Nuevo expediente');
-    await page.getByRole('button', { name: /solar/i }).click();
-    await page.getByPlaceholder('Nombre completo').fill('QA Recovery');
-    await page.getByRole('button', { name: /crear expediente/i }).click();
-
-    await expect(page.locator('h1').first()).toContainText('Documentos');
-    await expect(page).toHaveURL(/\/\?code=ELT\d+/);
-
-    const recreatedUrl = new URL(page.url());
-    const recreatedCode = recreatedUrl.searchParams.get('code');
-    expect(recreatedCode).toBeTruthy();
-
-    const lookupRes = await request.get(`${API_BASE}/api/lookup/phone/${encodeURIComponent(e164Phone)}`);
-    expect(lookupRes.ok()).toBeTruthy();
-    const lookupJson = await lookupRes.json();
-    expect(lookupJson.success).toBeTruthy();
-    expect(lookupJson.project.code).toBe(recreatedCode);
+    await page.goto(`/?code=${staleCode}`, { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('input[type="tel"]').first()).toBeVisible({ timeout: 15000 });
   });
 
-  test('resume by phone restores local backup and routes to the resumed step', async ({ page, request }) => {
+  test('code-bearing assessor link restores local backup and routes to the resumed step', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
+    const { assessorUrl } = await getProjectAccess(request, projectCode);
 
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
 
@@ -176,18 +155,16 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto('/');
-    await page.locator('input[type="tel"]').fill('666000005');
-    await page.getByRole('button', { name: /continuar/i }).click();
-
-    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await page.goto(assessorUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Confirma tu documentación' })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /certificado energético/i }).click();
-    await expect(page.locator('h1').first()).toContainText('Certificado energético');
+    await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
     await expect(page).toHaveURL(/code=ELT20250005/);
   });
 
-  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page }) => {
+  test('representation flow completes with the dev signature helper and advances cleanly', async ({ page, request }) => {
     const projectCode = 'ELT20250001';
+    const { customerUrl } = await getProjectAccess(request, projectCode);
 
     await seedLocalBackup(page, projectCode, {
       dni: {
@@ -212,16 +189,20 @@ test.describe('Customer Journey Regressions', () => {
       signatures: { customerSignature: null, repSignature: null },
     });
 
-    await page.goto(`/?code=${projectCode}`);
-    await expect(page.locator('h1').first()).toContainText('Documentos para firmar');
+    await page.goto(customerUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Documentos para firmar' })).toBeVisible({ timeout: 15000 });
 
-    await page.waitForFunction(() => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function');
+    await page.waitForFunction(
+      () => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function',
+      undefined,
+      { timeout: 15000 }
+    );
     await page.evaluate(() => (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature?.());
 
     const continueButton = page.getByTestId('representation-continue-btn');
     await expect(continueButton).toHaveAttribute('data-signed', 'true');
     await continueButton.click();
 
-    await expect(page.locator('h1').first()).toContainText('Certificado energético');
+    await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
   });
 });

@@ -9,7 +9,7 @@ interface UseProjectState {
   error: string | null;
 }
 
-export const useProject = (projectCode: string | null) => {
+export const useProject = (projectCode: string | null, token?: string | null) => {
   const [state, setState] = useState<UseProjectState>(() => ({
     projectCode,
     project: null,
@@ -21,7 +21,7 @@ export const useProject = (projectCode: string | null) => {
     if (!projectCode) return;
     let cancelled = false;
 
-    fetchProject(projectCode)
+    fetchProject(projectCode, { token: token || undefined })
       .then(res => {
         if (cancelled) return;
         if (res.success && res.project) {
@@ -53,7 +53,7 @@ export const useProject = (projectCode: string | null) => {
     return () => {
       cancelled = true;
     };
-  }, [projectCode]);
+  }, [projectCode, token]);
 
   if (!projectCode) {
     return { project: null, loading: false, error: 'INVALID_CODE' };

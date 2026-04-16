@@ -301,6 +301,7 @@ export const useFormState = (
   options?: {
     preserveRepresentationSignaturesOnDocumentChange?: boolean;
     source?: 'customer' | 'assessor';
+    projectToken?: string;
   }
 ) => {
   const preserveRepresentationSignatures =
@@ -351,7 +352,7 @@ export const useFormState = (
       // when the user navigates sections without editing anything.
       const snapshot = JSON.stringify(cleanData);
       if (snapshot === lastSavedPayload.current) return;
-      saveProgress(projectCode, cleanData, options?.source).then(() => {
+      saveProgress(projectCode, cleanData, options?.source, options?.projectToken).then(() => {
         lastSavedPayload.current = snapshot;
         if (consecutiveSaveFailures.current > 0) {
           consecutiveSaveFailures.current = 0;
@@ -396,7 +397,7 @@ export const useFormState = (
     lastPhotoFingerprint.current = photoFingerprint;
     if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
     progressiveUploadTimer.current = setTimeout(() => {
-      preUploadAssets(projectCode, formData).catch(() => {});
+      preUploadAssets(projectCode, formData, options?.projectToken).catch(() => {});
     }, 800);
     return () => {
       if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);

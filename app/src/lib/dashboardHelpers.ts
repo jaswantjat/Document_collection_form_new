@@ -68,7 +68,8 @@ export function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function buildProjectUrl(code: string, source?: 'customer' | 'assessor') {
+export function buildProjectUrl(code: string, source?: 'customer' | 'assessor', token?: string) {
+  void token;
   const params = new URLSearchParams({ code });
   if (source === 'assessor') params.set('source', 'assessor');
   return `/?${params.toString()}`;

@@ -227,7 +227,6 @@ function FormApp() {
   const navigate = useNavigate();
 
   const urlCode = searchParams.get('code') || searchParams.get('project');
-  const urlToken = searchParams.get('token');
   const source = searchParams.get('source') === 'assessor' ? 'assessor' : 'customer';
 
   const [project, setProject] = useState<ProjectData | null>(null);
@@ -345,7 +344,7 @@ function FormApp() {
       });
 
     return () => { controller.abort(); clearTimeout(timeoutId); };
-  }, [urlCode, urlToken]);
+  }, [navigate, urlCode]);
 
 
   // When navigating from the review checklist into property-docs, remember which
@@ -394,7 +393,10 @@ function FormApp() {
     activeProject?.code ?? null,
     activeProject?.productType ?? 'solar',
     activeProject?.formData ?? null,
-    { preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow, source }
+    {
+      preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow,
+      source,
+    }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
@@ -507,7 +509,6 @@ function FormApp() {
       return (
         <PhoneSection
           onPhoneConfirmed={handlePhoneConfirmed}
-          onContinue={() => { }}
         />
       );
     }

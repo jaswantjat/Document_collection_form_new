@@ -1452,6 +1452,7 @@ export function PropertyDocsSection({
 }: Props) {
   const [dniIsBusy, setDniIsBusy] = useState(false);
   const [electricityIsBusy, setElectricityIsBusy] = useState(false);
+  const [additionalDocumentsBusy, setAdditionalDocumentsBusy] = useState(false);
 
   // Refs for each doc card so we can scroll to the right one when arriving from review
   const dniRef = useRef<HTMLDivElement>(null);
@@ -1495,7 +1496,7 @@ export function PropertyDocsSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy;
+  const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy || additionalDocumentsBusy;
 
   // Validation warnings (only shown when at least one doc exists)
   const hasAnyDoc = !!(dni.front.photo || ibi.photo || electricityBill.pages.length > 0);
@@ -1533,7 +1534,7 @@ export function PropertyDocsSection({
               ? 'Sube solo la documentación pendiente y confirma cuando termines.'
               : isResuming && missingCount > 0
               ? `Falta${missingCount > 1 ? 'n' : ''} ${missingCount} documento${missingCount > 1 ? 's' : ''} por completar.`
-              : 'Sube cada documento con buena luz. Solo se guarda cuando la verificación termina correctamente.'}
+              : 'Sube cada documento con buena luz. Los documentos adicionales se guardan tal cual para ir más rápido.'}
           </p>
         </div>
 
@@ -1611,13 +1612,6 @@ export function PropertyDocsSection({
           )}
         </div>
 
-        <AdditionalBankDocumentsCard
-          documents={additionalBankDocuments}
-          onAddDocuments={onAddAdditionalBankDocuments}
-          onReplaceDocument={onReplaceAdditionalBankDocument}
-          onRemoveDocument={onRemoveAdditionalBankDocument}
-        />
-
         {/* Cross-document validation warnings */}
         {validationWarnings.map((warning, i) => (
           <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -1626,10 +1620,18 @@ export function PropertyDocsSection({
           </div>
         ))}
 
+        <AdditionalBankDocumentsCard
+          documents={additionalBankDocuments}
+          onAddDocuments={onAddAdditionalBankDocuments}
+          onRemoveDocument={onRemoveAdditionalBankDocument}
+          onReplaceDocument={onReplaceAdditionalBankDocument}
+          onBusyChange={setAdditionalDocumentsBusy}
+        />
+
         <p className="text-xs text-gray-400 text-center pt-1">
           {followUpMode
-            ? 'Puedes confirmar lo que hayas subido, pero no mientras haya una verificación en curso.'
-            : 'Puedes continuar sin tenerlos todos, pero no mientras haya una verificación en curso.'}
+            ? 'Puedes confirmar lo que hayas subido, pero no mientras haya una carga o verificación en curso.'
+            : 'Puedes continuar sin tenerlos todos, pero no mientras haya una carga o verificación en curso.'}
         </p>
 
         {errors['propertyDocs.blocking'] && (

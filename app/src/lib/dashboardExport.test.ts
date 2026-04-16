@@ -246,7 +246,7 @@ describe('listDashboardExportEntries', () => {
     const archivePaths = listDashboardExportEntries(project).map((entry) => entry.archivePath);
 
     expect(archivePaths).toEqual(expect.arrayContaining([
-      '1_documentos/certificado_de_titularidad_bancaria.pdf',
+      '1_documentos/documento_adicional.pdf',
       '1_documentos/irpf_2024.png',
     ]));
   });

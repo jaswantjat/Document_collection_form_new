@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { getProjectAccess } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -117,6 +118,7 @@ test.describe('AI fallback', () => {
   test('AI-01: failed IBI extraction preserves the upload and still allows follow-up completion', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);
+    const { customerUrl } = await getProjectAccess(request, projectCode);
 
     await seedLocalBackup(page, projectCode, {
       dni: {
@@ -178,7 +180,7 @@ test.describe('AI fallback', () => {
       });
     });
 
-    await page.goto(`/?code=${projectCode}`);
+    await page.goto(customerUrl);
     await expect(page.locator('h1, h2').first()).toContainText(/Sube lo que falte y confirma|Confirma tu documentación/);
     await page.getByRole('button', { name: /IBI o escritura/i }).first().click();
     await expect(page.locator('h1').first()).toContainText('Documentos');

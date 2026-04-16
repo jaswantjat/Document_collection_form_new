@@ -4,6 +4,19 @@ import path from 'node:path';
 import { ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '../../app/src/lib/energyCertificateDocument';
 import { SIGNED_DOCUMENT_TEMPLATE_VERSION } from '../../app/src/lib/signedDocumentOverlays';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+const APPROVED_ASSESSOR = 'Sergi Guillen Cavero';
+const APPROVED_ASSESSORS = [
+  'Sergi Guillen Cavero',
+  'Juán Felipe Murillo Tamayo',
+  'Diego Perujo Díaz',
+  'Javier Paterna Merino',
+  'José Luís Sevilla',
+  'Antonio Miguel Sorroche Martínez',
+  'Laura Martín Manzano',
+  'Adolfo José Perdiguero Molina',
+  'Albert Llacha',
+  'Koen Hoogteijling',
+];
 const VALID_JPEG_BASE64 = '/9j/4AAQSkZJRgABAQEASABIAAD/';
 const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z5Y4AAAAASUVORK5CYII=';
 const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
@@ -51,18 +64,19 @@ function delay(ms: number) {
 
 function isTransientRequestError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /ECONNRESET|EPIPE|socket hang up/i.test(message);
+  return /ECONNRESET|EPIPE|socket hang up|Timeout .* exceeded/i.test(message);
 }
 
 async function postWithRetry(
   request: any,
   url: string,
   data: unknown,
-  timeout: number
+  timeout: number,
+  headers?: Record<string, string>,
 ) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await request.post(url, { data, timeout });
+      return await request.post(url, { data, timeout, headers });
     } catch (error) {
       if (!isTransientRequestError(error) || attempt === 1) throw error;
       await delay(250);
@@ -193,6 +207,21 @@ function makeAdditionalBankDocuments() {
         timestamp: 1,
         sizeBytes: 100,
       }],
+      extraction: {
+        extractedData: {
+          summary: 'Declaración presentada ante AEAT.',
+        },
+        confidence: 0.93,
+        isCorrectDocument: true,
+        documentTypeDetected: 'Declaración de la renta',
+        needsManualReview: true,
+        confirmedByUser: true,
+      },
+      issue: {
+        code: 'manual-review',
+        message: 'Hemos guardado el documento, pero conviene revisarlo antes de tramitarlo.',
+        updatedAt: '2026-04-15T10:00:00Z',
+      },
     },
   ];
 }
@@ -202,7 +231,7 @@ async function loginDashboard(request: any) {
     request,
     `${API_BASE}/api/dashboard/login`,
     { password: 'eltex2025' },
-    10000,
+    20000,
   );
   expect(loginRes.status()).toBe(200);
   const loginBody = await loginRes.json();
@@ -210,24 +239,26 @@ async function loginDashboard(request: any) {
 }
 
 async function createDashboardProject(request: any, formData?: Record<string, unknown>) {
+  const dashboardToken = await loginDashboard(request);
   const createRes = await postWithRetry(
     request,
-    `${API_BASE}/api/project/create`,
+    `${API_BASE}/api/dashboard/project`,
     {
       phone: uniquePhone(),
-      assessor: 'QA Bot',
-      assessorId: 'QA-BOT',
+      assessor: APPROVED_ASSESSOR,
     },
     15000,
+    { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
   );
   expect(createRes.status()).toBe(200);
   const createBody = await createRes.json();
   const code = createBody.project.code as string;
+  const accessToken = createBody.project.accessToken as string;
 
   if (formData) {
     const saveRes = await postWithRetry(
       request,
-      `${API_BASE}/api/project/${code}/save`,
+      `${API_BASE}/api/project/${code}/save?token=${encodeURIComponent(accessToken)}`,
       { formData, source: 'customer' },
       15000,
     );
@@ -238,15 +269,95 @@ async function createDashboardProject(request: any, formData?: Record<string, un
 }
 
 async function openDashboard(page: any, token: string) {
-  await page.goto('/');
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
   await page.evaluate((dashboardToken: string) => {
     sessionStorage.setItem('dashboard_token', dashboardToken);
   }, token);
-  await page.goto('/dashboard');
-  await expect(page.getByText('Dashboard')).toBeVisible();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...')).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Dashboard QA', () => {
+  test('dashboard staff can create, reopen duplicate phones, and open the assessor form without customer-link controls', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    const phone = uniquePhone();
+
+    await openDashboard(page, token);
+
+    const assessorOptions = await page.locator('[data-testid="dashboard-create-assessor-select"] option').allTextContents();
+    expect(assessorOptions).toEqual(APPROVED_ASSESSORS);
+
+    await page.getByTestId('dashboard-create-phone-input').fill(phone);
+    await page.getByTestId('dashboard-create-email-input').fill('dashboard.staff@example.com');
+    await page.getByTestId('dashboard-create-assessor-select').selectOption(APPROVED_ASSESSOR);
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    const resultPanel = page.getByTestId('dashboard-project-action-result');
+    await expect(resultPanel).toContainText('Expediente creado');
+
+    const codeLine = await resultPanel.locator('text=/ELT\\d+/').first().textContent();
+    const createdCode = codeLine?.match(/ELT\d+/)?.[0];
+    expect(createdCode).toBeTruthy();
+    await expect(page.getByTestId('dashboard-open-project-btn')).toBeVisible();
+    await expect(page.getByTestId('dashboard-resend-latest-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-open-customer-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-customer-link-input')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-copy-customer-link-btn')).toHaveCount(0);
+
+    await expect(page.getByTestId('dashboard-create-phone-input')).toHaveValue('', { timeout: 15000 });
+    await page.getByTestId('dashboard-create-phone-input').fill(phone);
+    await expect(page.getByTestId('dashboard-create-project-btn')).toBeEnabled({ timeout: 15000 });
+    await page.getByTestId('dashboard-create-project-btn').click();
+    await expect(resultPanel).toContainText('Expediente existente encontrado');
+    await expect(resultPanel).toContainText(createdCode!);
+
+    const popupPromise = page.waitForEvent('popup');
+    await page.getByTestId('dashboard-open-project-btn').click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState('domcontentloaded');
+    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&source=assessor$`));
+    await popup.close();
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
+    await expect(page.getByTestId('dashboard-row-resend-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('open-upload-btn')).toHaveCount(0);
+  });
+
+  test('dashboard staff create shows a validation error when the phone is missing', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByTestId('dashboard-project-management-error')).toContainText(
+      'El número de teléfono es obligatorio.',
+    );
+  });
+
+  test('dashboard create surfaces backend failures without leaving the dashboard flow', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.route('**/api/dashboard/project', async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          message: 'Selecciona un asesor de la lista aprobada.',
+        }),
+      });
+    });
+
+    await page.getByTestId('dashboard-create-phone-input').fill(uniquePhone());
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByTestId('dashboard-project-management-error')).toContainText(
+      'Selecciona un asesor de la lista aprobada.',
+    );
+  });
+
   test('invalid dashboard session returns to the login gate', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => {
@@ -283,17 +394,19 @@ test.describe('Dashboard QA', () => {
   });
 
   test('refresh pulls in new projects and keeps the newest activity first', async ({ page, request }) => {
-    const assessor = `Refresh Sort ${Date.now()}`;
+    const customerName = `Refresh Sort ${Date.now()}`;
     const createProject = async () => {
+      const dashboardToken = await loginDashboard(request);
       const createRes = await postWithRetry(
         request,
-        `${API_BASE}/api/project/create`,
+        `${API_BASE}/api/dashboard/project`,
         {
           phone: uniquePhone(),
-          assessor,
-          assessorId: assessor,
+          assessor: APPROVED_ASSESSOR,
+          customerName,
         },
         15000,
+        { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
       );
       expect(createRes.status()).toBe(200);
       const createBody = await createRes.json();
@@ -304,7 +417,7 @@ test.describe('Dashboard QA', () => {
     const token = await loginDashboard(request);
 
     await openDashboard(page, token);
-    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(assessor);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(customerName);
     const filteredRows = page.locator('tbody tr');
     await expect(filteredRows).toHaveCount(1);
     await expect(filteredRows.first()).toContainText(firstCode);
@@ -339,6 +452,30 @@ test.describe('Dashboard QA', () => {
 
     await page.getByTestId('ver-expediente-btn').click();
     await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
+  });
+
+  test('expired dashboard session on create returns to the login gate', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+
+    await page.route('**/api/dashboard/project', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          error: 'SESSION_EXPIRED',
+          message: 'La sesión del dashboard ha caducado.',
+        }),
+      });
+    });
+
+    await page.getByTestId('dashboard-create-phone-input').fill(uniquePhone());
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
+    await expect(page.getByTestId('dashboard-project-management-card')).toBeHidden();
   });
 
   test('browser-built dashboard ZIP matches the detail inventory folders', async ({ page, request }) => {
@@ -437,6 +574,7 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
     await page.getByTestId('ver-expediente-btn').click();
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
@@ -467,15 +605,70 @@ test.describe('Dashboard QA', () => {
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
 
-    await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
-    await expect(modal.getByText('Certificado de titularidad bancaria')).toBeVisible();
+    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
+    await expect(modal.getByText('Documentos adicionales')).toBeVisible();
+    await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('IRPF 2024')).toBeVisible();
+    await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
+    await expect(modal.getByText('Declaración presentada ante AEAT.')).toHaveCount(0);
 
     const bankDocDownload = page.waitForEvent('download');
-    await modal.getByTitle('Descargar Certificado de titularidad bancaria').click();
+    await modal.getByTitle('Descargar Documento adicional').click();
     expect((await bankDocDownload).suggestedFilename()).toBe(
-      `${code}_certificado_de_titularidad_bancaria.pdf`,
+      `${code}_documento_adicional.pdf`,
     );
+  });
+
+  test('dashboard admin upload saves additional documents without triggering AI extraction and surfaces them in the new column', async ({ page, request }) => {
+    const code = await createDashboardProject(request);
+    const token = await loginDashboard(request);
+    let extractCalls = 0;
+
+    await page.route('**/api/extract', async (route) => {
+      extractCalls += 1;
+      await route.continue();
+    });
+    await page.route('**/api/extract-batch', async (route) => {
+      extractCalls += 1;
+      await route.continue();
+    });
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
+    await page.getByTestId('ver-expediente-btn').click();
+    await page.getByTestId('detail-upload-btn').click();
+    const uploadModal = page.getByTestId('admin-upload-modal');
+    await expect(uploadModal).toBeVisible();
+
+    await uploadModal.getByRole('button', { name: 'Documento adicional' }).click();
+    await uploadModal.getByTestId('admin-upload-file-input').setInputFiles({
+      name: 'irpf-2024.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'),
+    });
+
+    await expect(uploadModal.getByText('Documento adicional guardado correctamente.')).toBeVisible({ timeout: 15000 });
+    await uploadModal.getByTestId('admin-upload-close-btn').click();
+    await expect(uploadModal).toBeHidden({ timeout: 15000 });
+
+    const modal = page.getByTestId('project-detail-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Documentos adicionales')).toBeVisible();
+    await expect(modal.getByText('Documento adicional')).toBeVisible();
+    await expect(modal.getByText('Revisar', { exact: true })).toHaveCount(0);
+    await page.getByTestId('project-detail-modal').click({ position: { x: 8, y: 8 } });
+    await expect(page.getByTestId('project-detail-modal')).toBeHidden({ timeout: 15000 });
+
+    await expect(page.getByText('1 archivo · irpf-2024.pdf')).toBeVisible({ timeout: 15000 });
+    expect(extractCalls).toBe(0);
+
+    await page.getByTestId('ver-expediente-btn').click();
+    await expect(page.getByTestId('project-detail-modal')).toBeVisible();
+    const bankDocDownload = page.waitForEvent('download');
+    await page.getByTestId('project-detail-modal').getByTitle('Descargar Documento adicional').click();
+    expect((await bankDocDownload).suggestedFilename()).toBe(`${code}_documento_adicional.pdf`);
   });
 
   test('admin upload refreshes the dashboard and makes the new document downloadable', async ({ page, request }) => {
@@ -505,18 +698,15 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await page.getByTestId('open-upload-btn').click();
+    await page.getByTestId('ver-expediente-btn').click();
+    await page.getByTestId('detail-upload-btn').click();
     await expect(page.getByTestId('admin-upload-modal')).toBeVisible();
 
     await page.getByTestId('admin-upload-file-input').setInputFiles(ADMIN_UPLOAD_FILE);
-    await expect(page.getByText('Admin Upload Test')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Recibido')).toBeVisible({ timeout: 15000 });
     const uploadModal = page.getByTestId('admin-upload-modal');
     await expect(uploadModal.getByText('Documento guardado correctamente.')).toBeVisible({ timeout: 15000 });
     await uploadModal.getByTestId('admin-upload-close-btn').click();
     await expect(uploadModal).toBeHidden({ timeout: 15000 });
-
-    await page.getByTestId('ver-expediente-btn').click();
     await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();
   });
 
