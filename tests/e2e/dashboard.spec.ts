@@ -454,6 +454,30 @@ test.describe('Dashboard QA', () => {
     await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
   });
 
+  test('expired dashboard session on create returns to the login gate', async ({ page, request }) => {
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+
+    await page.route('**/api/dashboard/project', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          error: 'SESSION_EXPIRED',
+          message: 'La sesión del dashboard ha caducado.',
+        }),
+      });
+    });
+
+    await page.getByTestId('dashboard-create-phone-input').fill(uniquePhone());
+    await page.getByTestId('dashboard-create-project-btn').click();
+
+    await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
+    await expect(page.getByTestId('dashboard-project-management-card')).toBeHidden();
+  });
+
   test('browser-built dashboard ZIP matches the detail inventory folders', async ({ page, request }) => {
     const code = await createDashboardProject(request, makeDashboardFormData());
     const token = await loginDashboard(request);

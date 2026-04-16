@@ -2401,6 +2401,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
           token={token}
           actionResult={actionResult}
           onActionResult={handleProjectActionResult}
+          onUnauthorized={handleLogout}
         />
 
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">

@@ -346,7 +346,14 @@ export async function createDashboardProject(
     assessor: string;
   },
   token: string,
-): Promise<{ success: boolean; project?: ProjectData; existing?: boolean; customerLink?: string; message?: string }> {
+): Promise<{
+  success: boolean;
+  project?: ProjectData;
+  existing?: boolean;
+  customerLink?: string;
+  message?: string;
+  error?: string;
+}> {
   const res = await fetch(`${API_BASE}/dashboard/project`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-dashboard-token': token },

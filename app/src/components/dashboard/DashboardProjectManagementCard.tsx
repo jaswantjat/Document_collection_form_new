@@ -11,6 +11,7 @@ interface Props {
   token: string;
   actionResult: DashboardProjectActionResult | null;
   onActionResult: (result: DashboardProjectActionResult) => Promise<void>;
+  onUnauthorized: () => Promise<void>;
 }
 
 const productOptions = [
@@ -44,6 +45,7 @@ export function DashboardProjectManagementCard({
   token,
   actionResult,
   onActionResult,
+  onUnauthorized,
 }: Props) {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -65,6 +67,11 @@ export function DashboardProjectManagementCard({
       }, token);
 
       if (!response.success || !response.project || !response.customerLink) {
+        if (response.error === 'UNAUTHORIZED' || response.error === 'SESSION_EXPIRED') {
+          await onUnauthorized();
+          return;
+        }
+
         setError(response.message || 'No se pudo crear o abrir el expediente.');
         return;
       }
