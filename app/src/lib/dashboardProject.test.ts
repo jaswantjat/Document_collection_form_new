@@ -575,8 +575,37 @@ describe('getDashboardAdditionalBankDocumentAssets', () => {
       },
     });
 
-    expect(summary.downloadGroups.some((group) => group.key === 'additional-bank-documents')).toBe(true);
+    expect(summary.additionalDocuments).toHaveLength(1);
+    expect(summary.downloadGroups).toContainEqual(
+      expect.objectContaining({
+        key: 'additional-bank-documents',
+        label: 'Documentos adicionales',
+      }),
+    );
     expect(summary.counts.documentsTotal).toBe(4);
+  });
+
+  it('falls back to backend summary additional-document metadata for dashboard list rows', () => {
+    const summary = getDashboardProjectSummary({
+      summary: {
+        additionalDocuments: [
+          {
+            key: 'additional-1',
+            label: 'Documento adicional',
+            dataUrl: '',
+            mimeType: 'application/pdf',
+            needsManualReview: false,
+          },
+        ],
+      },
+      formData: null,
+    });
+
+    expect(summary.additionalDocuments).toHaveLength(1);
+    expect(summary.additionalDocuments[0]).toMatchObject({
+      key: 'additional-1',
+      label: 'Documento adicional',
+    });
   });
 });
 

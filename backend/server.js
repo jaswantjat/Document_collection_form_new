@@ -560,6 +560,36 @@ function getEnergyCertificate(formData) {
   return formData?.energyCertificate || null;
 }
 
+function getAdditionalDocumentLabel(entry) {
+  if (entry?.type === 'other' && typeof entry?.customLabel === 'string' && entry.customLabel.trim()) {
+    return entry.customLabel.trim();
+  }
+  return 'Documento adicional';
+}
+
+function getDashboardAdditionalDocuments(formData) {
+  const documents = Array.isArray(formData?.additionalBankDocuments)
+    ? formData.additionalBankDocuments
+    : [];
+
+  return documents.flatMap((entry, entryIndex) => {
+    const files = Array.isArray(entry?.files) ? entry.files : [];
+    const baseLabel = getAdditionalDocumentLabel(entry);
+    const needsManualReview = Boolean(
+      entry?.issue?.code === 'manual-review'
+      || entry?.extraction?.needsManualReview,
+    );
+
+    return files.map((file, fileIndex) => ({
+      key: file?.assetKey || file?.id || `${entry?.id || `additional-${entryIndex}`}-${fileIndex}`,
+      label: files.length > 1 ? `${baseLabel} ${fileIndex + 1}` : baseLabel,
+      dataUrl: '',
+      mimeType: typeof file?.mimeType === 'string' ? file.mimeType : null,
+      needsManualReview,
+    }));
+  });
+}
+
 /**
  * Validates that an energyCertificate object has all required fields filled.
  * Kept in sync with app/src/lib/energyCertificateValidation.ts — update both
@@ -681,6 +711,7 @@ function buildDashboardSummary(project) {
   const signedDocuments = [];
   const representation = formData?.representation || {};
   const energyCertificate = getEnergyCertificate(formData);
+  const additionalDocuments = getDashboardAdditionalDocuments(formData);
   // Use explicit status field only; do NOT infer 'completed' from imageDataUrl presence
   // (legacy projects without the explicit status field correctly default to 'not-started')
   // Normalize to frontend-compatible values: 'not-started' / 'in-progress' → 'pending'.
@@ -751,6 +782,7 @@ function buildDashboardSummary(project) {
       completedAt: energyCertificate?.completedAt || null,
       skippedAt: energyCertificate?.skippedAt || null,
     },
+    additionalDocuments,
     finalSignatures: [],
     photoGroups: [],
     downloadGroups: [],

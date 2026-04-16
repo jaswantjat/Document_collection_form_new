@@ -5,6 +5,7 @@ import type { AdditionalBankDocumentEntry } from '@/types';
 
 interface Props {
   accept: string;
+  actionsDisabled: boolean;
   busy: boolean;
   entry: AdditionalBankDocumentEntry;
   formatFileSize: (sizeBytes: number) => string;
@@ -40,6 +41,7 @@ function IssueNotice({ message }: { message: string }) {
 
 export function AdditionalBankDocumentEntryCard({
   accept,
+  actionsDisabled,
   busy,
   entry,
   formatFileSize,
@@ -65,6 +67,7 @@ export function AdditionalBankDocumentEntryCard({
               accept={accept}
               multiple
               className="hidden"
+              disabled={actionsDisabled}
               onChange={(event) => {
                 const files = Array.from(event.target.files || []);
                 event.target.value = '';
@@ -72,11 +75,12 @@ export function AdditionalBankDocumentEntryCard({
               }}
             />
             <RefreshCcw className="h-3.5 w-3.5" />
-            {busy ? 'Validando...' : 'Sustituir'}
+            {busy ? 'Guardando...' : 'Sustituir'}
           </label>
           <button
             type="button"
             onClick={onRemove}
+            disabled={actionsDisabled}
             className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 hover:bg-red-100 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />

@@ -274,7 +274,8 @@ async function openDashboard(page: any, token: string) {
     sessionStorage.setItem('dashboard_token', dashboardToken);
   }, token);
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...')).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Dashboard QA', () => {
@@ -548,6 +549,7 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
     await page.getByTestId('ver-expediente-btn').click();
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
@@ -578,7 +580,8 @@ test.describe('Dashboard QA', () => {
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
 
-    await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
+    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
+    await expect(modal.getByText('Documentos adicionales')).toBeVisible();
     await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('IRPF 2024')).toBeVisible();
     await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
@@ -591,51 +594,24 @@ test.describe('Dashboard QA', () => {
     );
   });
 
-  test('dashboard admin upload can save an additional document with the generic label and manual-review state', async ({ page, request }) => {
+  test('dashboard admin upload saves additional documents without triggering AI extraction and surfaces them in the new column', async ({ page, request }) => {
     const code = await createDashboardProject(request);
     const token = await loginDashboard(request);
+    let extractCalls = 0;
 
     await page.route('**/api/extract', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: false,
-          needsManualReview: true,
-          reason: 'temporary-error',
-          message: 'No se pudo validar el documento de forma concluyente.',
-        }),
-      });
+      extractCalls += 1;
+      await route.continue();
     });
     await page.route('**/api/extract-batch', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: false,
-          needsManualReview: true,
-          reason: 'temporary-error',
-          message: 'No se pudo validar el documento de forma concluyente.',
-        }),
-      });
-    });
-    await page.route('**/api/pdf-to-images', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          images: [{
-            name: 'irpf-2024-page-1.jpg',
-            mimeType: 'image/jpeg',
-            data: VALID_JPEG_BASE64,
-          }],
-        }),
-      });
+      extractCalls += 1;
+      await route.continue();
     });
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
     await page.getByTestId('open-upload-btn').click();
     const uploadModal = page.getByTestId('admin-upload-modal');
     await expect(uploadModal).toBeVisible();
@@ -652,13 +628,14 @@ test.describe('Dashboard QA', () => {
     await expect(uploadModal).toBeHidden({ timeout: 15000 });
 
     await page.getByTestId('dashboard-refresh-btn').click();
+    await expect(page.getByText('1 archivo')).toBeVisible();
     await page.getByTestId('ver-expediente-btn').click();
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
+    await expect(modal.getByText('Documentos adicionales')).toBeVisible();
     await expect(modal.getByText('Documento adicional')).toBeVisible();
-    await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
-    await expect(modal.getByText('No se pudo validar el documento de forma concluyente.')).toHaveCount(0);
+    await expect(modal.getByText('Revisar', { exact: true })).toHaveCount(0);
+    expect(extractCalls).toBe(0);
 
     const bankDocDownload = page.waitForEvent('download');
     await modal.getByTitle('Descargar Documento adicional').click();

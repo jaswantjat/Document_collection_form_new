@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Building2, Plus } from 'lucide-react';
 
 import { createAdditionalBankDocumentId, normalizeAdditionalBankDocuments } from '@/lib/additionalBankDocuments';
@@ -11,6 +11,7 @@ interface Props {
   onAddDocuments: (entries: AdditionalBankDocumentEntry[]) => void;
   onRemoveDocument: (entryId: string) => void;
   onReplaceDocument: (entryId: string, replacement: AdditionalBankDocumentEntry) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 const ACCEPTED_UPLOAD_TYPES = 'image/jpeg,image/png,application/pdf';
@@ -38,7 +39,7 @@ async function buildAdditionalBankEntriesFromFiles(
       continue;
     }
 
-    messages.push(item.reason instanceof Error ? item.reason.message : 'No se pudo validar el archivo.');
+    messages.push(item.reason instanceof Error ? item.reason.message : 'No se pudo guardar el archivo.');
   }
 
   return { entries, messages };
@@ -49,11 +50,20 @@ export function AdditionalBankDocumentsCard({
   onAddDocuments,
   onRemoveDocument,
   onReplaceDocument,
+  onBusyChange,
 }: Props) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const normalizedDocuments = normalizeAdditionalBankDocuments(documents);
+
+  const isBusy = busyKey !== null;
+
+  useEffect(() => {
+    onBusyChange?.(isBusy);
+  }, [isBusy, onBusyChange]);
+
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   const handleAddFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -68,7 +78,7 @@ export function AdditionalBankDocumentsCard({
       if (entries.length > 0) onAddDocuments(entries);
       if (messages.length > 0) setError(messages[0]);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'No se pudieron validar los archivos.');
+      setError(nextError instanceof Error ? nextError.message : 'No se pudieron guardar los archivos.');
     } finally {
       setBusyKey(null);
     }
@@ -90,7 +100,7 @@ export function AdditionalBankDocumentsCard({
       }
       if (messages.length > 0) setError(messages[0]);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'No se pudieron validar los archivos.');
+      setError(nextError instanceof Error ? nextError.message : 'No se pudieron guardar los archivos.');
     } finally {
       setBusyKey(null);
     }
@@ -108,19 +118,24 @@ export function AdditionalBankDocumentsCard({
         <div className="space-y-1">
           <p className="font-semibold text-gray-900">Documento adicional</p>
           <p className="text-xs text-gray-500">
-            Opcional. Sube uno o varios archivos aquí; guardamos cada PDF o imagen tal cual y la validación puede tardar unos segundos.
+            Opcional. Sube uno o varios archivos aquí y guardaremos cada PDF o imagen tal cual.
           </p>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white px-4 py-4 text-sm font-medium text-gray-600 transition-colors hover:border-eltex-blue hover:text-eltex-blue">
+        <label className={`flex items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-4 text-sm font-medium transition-colors ${
+          isBusy
+            ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+            : 'cursor-pointer border-gray-300 bg-white text-gray-600 hover:border-eltex-blue hover:text-eltex-blue'
+        }`}>
           <input
             type="file"
             data-testid="additional-bank-documents-input"
             accept={ACCEPTED_UPLOAD_TYPES}
             multiple
             className="hidden"
+            disabled={isBusy}
             onChange={(event) => {
               const files = Array.from(event.target.files || []);
               event.target.value = '';
@@ -128,7 +143,7 @@ export function AdditionalBankDocumentsCard({
             }}
           />
           <Plus className="h-4 w-4" />
-          {busyKey === 'new' ? 'Validando...' : 'Añadir archivos'}
+          {busyKey === 'new' ? 'Guardando...' : 'Añadir archivos'}
         </label>
       </div>
 
@@ -148,7 +163,8 @@ export function AdditionalBankDocumentsCard({
             <AdditionalBankDocumentEntryCard
               key={entry.id}
               accept={ACCEPTED_UPLOAD_TYPES}
-              busy={busyKey === entry.id}
+              busy={isBusy && busyKey === entry.id}
+              actionsDisabled={isBusy}
               entry={entry}
               formatFileSize={formatFileSize}
               onRemove={() => onRemoveDocument(entry.id)}

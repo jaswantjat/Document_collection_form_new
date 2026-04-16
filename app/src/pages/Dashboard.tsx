@@ -800,6 +800,38 @@ function ElectricityTableCell({
   );
 }
 
+function AdditionalDocumentsTableCell({
+  items,
+}: {
+  items: DashboardAssetItem[];
+}) {
+  if (items.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+        <FileText className="w-3 h-3" />
+        Sin docs
+      </span>
+    );
+  }
+
+  const manualReview = items.filter((item) => item.needsManualReview).length;
+
+  return (
+    <div className="space-y-1.5 min-w-[130px]">
+      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+        <CheckCircle className="w-3 h-3" />
+        {items.length} archivo{items.length !== 1 ? 's' : ''}
+      </div>
+      {manualReview > 0 && (
+        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
+          <AlertTriangle className="w-3 h-3" />
+          {manualReview} revisar
+        </div>
+      )}
+    </div>
+  );
+}
+
 type AdminDocType =
   | 'dni-front'
   | 'dni-back'
@@ -873,25 +905,15 @@ function AdminUploadModal({
       return;
     }
 
-    const hasPdf = files.some((file) => file.type === 'application/pdf');
-    setStatus('extracting');
-    setStatusMsg(hasPdf
-      ? 'Convirtiendo PDF en imágenes...'
-      : files.length > 1
-        ? 'Preparando imágenes...'
-        : 'Preparando imagen...');
-
     try {
       if (activeTab === 'additional-bank-document') {
-        setStatusMsg(files.length > 1 ? 'Validando documentos adicionales...' : 'Validando documento adicional...');
+        setStatus('uploading');
+        setStatusMsg(files.length > 1 ? 'Guardando documentos adicionales...' : 'Guardando documento adicional...');
 
         const formDataPatch = await buildDashboardAdditionalBankDocumentPatch(
           project.formData?.additionalBankDocuments,
           files,
         );
-
-        setStatus('uploading');
-        setStatusMsg('Guardando en el expediente...');
 
         const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
         if (!saveRes.success) {
@@ -914,6 +936,14 @@ function AdminUploadModal({
           : 'Documento adicional guardado correctamente.');
         return;
       }
+
+      const hasPdf = files.some((file) => file.type === 'application/pdf');
+      setStatus('extracting');
+      setStatusMsg(hasPdf
+        ? 'Convirtiendo PDF en imágenes...'
+        : files.length > 1
+          ? 'Preparando imágenes...'
+          : 'Preparando imagen...');
 
       const { pages: preparedPages, originalPdfs } = await prepareAdminUploadPages(files);
       setStatusMsg('Extrayendo datos con IA...');
@@ -1448,6 +1478,9 @@ function ProjectTableRow({
           loadProjectDetail={loadProjectDetail}
           onOpenDetail={() => setShowDetail(true)}
         />
+      </td>
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <AdditionalDocumentsTableCell items={summary.additionalDocuments} />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
@@ -2250,7 +2283,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
   }, [load]);
 
   const projectsWithSummary = useMemo(
-    () => projects.map((project) => ({ project, summary: project.summary as DashboardProjectSummary })),
+    () => projects.map((project) => ({ project, summary: getDashboardProjectSummary(project) })),
     [projects]
   );
 
@@ -2403,7 +2436,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="table-fixed w-[1690px]">
+                  <table className="table-fixed w-[1850px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
@@ -2413,6 +2446,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">DNI / NIE</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">Docs adicionales</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Signed PDFs</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Status</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Actions</th>

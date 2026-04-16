@@ -44,6 +44,7 @@ describe('AdditionalBankDocumentEntryCard', () => {
     const html = renderToStaticMarkup(
       createElement(AdditionalBankDocumentEntryCard, {
         accept: 'image/jpeg,application/pdf',
+        actionsDisabled: false,
         busy: false,
         entry: makeEntry(),
         formatFileSize: (sizeBytes: number) => `${sizeBytes} B`,
