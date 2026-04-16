@@ -337,27 +337,8 @@ function saveDB() {
 const database = loadDB();
 
 // ── IDOR: Validate project access ───────────────────────────────────────────
-function normalizeProjectToken(value) {
-  if (Array.isArray(value)) {
-    return normalizeProjectToken(value[0]);
-  }
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed || null;
-}
-
-function getCustomerAccessToken(req) {
-  const queryToken = normalizeProjectToken(req.query?.token);
-  const headerToken = normalizeProjectToken(req.get('x-project-token'));
-  if (queryToken && headerToken && queryToken !== headerToken) {
-    return { token: null, mismatch: true };
-  }
-  return { token: queryToken || headerToken, mismatch: false };
-}
-
-function buildCustomerProjectUrl(code, accessToken) {
+function buildCustomerProjectUrl(code, _accessToken) {
   const params = new URLSearchParams({ code });
-  if (accessToken) params.set('token', accessToken);
   return `/?${params.toString()}`;
 }
 
@@ -365,23 +346,6 @@ function requireProject(req, res, next) {
   const code = req.params.code;
   const project = database.projects[code];
   if (!project) return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
-
-  const { token, mismatch } = getCustomerAccessToken(req);
-  if (mismatch || !token) {
-    return res.status(401).json({
-      success: false,
-      error: mismatch ? 'INVALID_TOKEN' : 'UNAUTHORIZED',
-      message: 'Este enlace no tiene autorización para acceder al proyecto.',
-    });
-  }
-
-  if (!project.accessToken || token !== project.accessToken) {
-    return res.status(401).json({
-      success: false,
-      error: 'INVALID_TOKEN',
-      message: 'Este enlace no tiene autorización para acceder al proyecto.',
-    });
-  }
 
   req.project = project;
   next();
@@ -863,29 +827,27 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Backend is running', timestamp: new Date().toISOString() });
 });
 
-// Get project by code (protected by project access token)
+// Get project by code
 app.get('/api/project/:code', requireProject, (req, res) => {
   res.json({ success: true, project: serializeProject(req.project) });
 });
 
-// Legacy staff-only lookup route retained for non-UI tooling.
-app.get('/api/lookup/phone/:phone', requireDashboardAuth, (req, res) => {
+// Look up project by phone number
+app.get('/api/lookup/phone/:phone', (req, res) => {
   const needle = normalizePhone(decodeURIComponent(req.params.phone));
   const project = Object.values(database.projects).find(p => normalizePhone(p.phone) === needle);
   if (!project) return res.status(404).json({ success: false, error: 'NOT_FOUND', message: 'No encontramos ningún proyecto con ese teléfono. Contacta con tu asesor.' });
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }) });
 });
 
-// Legacy staff-only create route retained for non-UI tooling.
-app.post('/api/project/create', requireDashboardAuth, (req, res) => {
-  const { customerName, assessorId } = req.body;
-  const input = normalizeDashboardCreateInput(req.body, normalizePhone);
-  const validationError = validateDashboardCreateInput(input);
-  if (validationError) {
-    return res.status(400).json({ success: false, message: validationError });
-  }
+// Create new project (SSR flow — phone number not yet in system)
+app.post('/api/project/create', (req, res) => {
+  const { phone, customerName, email, productType, assessor, assessorId } = req.body;
 
-  const normalizedPhone = input.normalizedPhone;
+  if (!phone) return res.status(400).json({ success: false, message: 'El número de teléfono es obligatorio.' });
+  if (!assessor || !assessor.trim()) return res.status(400).json({ success: false, message: 'El nombre del asesor es obligatorio.' });
+
+  const normalizedPhone = normalizePhone(phone);
 
   // Check for duplicate
   const existing = Object.values(database.projects).find(p => normalizePhone(p.phone) === normalizedPhone);
@@ -899,10 +861,10 @@ app.post('/api/project/create', requireDashboardAuth, (req, res) => {
     accessToken: uuidv4(),
     customerName: customerName || 'Cliente nuevo',
     phone: normalizedPhone,
-    email: input.email,
-    productType: input.productType,
-    assessor: input.assessor,
-    assessorId: assessorId ? String(assessorId).trim() : input.assessor,
+    email: email || '',
+    productType: productType || 'solar',
+    assessor: assessor.trim(),
+    assessorId: assessorId ? String(assessorId).trim() : assessor.trim(),
     formData: null,
     submissions: [],
     lastActivity: null,
@@ -920,9 +882,6 @@ app.post('/api/dashboard/project/:code/secure-link', requireDashboardAuth, (req,
   if (!project) {
     return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
   }
-
-  project.accessToken = uuidv4();
-  saveDB();
 
   res.json({
     success: true,
@@ -1104,7 +1063,7 @@ app.post('/api/project/:code/save', requireProject, (req, res) => {
   res.json({ success: true, message: 'Progreso guardado.', cataloniaPDFs: pdfStatus });
 });
 
-// Final submit (requires access token)
+// Final submit
 app.post('/api/project/:code/submit', requireProject, async (req, res) => {
   const project = req.project;
   const { formData, source, attemptId } = req.body;
@@ -1377,9 +1336,6 @@ app.post('/api/dashboard/project/:code/resend', requireDashboardAuth, (req, res)
   if (!project) {
     return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
   }
-
-  project.accessToken = uuidv4();
-  saveDB();
 
   return res.json({
     success: true,

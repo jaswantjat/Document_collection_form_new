@@ -32,7 +32,7 @@ function resultTitle(result: DashboardProjectActionResult): string {
 
 function resultMessage(result: DashboardProjectActionResult): string {
   if (result.action === 'resent') {
-    return 'Se ha rotado el token y este es el enlace vigente para el cliente.';
+    return 'Este es el enlace vigente para el cliente.';
   }
 
   if (result.existing) {
@@ -139,7 +139,7 @@ export function DashboardProjectManagementCard({
         <div className="space-y-1">
           <h2 className="text-lg font-bold text-gray-900">Gestión de expedientes</h2>
           <p className="text-sm text-gray-500">
-            Crea expedientes desde el dashboard, reabre duplicados por teléfono y reenvía el enlace seguro actual.
+            Crea expedientes desde el dashboard, reabre duplicados por teléfono y reenvía el enlace actual.
           </p>
         </div>
 

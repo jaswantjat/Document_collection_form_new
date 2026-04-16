@@ -1,11 +1,12 @@
 import { lazy, Suspense, useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Toaster } from 'sonner';
-import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeFormData, useFormState } from '@/hooks/useFormState';
 import { useBeforeUnloadSave } from '@/hooks/useBeforeUnloadSave';
 import { useLocalStorageBackup, readLocalBackup, clearLocalBackup } from '@/hooks/useLocalStorageBackup';
 import { readIndexedDBBackup } from '@/hooks/useIndexedDBBackup';
 import { fetchProject } from '@/services/api';
+import { PhoneSection } from '@/sections/PhoneSection';
 import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
@@ -209,6 +210,10 @@ function readSavedSection(code: string): Section | null {
   } catch { return null; }
 }
 
+function buildProjectUrl(code: string) {
+  return `/?code=${code}`;
+}
+
 function normalizeLoadedProject(project: ProjectData): ProjectData {
   return {
     ...project,
@@ -219,9 +224,9 @@ function normalizeLoadedProject(project: ProjectData): ProjectData {
 // ── Main Form App ─────────────────────────────────────────────────────────────
 function FormApp() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const urlCode = searchParams.get('code') || searchParams.get('project');
-  const urlToken = searchParams.get('token');
   const source = searchParams.get('source') === 'assessor' ? 'assessor' : 'customer';
 
   const [project, setProject] = useState<ProjectData | null>(null);
@@ -268,7 +273,7 @@ function FormApp() {
       }
     }, 12000);
 
-    fetchProject(urlCode, { signal: controller.signal, token: urlToken || undefined })
+    fetchProject(urlCode, { signal: controller.signal })
       .then(async (res) => {
         if (controller.signal.aborted) return;
 
@@ -309,22 +314,22 @@ function FormApp() {
           return;
         }
 
-        // Project was deleted or never existed — clear stale local data and keep
-        // the customer on the contact-advisor handling instead of dropping back
-        // into the public entry flow.
+        // Project was deleted or never existed — clear stale local data and go back
+        // to the phone entry screen rather than showing a dead-end error page.
+        // The assessor can then re-enter the phone number and create a new project.
         if (urlCode) clearLocalBackup(urlCode);
         setProject(null);
-        setLoadError('PROJECT_NOT_FOUND');
+        navigate('/', { replace: true });
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === 'AbortError') return;
 
-        // Gracefully handle "Project Not Found" (404) without routing customers
-        // back into the public phone entry flow.
+        // Gracefully handle "Project Not Found" (404) by redirecting to phone entry.
+        // This fixes the "stale code" issue where a deleted project shows an error screen.
         if (err?.message === 'PROJECT_NOT_FOUND' || err?.status === 404) {
           if (urlCode) clearLocalBackup(urlCode);
           setProject(null);
-          setLoadError('PROJECT_NOT_FOUND');
+          navigate('/', { replace: true });
           return;
         }
 
@@ -339,7 +344,7 @@ function FormApp() {
       });
 
     return () => { controller.abort(); clearTimeout(timeoutId); };
-  }, [urlCode, urlToken]);
+  }, [navigate, urlCode]);
 
 
   // When navigating from the review checklist into property-docs, remember which
@@ -391,14 +396,13 @@ function FormApp() {
     {
       preserveRepresentationSignaturesOnDocumentChange: projectFollowUpDocumentFlow,
       source,
-      projectToken: urlToken || undefined,
     }
   );
   const followUpDocumentFlow = hasExistingRepresentationFlow(formData);
 
   // Persistence: instant localStorage backup (300ms debounce) + beforeunload server flush
   useLocalStorageBackup(activeProject?.code ?? null, formData);
-  useBeforeUnloadSave(activeProject?.code ?? null, formData, source, urlToken || undefined);
+  useBeforeUnloadSave(activeProject?.code ?? null, formData, source);
   const nextLikelySection = getLikelyNextSection(activeSection, formData, followUpDocumentFlow);
   const hasSkippedInitialPrefetch = useRef(false);
 
@@ -465,9 +469,48 @@ function FormApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, followUpDocumentFlow]);
 
+  const handlePhoneConfirmed = async (_phone: string, foundProject: ProjectData) => {
+    let normalizedProject = normalizeLoadedProject(foundProject);
+
+    // Merge any local backup so that photos the user uploaded earlier are
+    // restored immediately — the URL-based load path does this but the phone
+    // path previously skipped it, causing uploads to disappear on return.
+    const code = foundProject.code;
+    const serverTs = normalizedProject.lastActivity
+      ? new Date(normalizedProject.lastActivity).getTime()
+      : 0;
+
+    const localBackup = readLocalBackup(code);
+    const idbBackup = localBackup ? null : await readIndexedDBBackup(code);
+    const bestBackup = localBackup ?? idbBackup;
+
+    if (bestBackup) {
+      const backupFd = normalizeFormData(bestBackup.formData as Parameters<typeof normalizeFormData>[0]);
+      const projectCreatedAt = normalizedProject.createdAt
+        ? new Date(normalizedProject.createdAt).getTime()
+        : 0;
+      const backupIsStale = projectCreatedAt > 0 && bestBackup.savedAt < projectCreatedAt - 1000;
+      if (backupIsStale) {
+        clearLocalBackup(code);
+      } else if (bestBackup.savedAt > serverTs + 500) {
+        normalizedProject = { ...normalizedProject, formData: backupFd };
+      } else {
+        normalizedProject = mergeProjectWithDeviceBackup(normalizedProject, backupFd);
+      }
+    }
+
+    setProject(normalizedProject);
+    navigate(buildProjectUrl(foundProject.code), { replace: true });
+    goTo(getInitialSection(normalizedProject, foundProject.code));
+  };
+
   const renderSection = () => {
-    if (!urlCode) {
-      return <Navigate to="/dashboard" replace />;
+    if (activeSection === 'phone') {
+      return (
+        <PhoneSection
+          onPhoneConfirmed={handlePhoneConfirmed}
+        />
+      );
     }
 
     if (activeLoading) return <LoadingSection />;
@@ -580,7 +623,6 @@ function FormApp() {
             project={activeProject}
             formData={formData}
             source={source}
-            projectToken={urlToken || undefined}
             canSubmit={canSubmit()}
             hasBlockingDocumentProcessing={hasBlockingDocumentProcessing}
             followUpMode={followUpDocumentFlow}

@@ -95,7 +95,7 @@ async function seedLocalBackup(page: Page, projectCode: string, formData: unknow
 }
 
 test.describe('Customer Journey Regressions', () => {
-  test('deleted stale link shows contact-advisor handling instead of phone recovery', async ({ page, request }) => {
+  test('deleted stale link recovers to the phone start flow instead of dead-ending', async ({ page, request }) => {
     const phone = `+346${String(Date.now() % 100_000_000).padStart(8, '0')}`;
     const dashboardToken = await loginDashboard(request);
 
@@ -122,9 +122,8 @@ test.describe('Customer Journey Regressions', () => {
     expect(deleteRes.ok()).toBeTruthy();
 
     await page.goto(`/?code=${staleCode}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /enlace no válido/i })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/contacta con tu asesor/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('input[type="tel"]')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('input[type="tel"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('code-bearing assessor link restores local backup and routes to the resumed step', async ({ page, request }) => {
@@ -161,7 +160,6 @@ test.describe('Customer Journey Regressions', () => {
     await page.getByRole('button', { name: /certificado energético/i }).click();
     await expect(page.getByRole('heading', { name: 'Certificado energético' })).toBeVisible({ timeout: 15000 });
     await expect(page).toHaveURL(/code=ELT20250005/);
-    await expect(page).toHaveURL(/token=/);
   });
 
   test('representation flow completes with the dev signature helper and advances cleanly', async ({ page, request }) => {

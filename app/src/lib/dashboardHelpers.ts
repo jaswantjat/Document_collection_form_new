@@ -69,8 +69,8 @@ export function downloadBlob(blob: Blob, filename: string) {
 }
 
 export function buildProjectUrl(code: string, source?: 'customer' | 'assessor', token?: string) {
+  void token;
   const params = new URLSearchParams({ code });
-  if (token) params.set('token', token);
   if (source === 'assessor') params.set('source', 'assessor');
   return `/?${params.toString()}`;
 }

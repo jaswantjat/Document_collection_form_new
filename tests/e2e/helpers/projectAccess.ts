@@ -40,7 +40,7 @@ export async function getProjectAccess(
   return {
     dashboardToken,
     accessToken: accessToken as string,
-    customerUrl: `/?code=${projectCode}&token=${encodeURIComponent(accessToken as string)}`,
-    assessorUrl: `/?code=${projectCode}&token=${encodeURIComponent(accessToken as string)}&source=assessor`,
+    customerUrl: `/?code=${projectCode}`,
+    assessorUrl: `/?code=${projectCode}&source=assessor`,
   };
 }

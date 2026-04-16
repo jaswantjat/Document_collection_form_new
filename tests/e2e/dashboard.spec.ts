@@ -278,7 +278,7 @@ async function openDashboard(page: any, token: string) {
 }
 
 test.describe('Dashboard QA', () => {
-  test('dashboard staff can create, reopen duplicate phones, and resend the rotated secure customer link without using the public root', async ({ page, request }) => {
+  test('dashboard staff can create, reopen duplicate phones, and resend the current customer link without using the public root', async ({ page, request }) => {
     const token = await loginDashboard(request);
     const phone = uniquePhone();
 
@@ -300,7 +300,7 @@ test.describe('Dashboard QA', () => {
     expect(createdCode).toBeTruthy();
 
     const firstLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
-    expect(firstLink).toMatch(new RegExp(`^/\\?code=${createdCode}&token=`));
+    expect(firstLink).toBe(`/?code=${createdCode}`);
 
     await page.getByTestId('dashboard-create-phone-input').fill(phone);
     await page.getByTestId('dashboard-create-project-btn').click();
@@ -311,16 +311,15 @@ test.describe('Dashboard QA', () => {
     await page.getByTestId('dashboard-open-project-btn').click();
     const popup = await popupPromise;
     await popup.waitForLoadState('domcontentloaded');
-    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&token=.*&source=assessor`));
+    await expect(popup).toHaveURL(new RegExp(`/\\?code=${createdCode}&source=assessor$`));
     await popup.close();
 
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
     await page.getByTestId('dashboard-row-resend-link-btn').click();
     await expect(resultPanel).toContainText('Enlace reenviado');
 
-    const rotatedLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
-    expect(rotatedLink).toMatch(new RegExp(`^/\\?code=${createdCode}&token=`));
-    expect(rotatedLink).not.toBe(firstLink);
+    const resentLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
+    expect(resentLink).toBe(`/?code=${createdCode}`);
   });
 
   test('dashboard staff create shows a validation error when the phone is missing', async ({ page, request }) => {

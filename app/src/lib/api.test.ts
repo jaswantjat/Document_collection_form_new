@@ -215,11 +215,11 @@ describe('fetchDashboardProject', () => {
 // createDashboardProject
 // ─────────────────────────────────────────────────────────────────────────────
 describe('createDashboardProject', () => {
-  it('posts to the dashboard project endpoint and returns the secure link payload', async () => {
+  it('posts to the dashboard project endpoint and returns the customer link payload', async () => {
     mockFetch({
       success: true,
       existing: false,
-      customerLink: '/?code=ELT001&token=token-123',
+      customerLink: '/?code=ELT001',
       project: { code: 'ELT001' },
     });
 
@@ -230,7 +230,7 @@ describe('createDashboardProject', () => {
     }, 'dash-token');
 
     expect(result.success).toBe(true);
-    expect(result.customerLink).toBe('/?code=ELT001&token=token-123');
+    expect(result.customerLink).toBe('/?code=ELT001');
 
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     expect(fetchMock.mock.calls[0][0]).toContain('/api/dashboard/project');
@@ -254,17 +254,17 @@ describe('createDashboardProject', () => {
 // resendDashboardProjectLink
 // ─────────────────────────────────────────────────────────────────────────────
 describe('resendDashboardProjectLink', () => {
-  it('posts to the resend endpoint and returns the rotated customer link', async () => {
+  it('posts to the resend endpoint and returns the current customer link', async () => {
     mockFetch({
       success: true,
-      customerLink: '/?code=ELT001&token=rotated-token',
+      customerLink: '/?code=ELT001',
       project: { code: 'ELT001' },
     });
 
     const result = await resendDashboardProjectLink('ELT001', 'dash-token');
 
     expect(result.success).toBe(true);
-    expect(result.customerLink).toBe('/?code=ELT001&token=rotated-token');
+    expect(result.customerLink).toBe('/?code=ELT001');
 
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     expect(fetchMock.mock.calls[0][0]).toContain('/api/dashboard/project/ELT001/resend');

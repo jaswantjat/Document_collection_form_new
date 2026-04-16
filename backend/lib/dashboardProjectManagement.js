@@ -5,7 +5,6 @@ const VALID_PRODUCT_TYPES = new Set(['solar', 'aerothermal', 'solar-aerothermal'
 function buildCustomerLink(project) {
   const params = new URLSearchParams({
     code: project.code,
-    token: project.accessToken,
   });
   return `/?${params.toString()}`;
 }
