@@ -534,7 +534,7 @@ export function ReviewSection({
                     type="button"
                     onClick={submit}
                     disabled={hasBlockingDocumentProcessing}
-                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-40"
+                    className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-40"
                   >
                     Sí, enviar incompleto
                   </button>
@@ -545,7 +545,7 @@ export function ReviewSection({
                 type="button"
                 onClick={() => setConfirmingIncomplete(true)}
                 disabled={hasBlockingDocumentProcessing}
-                className="w-full border-2 border-gray-200 text-gray-500 font-medium py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors hover:border-gray-300 disabled:opacity-40"
+                className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-3 rounded-2xl flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-40 shadow-sm"
               >
                 Enviar igualmente (incompleto)
               </button>
