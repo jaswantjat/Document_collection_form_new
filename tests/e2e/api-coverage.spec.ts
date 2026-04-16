@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { APPROVED_ASSESSOR } from './helpers/projectAccess';
 
 const BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const VALID_CODE = 'ELT20250001';
@@ -173,8 +174,8 @@ test.describe('API Coverage', () => {
     const first = await request.post(`${BASE}/api/project/create`, {
       data: {
         phone,
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
@@ -186,8 +187,8 @@ test.describe('API Coverage', () => {
     const second = await request.post(`${BASE}/api/project/create`, {
       data: {
         phone,
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
@@ -202,8 +203,8 @@ test.describe('API Coverage', () => {
     const createRes = await request.post(`${BASE}/api/project/create`, {
       data: {
         phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
@@ -246,8 +247,8 @@ test.describe('API Coverage', () => {
     const createRes = await request.post(`${BASE}/api/project/create`, {
       data: {
         phone: uniquePhone(),
-        assessor: 'QA Bot',
-        assessorId: 'QA-BOT',
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
       },
       timeout: 15000,
     });
@@ -281,6 +282,24 @@ test.describe('API Coverage', () => {
       '1_documentos/Factura_luz_original_pdf.pdf',
       '2_certificados/Certificado_energetico.pdf',
     ]));
+  });
+
+  test('API-05b: public project creation rejects an assessor outside the approved list', async ({ request }) => {
+    const res = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: 'QA Bot',
+        assessorId: 'QA-BOT',
+      },
+      failOnStatusCode: false,
+      timeout: 15000,
+    });
+
+    expect(res.status()).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      message: 'Selecciona un asesor de la lista aprobada.',
+    });
   });
 
   test('API-06: reset endpoints recreate missing seeded follow-up fixtures', async ({ request }) => {

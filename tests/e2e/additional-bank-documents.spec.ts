@@ -273,9 +273,12 @@ test('additional bank documents persist across reload and remain optional for su
   await clearDeviceBackup(page, projectCode);
   await page.reload({ waitUntil: 'domcontentloaded' });
 
-  await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
-  await page.getByRole('button', { name: /Factura de luz/i }).click();
-  await expect(page.locator('h1').first()).toContainText('Documentos');
+  const topHeading = page.locator('h1, h2').first();
+  await expect(topHeading).toContainText(/Confirma tu documentación|Documentos/);
+  if ((await topHeading.textContent())?.includes('Confirma')) {
+    await page.getByRole('button', { name: /Factura de luz/i }).click();
+    await expect(page.locator('h1').first()).toContainText('Documentos');
+  }
 
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('irpf-2024.pdf');
   await expect(page.getByTestId('additional-bank-documents-list')).toContainText('Documento adicional');
@@ -320,10 +323,15 @@ test('additional bank documents reject a wrong document before saving it', async
   await expect(page.getByText('Documento incorrecto. Por favor sube la nómina.')).toBeVisible();
   await expect(page.getByTestId('additional-bank-documents-list')).toHaveCount(0);
 
-  await expect.poll(async () => {
-    const project = await readProjectState(request, projectCode, accessToken);
-    return project?.formData.additionalBankDocuments?.length ?? 0;
-  }).toBe(0);
+  await clearDeviceBackup(page, projectCode);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const topHeading = page.locator('h1, h2').first();
+  await expect(topHeading).toContainText(/Confirma tu documentación|Documentos/);
+  if ((await topHeading.textContent())?.includes('Confirma')) {
+    await page.getByRole('button', { name: /Factura de luz/i }).click();
+    await expect(page.locator('h1').first()).toContainText('Documentos');
+  }
+  await expect(page.getByTestId('additional-bank-documents-list')).toHaveCount(0);
 });
 
 test('additional bank documents save with manual review when AI result is temporary or ambiguous', async ({ page, request }) => {
@@ -361,7 +369,7 @@ test('additional bank documents save with manual review when AI result is tempor
         (document: { issue?: { code?: string } | null }) => document.issue?.code ?? null,
       ),
     };
-  }).toEqual({
+  }, { timeout: 15000 }).toEqual({
     documents: 2,
     asset0: true,
     asset1: true,

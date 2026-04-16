@@ -43,6 +43,7 @@ const {
   serializeDashboardProjectAction,
   validateDashboardCreateInput,
 } = require('./lib/dashboardProjectManagement');
+const { isApprovedAssessor } = require('./lib/approvedAssessors');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
 const app = express();
@@ -846,6 +847,9 @@ app.post('/api/project/create', (req, res) => {
 
   if (!phone) return res.status(400).json({ success: false, message: 'El número de teléfono es obligatorio.' });
   if (!assessor || !assessor.trim()) return res.status(400).json({ success: false, message: 'El nombre del asesor es obligatorio.' });
+  if (!isApprovedAssessor(assessor.trim())) {
+    return res.status(400).json({ success: false, message: 'Selecciona un asesor de la lista aprobada.' });
+  }
 
   const normalizedPhone = normalizePhone(phone);
 

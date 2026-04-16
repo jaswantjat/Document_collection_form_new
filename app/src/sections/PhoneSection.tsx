@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowRight, Loader2, UserPlus, Search, ChevronDown, X } from 'lucide-react';
 import type { ProjectData } from '@/types';
 import { lookupByPhone, createProject } from '@/services/api';
+import { approvedAssessors } from '@/lib/approvedAssessors';
 import { COUNTRIES_SORTED, TOP_COUNTRIES, findCountry, type Country } from '@/lib/countries';
 import { buildPhone, getPhoneError, formatLocalNumber } from '@/lib/phone';
 
@@ -358,15 +359,26 @@ export function PhoneSection({ onPhoneConfirmed }: Props) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="text-sm font-semibold text-gray-700">Tu nombre (asesor) <span className="text-red-500">*</span></p>
-                  <input
-                    type="text"
-                    value={newAssessor}
-                    onChange={e => { setNewAssessor(e.target.value); setAssessorError(''); }}
-                    placeholder="Nombre completo"
-                    className={`form-input ${assessorError ? 'error' : ''}`}
-                    autoFocus
-                  />
+                  <p className="text-sm font-semibold text-gray-700">Asesor <span className="text-red-500">*</span></p>
+                  <div className="relative">
+                    <select
+                      data-testid="phone-create-assessor-select"
+                      value={newAssessor}
+                      onChange={(event) => {
+                        setNewAssessor(event.target.value);
+                        setAssessorError('');
+                      }}
+                      className={`form-input appearance-none pr-10 ${assessorError ? 'error' : ''}`}
+                    >
+                      <option value="">Selecciona un asesor</option>
+                      {approvedAssessors.map((assessor) => (
+                        <option key={assessor} value={assessor}>
+                          {assessor}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  </div>
                   {assessorError && <p className="text-sm text-red-500">{assessorError}</p>}
                 </div>
 

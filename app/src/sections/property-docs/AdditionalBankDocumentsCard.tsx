@@ -108,7 +108,7 @@ export function AdditionalBankDocumentsCard({
         <div className="space-y-1">
           <p className="font-semibold text-gray-900">Documento adicional</p>
           <p className="text-xs text-gray-500">
-            Opcional. Sube cualquier documento adicional; la validación puede tardar unos segundos.
+            Opcional. Sube uno o varios archivos aquí; guardamos cada PDF o imagen tal cual y la validación puede tardar unos segundos.
           </p>
         </div>
       </div>

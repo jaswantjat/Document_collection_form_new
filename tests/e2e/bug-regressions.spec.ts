@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+const APPROVED_ASSESSORS = JSON.parse(
+  readFileSync(path.resolve(process.cwd(), 'app/src/shared/approvedAssessors.json'), 'utf8')
+) as string[];
+
+function uniquePhone() {
+  const suffix = Date.now().toString().slice(-8);
+  return `699 ${suffix.slice(0, 3)} ${suffix.slice(3, 6)}`;
+}
 
 test.describe('Bug Regressions', () => {
   test('REG-01: bare home page stays on the public phone start flow', async ({ page }) => {
@@ -9,6 +19,16 @@ test.describe('Bug Regressions', () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator('input[type="tel"]').first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('button', { name: /continuar|buscar|seguir/i }).first()).toBeVisible();
+  });
+
+  test('REG-01b: public new-project flow shows the full approved assessor dropdown', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.locator('input[type="tel"]').first().fill(uniquePhone());
+    await page.getByRole('button', { name: /continuar|buscar|seguir/i }).first().click();
+    await page.waitForLoadState('networkidle');
+
+    const options = await page.getByTestId('phone-create-assessor-select').locator('option').allTextContents();
+    expect(options).toEqual(['Selecciona un asesor', ...APPROVED_ASSESSORS]);
   });
 
   test('REG-02: stale or unknown codes recover to the public start flow instead of dead-ending', async ({ page }) => {
