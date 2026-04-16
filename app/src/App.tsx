@@ -380,9 +380,6 @@ function FormApp() {
     setIBIIssue,
     addElectricityPages, removeElectricityPage,
     setElectricityIssue,
-    addAdditionalBankDocuments,
-    replaceAdditionalBankDocument,
-    removeAdditionalBankDocument,
     setLocation,
     setRepresentation,
     setEnergyCertificate,
@@ -523,7 +520,6 @@ function FormApp() {
             dni={formData.dni}
             ibi={formData.ibi}
             electricityBill={formData.electricityBill}
-            additionalBankDocuments={formData.additionalBankDocuments ?? []}
             followUpMode={followUpDocumentFlow}
             errors={errors}
             documentProcessing={documentProcessing}
@@ -539,9 +535,6 @@ function FormApp() {
             onAddElectricityPages={addElectricityPages}
             onRemoveElectricityPage={removeElectricityPage}
             onElectricityIssueChange={setElectricityIssue}
-            onAddAdditionalBankDocuments={addAdditionalBankDocuments}
-            onReplaceAdditionalBankDocument={replaceAdditionalBankDocument}
-            onRemoveAdditionalBankDocument={removeAdditionalBankDocument}
             onDocumentProcessingChange={setDocumentProcessingState}
             scrollToDoc={propertyDocsTarget}
             onBack={followUpDocumentFlow ? () => goTo('review') : undefined}

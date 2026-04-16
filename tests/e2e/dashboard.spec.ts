@@ -278,7 +278,7 @@ async function openDashboard(page: any, token: string) {
 }
 
 test.describe('Dashboard QA', () => {
-  test('dashboard staff can create, reopen duplicate phones, and resend the current customer link without using the public root', async ({ page, request }) => {
+  test('dashboard staff can create, reopen duplicate phones, and open the assessor form without customer-link controls', async ({ page, request }) => {
     const token = await loginDashboard(request);
     const phone = uniquePhone();
 
@@ -298,11 +298,15 @@ test.describe('Dashboard QA', () => {
     const codeLine = await resultPanel.locator('text=/ELT\\d+/').first().textContent();
     const createdCode = codeLine?.match(/ELT\d+/)?.[0];
     expect(createdCode).toBeTruthy();
+    await expect(page.getByTestId('dashboard-open-project-btn')).toBeVisible();
+    await expect(page.getByTestId('dashboard-resend-latest-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-open-customer-link-btn')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-customer-link-input')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-copy-customer-link-btn')).toHaveCount(0);
 
-    const firstLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
-    expect(firstLink).toBe(`/?code=${createdCode}`);
-
+    await expect(page.getByTestId('dashboard-create-phone-input')).toHaveValue('', { timeout: 15000 });
     await page.getByTestId('dashboard-create-phone-input').fill(phone);
+    await expect(page.getByTestId('dashboard-create-project-btn')).toBeEnabled({ timeout: 15000 });
     await page.getByTestId('dashboard-create-project-btn').click();
     await expect(resultPanel).toContainText('Expediente existente encontrado');
     await expect(resultPanel).toContainText(createdCode!);
@@ -315,11 +319,7 @@ test.describe('Dashboard QA', () => {
     await popup.close();
 
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(createdCode!);
-    await page.getByTestId('dashboard-row-resend-link-btn').click();
-    await expect(resultPanel).toContainText('Enlace reenviado');
-
-    const resentLink = await page.getByTestId('dashboard-customer-link-input').inputValue();
-    expect(resentLink).toBe(`/?code=${createdCode}`);
+    await expect(page.getByTestId('dashboard-row-resend-link-btn')).toHaveCount(0);
   });
 
   test('dashboard staff create shows a validation error when the phone is missing', async ({ page, request }) => {
@@ -354,33 +354,6 @@ test.describe('Dashboard QA', () => {
     await expect(page.getByTestId('dashboard-project-management-error')).toContainText(
       'Selecciona un asesor de la lista aprobada.',
     );
-  });
-
-  test('dashboard resend failures stay scoped to the row action and show the backend error', async ({ page, request }) => {
-    const code = await createDashboardProject(request, makeDashboardFormData());
-    const token = await loginDashboard(request);
-
-    await openDashboard(page, token);
-    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toContain('Proyecto no encontrado.');
-      await dialog.accept();
-    });
-
-    await page.route(`**/api/dashboard/project/${code}/resend`, async (route) => {
-      await route.fulfill({
-        status: 404,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: false,
-          error: 'PROJECT_NOT_FOUND',
-          message: 'Proyecto no encontrado.',
-        }),
-      });
-    });
-
-    await page.getByTestId('dashboard-row-resend-link-btn').click();
   });
 
   test('invalid dashboard session returns to the login gate', async ({ page }) => {
@@ -618,6 +591,80 @@ test.describe('Dashboard QA', () => {
     );
   });
 
+  test('dashboard admin upload can save an additional document with the generic label and manual-review state', async ({ page, request }) => {
+    const code = await createDashboardProject(request);
+    const token = await loginDashboard(request);
+
+    await page.route('**/api/extract', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          needsManualReview: true,
+          reason: 'temporary-error',
+          message: 'No se pudo validar el documento de forma concluyente.',
+        }),
+      });
+    });
+    await page.route('**/api/extract-batch', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          needsManualReview: true,
+          reason: 'temporary-error',
+          message: 'No se pudo validar el documento de forma concluyente.',
+        }),
+      });
+    });
+    await page.route('**/api/pdf-to-images', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          images: [{
+            name: 'irpf-2024-page-1.jpg',
+            mimeType: 'image/jpeg',
+            data: VALID_JPEG_BASE64,
+          }],
+        }),
+      });
+    });
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    await page.getByTestId('open-upload-btn').click();
+    const uploadModal = page.getByTestId('admin-upload-modal');
+    await expect(uploadModal).toBeVisible();
+
+    await uploadModal.getByRole('button', { name: 'Documento adicional' }).click();
+    await uploadModal.getByTestId('admin-upload-file-input').setInputFiles({
+      name: 'irpf-2024.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'),
+    });
+
+    await expect(uploadModal.getByText('Documento adicional guardado correctamente.')).toBeVisible({ timeout: 15000 });
+    await uploadModal.getByTestId('admin-upload-close-btn').click();
+    await expect(uploadModal).toBeHidden({ timeout: 15000 });
+
+    await page.getByTestId('dashboard-refresh-btn').click();
+    await page.getByTestId('ver-expediente-btn').click();
+    const modal = page.getByTestId('project-detail-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Documentos bancarios adicionales')).toBeVisible();
+    await expect(modal.getByText('Documento adicional')).toBeVisible();
+    await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
+    await expect(modal.getByText('No se pudo validar el documento de forma concluyente.')).toHaveCount(0);
+
+    const bankDocDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar Documento adicional').click();
+    expect((await bankDocDownload).suggestedFilename()).toBe(`${code}_documento_adicional.pdf`);
+  });
+
   test('admin upload refreshes the dashboard and makes the new document downloadable', async ({ page, request }) => {
     const code = await createDashboardProject(request);
     const token = await loginDashboard(request);
@@ -656,6 +703,7 @@ test.describe('Dashboard QA', () => {
     await uploadModal.getByTestId('admin-upload-close-btn').click();
     await expect(uploadModal).toBeHidden({ timeout: 15000 });
 
+    await page.getByTestId('dashboard-refresh-btn').click();
     await page.getByTestId('ver-expediente-btn').click();
     await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();
   });

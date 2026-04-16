@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Copy, ExternalLink, Link2, Send, UserPlus } from 'lucide-react';
+import { ExternalLink, UserPlus } from 'lucide-react';
 import { approvedAssessors } from '@/lib/approvedAssessors';
 import { buildProjectUrl } from '@/lib/dashboardHelpers';
 import {
   createDashboardProject,
-  resendDashboardProjectLink,
   type DashboardProjectActionResult,
 } from '@/services/api';
 
@@ -25,29 +24,16 @@ function normalizePhoneInput(value: string): string {
 }
 
 function resultTitle(result: DashboardProjectActionResult): string {
-  if (result.action === 'resent') return 'Enlace reenviado';
   if (result.existing) return 'Expediente existente encontrado';
   return 'Expediente creado';
 }
 
 function resultMessage(result: DashboardProjectActionResult): string {
-  if (result.action === 'resent') {
-    return 'Este es el enlace vigente para el cliente.';
-  }
-
   if (result.existing) {
     return 'Ya existía un expediente activo para ese teléfono. Ábrelo desde aquí sin crear otro.';
   }
 
-  return 'El expediente ya está disponible en el dashboard y el enlace del cliente está listo.';
-}
-
-async function copyCustomerLink(customerLink: string): Promise<void> {
-  await navigator.clipboard.writeText(customerLink);
-}
-
-function openCustomerLink(customerLink: string): void {
-  window.open(customerLink, '_blank', 'noopener,noreferrer');
+  return 'El expediente ya está disponible en el dashboard.';
 }
 
 function openAssessorProject(projectCode: string, accessToken?: string): void {
@@ -65,8 +51,6 @@ export function DashboardProjectManagementCard({
   const [assessor, setAssessor] = useState(approvedAssessors[0]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [copyState, setCopyState] = useState<'idle' | 'done'>('idle');
-  const [resendingLatest, setResendingLatest] = useState(false);
 
   const handleCreate = async () => {
     setSubmitting(true);
@@ -94,39 +78,11 @@ export function DashboardProjectManagementCard({
 
       setPhone('');
       setEmail('');
-      setCopyState('idle');
     } catch (err) {
       console.error('Dashboard project create failed:', err);
       setError('Error de conexión al gestionar el expediente.');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleResendLatest = async () => {
-    if (!actionResult) return;
-    setResendingLatest(true);
-    setError('');
-
-    try {
-      const response = await resendDashboardProjectLink(actionResult.project.code, token);
-      if (!response.success || !response.project || !response.customerLink) {
-        setError(response.message || 'No se pudo reenviar el enlace.');
-        return;
-      }
-
-      await onActionResult({
-        action: 'resent',
-        existing: false,
-        project: response.project,
-        customerLink: response.customerLink,
-      });
-      setCopyState('idle');
-    } catch (err) {
-      console.error('Dashboard project resend failed:', err);
-      setError('Error de conexión al reenviar el enlace.');
-    } finally {
-      setResendingLatest(false);
     }
   };
 
@@ -139,7 +95,7 @@ export function DashboardProjectManagementCard({
         <div className="space-y-1">
           <h2 className="text-lg font-bold text-gray-900">Gestión de expedientes</h2>
           <p className="text-sm text-gray-500">
-            Crea expedientes desde el dashboard, reabre duplicados por teléfono y reenvía el enlace actual.
+            Crea expedientes desde el dashboard, reabre duplicados por teléfono y entra al expediente desde aquí.
           </p>
         </div>
 
@@ -222,19 +178,6 @@ export function DashboardProjectManagementCard({
           <UserPlus className="h-4 w-4" />
           {submitting ? 'Guardando...' : 'Crear o abrir expediente'}
         </button>
-
-        {actionResult && (
-          <button
-            type="button"
-            data-testid="dashboard-resend-latest-link-btn"
-            onClick={() => { void handleResendLatest(); }}
-            disabled={resendingLatest}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Send className="h-4 w-4" />
-            {resendingLatest ? 'Rotando enlace...' : 'Reenviar enlace actual'}
-          </button>
-        )}
       </div>
 
       {actionResult && (
@@ -261,40 +204,8 @@ export function DashboardProjectManagementCard({
                 <ExternalLink className="h-4 w-4" />
                 Abrir expediente
               </button>
-              <button
-                type="button"
-                data-testid="dashboard-open-customer-link-btn"
-                onClick={() => openCustomerLink(actionResult.customerLink)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                <Link2 className="h-4 w-4" />
-                Abrir enlace cliente
-              </button>
             </div>
           </div>
-
-          <label className="mt-3 block space-y-1 text-sm">
-            <span className="font-semibold text-gray-700">Enlace seguro actual</span>
-            <div className="flex gap-2">
-              <input
-                data-testid="dashboard-customer-link-input"
-                readOnly
-                value={actionResult.customerLink}
-                className="form-input flex-1 bg-white font-mono text-xs"
-              />
-              <button
-                type="button"
-                data-testid="dashboard-copy-customer-link-btn"
-                onClick={() => {
-                  void copyCustomerLink(actionResult.customerLink).then(() => setCopyState('done'));
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                <Copy className="h-4 w-4" />
-                {copyState === 'done' ? 'Copiado' : 'Copiar'}
-              </button>
-            </div>
-          </label>
         </div>
       )}
     </section>

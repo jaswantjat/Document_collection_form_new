@@ -473,7 +473,7 @@ export async function adminUpdateFormData(
   code: string,
   formDataPatch: DeepPartial<AppFormData>,
   dashboardToken: string
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; formData?: AppFormData }> {
   const res = await fetch(`${API_BASE}/project/${encodeURIComponent(code)}/admin-formdata`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },

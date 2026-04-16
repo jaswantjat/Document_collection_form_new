@@ -29,7 +29,6 @@ import {
   Upload,
   Zap,
   Scissors,
-  Send,
 } from 'lucide-react';
 import {
   dashboardLogout,
@@ -39,7 +38,6 @@ import {
   extractDocument,
   extractDocumentBatch,
   adminUpdateFormData,
-  resendDashboardProjectLink,
   type DashboardProjectActionResult,
 } from '@/services/api';
 import {
@@ -63,6 +61,7 @@ import {
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
   getDocumentAssetsFromProject, getElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
+import { buildDashboardAdditionalBankDocumentPatch } from '@/lib/dashboardAdditionalBankDocuments';
 import { downloadProjectZip } from '@/lib/dashboardExport';
 import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
 
@@ -801,13 +800,19 @@ function ElectricityTableCell({
   );
 }
 
-type AdminDocType = 'dni-front' | 'dni-back' | 'ibi' | 'electricity-bill';
+type AdminDocType =
+  | 'dni-front'
+  | 'dni-back'
+  | 'ibi'
+  | 'electricity-bill'
+  | 'additional-bank-document';
 
 const ADMIN_DOC_TABS: { key: AdminDocType; label: string }[] = [
   { key: 'dni-front', label: 'DNI frontal' },
   { key: 'dni-back', label: 'DNI trasera' },
   { key: 'ibi', label: 'IBI / Escritura' },
   { key: 'electricity-bill', label: 'Factura luz' },
+  { key: 'additional-bank-document', label: 'Documento adicional' },
 ];
 
 function AdminUploadModal({
@@ -821,7 +826,7 @@ function AdminUploadModal({
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   const [activeTab, setActiveTab] = useState<AdminDocType>('dni-front');
   const [status, setStatus] = useState<'idle' | 'extracting' | 'uploading' | 'done' | 'error'>('idle');
@@ -830,6 +835,7 @@ function AdminUploadModal({
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const isBusy = status === 'extracting' || status === 'uploading';
 
   useEffect(() => {
     let cancelled = false;
@@ -876,6 +882,39 @@ function AdminUploadModal({
         : 'Preparando imagen...');
 
     try {
+      if (activeTab === 'additional-bank-document') {
+        setStatusMsg(files.length > 1 ? 'Validando documentos adicionales...' : 'Validando documento adicional...');
+
+        const formDataPatch = await buildDashboardAdditionalBankDocumentPatch(
+          project.formData?.additionalBankDocuments,
+          files,
+        );
+
+        setStatus('uploading');
+        setStatusMsg('Guardando en el expediente...');
+
+        const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
+        if (!saveRes.success) {
+          setStatus('error');
+          setStatusMsg(saveRes.message || 'Error al guardar.');
+          return;
+        }
+
+        setProject((prev: any) => prev ? {
+          ...prev,
+          formData: saveRes.formData ?? {
+            ...(prev.formData ?? {}),
+            ...formDataPatch,
+          },
+        } : prev);
+        await onRefresh();
+        setStatus('done');
+        setStatusMsg(files.length > 1
+          ? 'Documentos adicionales guardados correctamente.'
+          : 'Documento adicional guardado correctamente.');
+        return;
+      }
+
       const { pages: preparedPages, originalPdfs } = await prepareAdminUploadPages(files);
       setStatusMsg('Extrayendo datos con IA...');
 
@@ -884,6 +923,7 @@ function AdminUploadModal({
         'dni-back': 'dniBack',
         'ibi': 'ibi',
         'electricity-bill': 'electricity',
+        'additional-bank-document': 'other',
       };
 
       const res = activeTab === 'electricity-bill'
@@ -962,9 +1002,16 @@ function AdminUploadModal({
         return;
       }
 
+      setProject((prev: any) => prev ? {
+        ...prev,
+        formData: saveRes.formData ?? {
+          ...(prev.formData ?? {}),
+          ...formDataPatch,
+        },
+      } : prev);
+      await onRefresh();
       setStatus('done');
       setStatusMsg('Documento guardado correctamente.');
-      onRefresh();
     } catch (err) {
       console.error('Admin upload failed:', err);
       setStatus('error');
@@ -982,7 +1029,9 @@ function AdminUploadModal({
     <div
       className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4"
       data-testid="admin-upload-modal"
-      onClick={onClose}
+      onClick={() => {
+        if (!isBusy) onClose();
+      }}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
@@ -993,7 +1042,10 @@ function AdminUploadModal({
           <button
             type="button"
             data-testid="admin-upload-close-btn"
-            onClick={onClose}
+            onClick={() => {
+              if (!isBusy) onClose();
+            }}
+            disabled={isBusy}
             className="text-gray-400 hover:text-gray-700 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -1028,6 +1080,7 @@ function AdminUploadModal({
                 key={tab.key}
                 type="button"
                 onClick={() => { setActiveTab(tab.key); reset(); }}
+                disabled={isBusy}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeTab === tab.key
                     ? 'bg-eltex-blue text-white'
@@ -1258,7 +1311,6 @@ function ProjectTableRow({
   loadProjectDetail,
   onRefresh,
   onDelete,
-  onResendLink,
 }: {
   project: any;
   summary: DashboardProjectSummary;
@@ -1266,11 +1318,9 @@ function ProjectTableRow({
   loadProjectDetail: (projectCode: string) => Promise<any>;
   onRefresh: () => void;
   onDelete: (code: string) => void;
-  onResendLink: (code: string) => Promise<void>;
 }) {
   const [downloading, setDownloading] = useState(false);
   const [openingForm, setOpeningForm] = useState(false);
-  const [resendingLink, setResendingLink] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
@@ -1326,18 +1376,6 @@ function ProjectTableRow({
     } catch {
       setDeleteState('idle');
       alert('Error de conexión al intentar eliminar el expediente.');
-    }
-  };
-
-  const handleResendLink = async () => {
-    setResendingLink(true);
-    try {
-      await onResendLink(project.code);
-    } catch (err) {
-      console.error('Resend project link failed:', err);
-      alert(err instanceof Error ? err.message : 'No se pudo reenviar el enlace.');
-    } finally {
-      setResendingLink(false);
     }
   };
 
@@ -1443,16 +1481,6 @@ function ProjectTableRow({
             className="px-2 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 text-center truncate"
           >
             {openingForm ? 'Abriendo...' : 'Formulario'}
-          </button>
-          <button
-            type="button"
-            data-testid="dashboard-row-resend-link-btn"
-            onClick={() => { void handleResendLink(); }}
-            disabled={resendingLink}
-            className="px-2 py-2 rounded-lg text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-1"
-          >
-            <Send className="w-3 h-3 shrink-0" />
-            {resendingLink ? 'Rotando...' : 'Reenviar'}
           </button>
           <button
             type="button"
@@ -2217,26 +2245,6 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     await load();
   }, [load]);
 
-  const handleResendProjectLink = useCallback(async (projectCode: string) => {
-    const response = await resendDashboardProjectLink(projectCode, token);
-    if (response.success && response.project && response.customerLink) {
-      await handleProjectActionResult({
-        action: 'resent',
-        existing: false,
-        project: response.project,
-        customerLink: response.customerLink,
-      });
-      return;
-    }
-
-    if (isDashboardAuthError(response.error)) {
-      await handleLogout();
-      throw new Error(response.message || 'La sesión del dashboard ha caducado.');
-    }
-
-    throw new Error(response.message || response.error || 'No se pudo reenviar el enlace.');
-  }, [handleLogout, handleProjectActionResult, token]);
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -2420,7 +2428,6 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                           loadProjectDetail={loadProjectDetail}
                           onRefresh={load}
                           onDelete={handleDeleteProject}
-                          onResendLink={handleResendProjectLink}
                         />
                       ))}
                     </tbody>
