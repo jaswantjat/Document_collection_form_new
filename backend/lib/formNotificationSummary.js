@@ -366,37 +366,22 @@ function formatSubmittedBy(payload) {
 }
 
 function buildMessageLines(payload) {
+  const pendingItems = payload.documents.pending_labels;
   const lines = [
     buildEventTitle(payload),
     `Expediente: ${payload.order_id}`,
     `Cliente: ${payload.customer.name}`,
-    `Asesor asignado: ${payload.project.assessor || 'Pendiente'}`,
+    `Asesor: ${payload.project.assessor || 'Pendiente'}`,
     `Rellenado por: ${formatSubmittedBy(payload)}`,
-    `Enlace del formulario: ${payload.links.form}`,
     `Fecha: ${payload.submitted_at_label || 'Pendiente'}`,
+    `Formulario: ${payload.links.form}`,
     '',
-    'Resumen:',
-    `- Producto: ${payload.project.product_label}`,
-    `- Ubicación: ${payload.project.location_label}`,
-    `- Titular del contrato: ${payload.project.holder_type_label}`,
-    `- Teléfono: ${payload.customer.phone || 'Pendiente'}`,
-    `- Email: ${payload.customer.email || 'Pendiente'}`,
-    `- DNI/NIF: ${payload.customer.dni_number || payload.project.company_nif || 'Pendiente'}`,
-    `- Dirección: ${payload.customer.address || 'Pendiente'}`,
-    '',
-    'Estado actual:',
-    `- Progreso documental: ${payload.documents.progress_label}`,
-    `- Identidad: ${payload.statuses.identity}`,
-    `- IBI / Escritura: ${payload.statuses.ibi}`,
-    `- Factura de luz: ${payload.statuses.electricity_bill}`,
-    `- Documentos de representación: ${payload.statuses.representation_documents}`,
-    `- Firmas de representación: ${payload.statuses.representation_signatures}`,
-    `- Firmas finales: ${payload.statuses.final_signatures}`,
-    `- Certificado energético: ${payload.statuses.energy_certificate}`,
-    `- Documentos adicionales: ${payload.statuses.additional_documents}`,
-    '',
-    `Pendiente (${payload.documents.pending_labels.length}):`,
-    ...payload.documents.pending_labels.map((item) => `- ${item}`),
+    pendingItems.length === 1 && pendingItems[0] === 'Nada pendiente'
+      ? 'Estado: Todo completo. No hay nada pendiente.'
+      : `Pendiente (${pendingItems.length}):`,
+    ...(pendingItems.length === 1 && pendingItems[0] === 'Nada pendiente'
+      ? []
+      : pendingItems.map((item) => `- ${item}`)),
   ];
 
   return lines.filter((line, index, all) => {
