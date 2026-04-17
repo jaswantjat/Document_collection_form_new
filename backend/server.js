@@ -1044,6 +1044,7 @@ async function fireFormNotification(project, {
     locale: getFormNotificationLocale(project, project.formData),
     source,
     submittedAt,
+    publicFormBaseUrl: process.env.ELTEX_PUBLIC_FORM_BASE_URL,
   });
 
   console.log(
