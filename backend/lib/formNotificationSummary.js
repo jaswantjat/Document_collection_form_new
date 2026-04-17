@@ -355,12 +355,6 @@ function buildEventTitle(payload) {
   return payload.event_label;
 }
 
-function formatSubmittedBy(payload) {
-  if (!payload.submitted_by?.name) return payload.source_label;
-  if (payload.submitted_by.name === payload.submitted_by.label) return payload.submitted_by.name;
-  return `${payload.submitted_by.name} (${payload.submitted_by.label})`;
-}
-
 function buildMessageLines(payload) {
   const pendingItems = payload.documents.pending_labels;
   const lines = [
@@ -368,7 +362,6 @@ function buildMessageLines(payload) {
     `Expediente: ${payload.order_id}`,
     `Cliente: ${payload.customer.name}`,
     `Asesor: ${payload.project.assessor || 'Pendiente'}`,
-    `Rellenado por: ${formatSubmittedBy(payload)}`,
     `Fecha: ${payload.submitted_at_label || 'Pendiente'}`,
     `Formulario: ${payload.links.form}`,
     '',

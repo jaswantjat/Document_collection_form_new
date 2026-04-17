@@ -140,11 +140,11 @@ test('buildFormNotificationPayload summarizes a new submission in Spanish with p
   assert.equal(payload.statuses.final_signatures, 'pendiente (0/1)');
   assert.match(payload.teams_message, /Nuevo formulario enviado/);
   assert.match(payload.teams_message, /Asesor: Luciano/);
-  assert.match(payload.teams_message, /Rellenado por: Jaswant Jat \(Cliente\)/);
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260001/);
   assert.match(payload.teams_message, /Pendiente \(9\):/);
   assert.doesNotMatch(payload.teams_message, /Estado actual:/);
   assert.doesNotMatch(payload.teams_message, /Producto:/);
+  assert.doesNotMatch(payload.teams_message, /Rellenado por:/);
 });
 
 test('buildFormNotificationPayload marks updates with no pending items when the file set is complete', () => {
@@ -216,6 +216,7 @@ test('buildFormNotificationPayload marks updates with no pending items when the 
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260002/);
   assert.match(payload.teams_message, /Estado: Todo completo\. No hay nada pendiente\./);
   assert.doesNotMatch(payload.teams_message, /Pendiente \(1\):/);
+  assert.doesNotMatch(payload.teams_message, /Rellenado por:/);
 });
 
 test('buildFormNotificationPayload handles passport uploads, deferred signatures, and skipped energy correctly', () => {
@@ -278,7 +279,7 @@ test('buildFormNotificationPayload handles passport uploads, deferred signatures
   ]);
   assert.doesNotMatch(payload.teams_message, /DNI trasera/);
   assert.doesNotMatch(payload.teams_message, /Certificado energético\n- Certificado energético/);
-  assert.match(payload.teams_message, /Rellenado por: Informatica/);
   assert.match(payload.teams_message, /Pendiente \(2\):/);
   assert.doesNotMatch(payload.teams_message, /Certificado energético: aplazado/);
+  assert.doesNotMatch(payload.teams_message, /Rellenado por:/);
 });
