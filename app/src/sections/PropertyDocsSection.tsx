@@ -16,7 +16,12 @@ import type {
   DocumentSlotKey,
   DocumentProcessingState,
 } from '@/types';
-import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
+import {
+  getIdentityDocumentPendingLabel,
+  isIdentityDocumentComplete,
+  isDNIBackRequired,
+  shouldStoreAsAdditionalIdentityDocument,
+} from '@/lib/identityDocument';
 import { createDocumentIssue } from '@/lib/documentIssues';
 import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePhotoAssets, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
@@ -200,6 +205,23 @@ interface PreparedDniItem {
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function buildStoredDocumentFromPreparedItem(prepared: PreparedDniItem): StoredDocumentFile {
+  const baseName = prepared.file.name.replace(/\.[^.]+$/, '') || 'documento-identidad';
+  return {
+    id: genId(),
+    filename: `${baseName}.jpg`,
+    mimeType: 'image/jpeg',
+    dataUrl: prepared.preview,
+    timestamp: Date.now(),
+    sizeBytes: prepared.file.size,
+  };
+}
+
+function getStoredIdentityFilesMessage(files: StoredDocumentFile[]): string {
+  const count = files.length;
+  return `Archivos del documento guardados: ${count} archivo${count !== 1 ? 's' : ''}.`;
 }
 
 // ── Document progress strip ────────────────────────────────────────────────────
@@ -713,6 +735,8 @@ function DNICard({
     setPendingItems(prev => [...prev, ...newItems]);
     let assignedFront = !!front.photo;
     let assignedBack = !!back.photo;
+    let currentFront = front;
+    let currentBack = back;
 
     const preparedFileResults = await Promise.all(splitFiles.map(async ({ file, skipBlurCheck }, index) => {
       const id = newItems[index].id;
@@ -824,22 +848,30 @@ function DNICard({
             return;
           }
           assignedBack = true;
+          currentBack = { photo, extraction };
           onBackPhotoChange(photo);
           onBackExtractionChange(extraction);
           acceptedCount += 1;
         } else {
           if (assignedFront) {
-            setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
-              ...p,
-              status: 'failed' as const,
-              error: 'El sistema detectó que esta imagen también corresponde a la página principal. Si tu documento tiene reverso útil, sube ahora la otra cara.'
-            } : p));
-            return;
+            if (shouldStoreAsAdditionalIdentityDocument({ front: currentFront, back: currentBack }, result.side)) {
+              onOriginalPdfsMerge([buildStoredDocumentFromPreparedItem(prepared)]);
+              acceptedCount += 1;
+            } else {
+              setPendingItems(prev => prev.map(p => p.id === prepared.id ? {
+                ...p,
+                status: 'failed' as const,
+                error: 'El sistema detectó que esta imagen también corresponde a la página principal. Si tu documento tiene reverso útil, sube ahora la otra cara.'
+              } : p));
+              return;
+            }
+          } else {
+            assignedFront = true;
+            currentFront = { photo, extraction };
+            onFrontPhotoChange(photo);
+            onFrontExtractionChange(extraction);
+            acceptedCount += 1;
           }
-          assignedFront = true;
-          onFrontPhotoChange(photo);
-          onFrontExtractionChange(extraction);
-          acceptedCount += 1;
         }
 
         if ((result.needsManualReview ?? false) && !nextIssue) {
@@ -867,9 +899,9 @@ function DNICard({
       );
     }
   }, [
-    back.photo,
+    back,
     commitWithoutExtraction,
-    front.photo,
+    front,
     onBackExtractionChange,
     onBackPhotoChange,
     onFrontExtractionChange,
@@ -898,12 +930,12 @@ function DNICard({
       </div>
 
       <p className="text-xs text-gray-500">
-        Para DNI sube las dos caras. Para NIE certificado o tarjeta, una foto es suficiente.
+        Para DNI sube las dos caras. Para NIE certificado, NIE tarjeta o pasaporte, una foto es suficiente.
       </p>
 
       {originalPdfs.length > 0 && (
         <p className="text-xs text-gray-500">
-          PDF original guardado: {originalPdfs.length} archivo{originalPdfs.length !== 1 ? 's' : ''}.
+          {getStoredIdentityFilesMessage(originalPdfs)}
         </p>
       )}
 
@@ -1062,7 +1094,7 @@ function DNICard({
             }}
           />
           <Plus className="w-5 h-5" />
-          <span className="text-sm font-medium">{hasAny ? 'Añadir más fotos del DNI' : 'Añadir fotos del DNI'}</span>
+          <span className="text-sm font-medium">{hasAny ? 'Añadir más fotos del documento' : 'Añadir fotos del documento'}</span>
         </label>
       )}
     </div>

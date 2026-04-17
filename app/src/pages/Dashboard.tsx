@@ -1722,6 +1722,11 @@ export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string
           <FieldRow label="Lugar de nacimiento" value={backData?.placeOfBirth} />
         </ImagePreviewCard>
       </div>
+      {Array.isArray(dni.originalPdfs) && dni.originalPdfs.length > 0 && (
+        <p className="text-xs text-gray-500">
+          Archivos adicionales guardados: {dni.originalPdfs.length}
+        </p>
+      )}
     </div>
   );
 }

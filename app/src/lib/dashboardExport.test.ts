@@ -50,6 +50,18 @@ function makeStoredPdf(payload: string) {
   };
 }
 
+function makeStoredImage(payload: string, mimeType = 'image/jpeg') {
+  const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+  return {
+    id: `img-${payload}`,
+    filename: `${payload}.${ext}`,
+    mimeType,
+    dataUrl: makeDataUrl(payload, mimeType),
+    timestamp: 1,
+    sizeBytes: payload.length,
+  };
+}
+
 function makeCompletedEnergyCertificate() {
   return {
     status: 'completed' as const,
@@ -249,6 +261,21 @@ describe('listDashboardExportEntries', () => {
       '1_documentos/documento_adicional.pdf',
       '1_documentos/irpf_2024.png',
     ]));
+  });
+
+  it('keeps extra stored identity images with an image extension', () => {
+    const project = makeProject('cataluna');
+    project.formData = {
+      ...project.formData!,
+      dni: {
+        ...project.formData!.dni,
+        originalPdfs: [makeStoredImage('passport-copy')],
+      },
+    } as DashboardProjectExportSource['formData'] & Record<string, unknown>;
+
+    const archivePaths = listDashboardExportEntries(project).map((entry) => entry.archivePath);
+
+    expect(archivePaths).toContain('1_documentos/dni_original_pdf.jpg');
   });
 
   it('omits pending or empty optional artifacts', () => {

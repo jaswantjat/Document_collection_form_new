@@ -126,7 +126,16 @@ function assetEntriesFromGroup(category: DashboardExportCategory, group: Dashboa
   });
 }
 
-function storedPdfEntries(
+function getStoredDocumentMimeType(source: string | undefined, file: StoredDocumentLike): string {
+  if (file?.mimeType) return file.mimeType;
+  const lowerSource = (source || '').toLowerCase();
+  if (lowerSource.endsWith('.png')) return 'image/png';
+  if (lowerSource.endsWith('.webp')) return 'image/webp';
+  if (lowerSource.endsWith('.pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
+function storedDocumentEntries(
   project: DashboardProjectExportSource,
   label: string,
   assetKeyPrefix: string,
@@ -139,19 +148,22 @@ function storedPdfEntries(
 
   if (storedKeys.length > 0) {
     return storedKeys.map((key, index) => {
+      const mimeType = getStoredDocumentMimeType(assetFiles[key], files?.[index]);
+      const ext = extensionFromMimeType(mimeType, assetFiles[key]);
       const filename = storedKeys.length === 1
-        ? `${buildLabelFilenameStem(label)}.pdf`
-        : `${buildLabelFilenameStem(label)}_${index + 1}.pdf`;
-      return createAssetEntry('documents', key, filename, assetFiles[key], 'application/pdf');
+        ? `${buildLabelFilenameStem(label)}.${ext}`
+        : `${buildLabelFilenameStem(label)}_${index + 1}.${ext}`;
+      return createAssetEntry('documents', key, filename, assetFiles[key], mimeType);
     });
   }
 
   return (files || [])
     .filter((file): file is StoredDocumentFile => Boolean(file?.dataUrl))
     .map((file, index, all) => {
+      const ext = extensionFromMimeType(file.mimeType, file.dataUrl);
       const filename = all.length === 1
-        ? `${buildLabelFilenameStem(label)}.pdf`
-        : `${buildLabelFilenameStem(label)}_${index + 1}.pdf`;
+        ? `${buildLabelFilenameStem(label)}.${ext}`
+        : `${buildLabelFilenameStem(label)}_${index + 1}.${ext}`;
       return createAssetEntry('documents', `${assetKeyPrefix}-${index}`, filename, file.dataUrl, file.mimeType);
     });
 }
@@ -172,9 +184,9 @@ function documentEntries(project: DashboardProjectExportSource) {
 
   return [
     ...documentGroups,
-    ...storedPdfEntries(project, 'DNI_original_pdf', 'dniOriginal', formData?.dni?.originalPdfs),
-    ...storedPdfEntries(project, 'IBI_original_pdf', 'ibiOriginal', formData?.ibi?.originalPdfs),
-    ...storedPdfEntries(project, 'Factura_luz_original_pdf', 'electricityOriginal', formData?.electricityBill?.originalPdfs),
+    ...storedDocumentEntries(project, 'DNI_original_pdf', 'dniOriginal', formData?.dni?.originalPdfs),
+    ...storedDocumentEntries(project, 'IBI_original_pdf', 'ibiOriginal', formData?.ibi?.originalPdfs),
+    ...storedDocumentEntries(project, 'Factura_luz_original_pdf', 'electricityOriginal', formData?.electricityBill?.originalPdfs),
   ];
 }
 
