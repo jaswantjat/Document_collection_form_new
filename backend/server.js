@@ -44,6 +44,7 @@ const {
   serializeDashboardProjectAction,
   validateDashboardCreateInput,
 } = require('./lib/dashboardProjectManagement');
+const { buildFormNotificationPayload } = require('./lib/formNotificationSummary');
 const { isApprovedAssessor } = require('./lib/approvedAssessors');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
@@ -77,7 +78,9 @@ const trustProxy = configureTrustProxy(app, {
   railwayEnvironment: process.env.RAILWAY_ENVIRONMENT,
   trustProxyEnv: process.env.TRUST_PROXY,
 });
-const DOCFLOW_WEBHOOK_SECRET = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET || 'eltex-docflow-2026-v1';
+const LEGACY_DOCFLOW_WEBHOOK_SECRET = process.env.ELTEX_DOCFLOW_WEBHOOK_SECRET || 'eltex-docflow-2026-v1';
+const FORM_NOTIFICATIONS_WEBHOOK_SECRET =
+  process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_SECRET || LEGACY_DOCFLOW_WEBHOOK_SECRET;
 const DATA_DIR = process.env.DATA_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/data' : __dirname);
 const uploadDir = path.join(DATA_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -1014,6 +1017,68 @@ function localeFromPhone(phone) {
   return null;
 }
 
+function hasFormNotificationsWebhookConfigured() {
+  return Boolean(process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL);
+}
+
+function getFormNotificationLocale(project, formData) {
+  return localeFromPhone(project.phone) || project.customerLanguage || formData?.browserLanguage || 'es';
+}
+
+async function fireFormNotification(project, {
+  eventType,
+  docsUploaded = [],
+  source = 'customer',
+  submittedAt = null,
+} = {}) {
+  const webhookUrl = process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL;
+  if (!webhookUrl) return true;
+
+  const payload = buildFormNotificationPayload({
+    eventType,
+    project,
+    formData: project.formData || {},
+    snapshot: getProjectSnapshot(project.formData || {}),
+    docsUploaded,
+    docsRequired: computeRequiredDocs(project.productType),
+    locale: getFormNotificationLocale(project, project.formData),
+    source,
+    submittedAt,
+  });
+
+  console.log(
+    `[FormNotifications] ${eventType} payload for ${project.code}: `
+    + `source=${payload.source} | uploaded=${payload.documents.uploaded_keys.join(', ') || 'none'} `
+    + `| pending=${payload.documents.pending_labels.join(' | ')}`
+  );
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Eltex-Webhook-Secret': FORM_NOTIFICATIONS_WEBHOOK_SECRET,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      const responseText = await res.text().catch(() => '');
+      console.error(
+        `[FormNotifications] ${eventType} failed for ${project.code}: HTTP ${res.status}${responseText ? ` ${responseText.slice(0, 200)}` : ''}`
+      );
+      return false;
+    }
+
+    console.log(`[FormNotifications] ${eventType} sent for ${project.code} → HTTP ${res.status}`);
+    return true;
+  } catch (err) {
+    console.error(`[FormNotifications] ${eventType} failed for ${project.code}:`, err.message);
+    return false;
+  }
+}
+
 // Fires new_order webhook to DocFlow. Returns true on success, false on failure.
 // Awaitable — callers must await this to guarantee the row exists before any follow-up calls.
 // On first submission, docs_uploaded is included so no separate doc_update is needed.
@@ -1037,7 +1102,7 @@ async function fireDocFlowNewOrder(project, docsUploaded = []) {
     docs_uploaded: docsUploaded,
   };
 
-  const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET };
+  const headers = { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET };
 
   console.log(`[DocFlow] new_order payload for ${project.code}: customer_name=${JSON.stringify(payload.customer_name)} | first_name=${JSON.stringify(payload.first_name)} | last_name=${JSON.stringify(payload.last_name)} | locale=${JSON.stringify(payload.locale)} | product_type=${JSON.stringify(payload.product_type)} | phone=${payload.phone} | contract_date=${payload.contract_date} | assessor=${JSON.stringify(payload.assessor)} | docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
 
@@ -1064,7 +1129,7 @@ function fireDocFlowDocUpdate(orderCode, docsUploaded) {
   console.log(`[DocFlow] doc_update payload for ${orderCode}: docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
   fetch(webhookUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': DOCFLOW_WEBHOOK_SECRET },
+    headers: { 'Content-Type': 'application/json', 'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET },
     body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
   }).then((res) => console.log(`[DocFlow] doc_update sent for ${orderCode} → HTTP ${res.status}`))
     .catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
@@ -1174,20 +1239,37 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
       cataloniaPDFs: pdfStatus,
     });
 
-    // DocFlow webhook sequence (after response is sent — does not block the customer).
+    // Notification webhook sequence (after response is sent — does not block the customer).
     const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
-    console.log(`[DocFlow] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
+    const notificationLabel = hasFormNotificationsWebhookConfigured() ? 'FormNotifications' : 'DocFlow';
+    console.log(`[${notificationLabel}] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
 
     if (!project.docflowNewOrderSent) {
       project.docflowNewOrderSent = true;
       saveDB();
-      const ok = await fireDocFlowNewOrder(project, docsUploaded);
+      const ok = hasFormNotificationsWebhookConfigured()
+        ? await fireFormNotification(project, {
+            eventType: 'form_submitted',
+            docsUploaded,
+            source: submission.source,
+            submittedAt: submission.timestamp,
+          })
+        : await fireDocFlowNewOrder(project, docsUploaded);
       if (!ok) {
         project.docflowNewOrderSent = false;
         saveDB();
       }
     } else {
-      fireDocFlowDocUpdate(project.code, docsUploaded);
+      if (hasFormNotificationsWebhookConfigured()) {
+        void fireFormNotification(project, {
+          eventType: 'form_updated',
+          docsUploaded,
+          source: submission.source,
+          submittedAt: submission.timestamp,
+        });
+      } else {
+        fireDocFlowDocUpdate(project.code, docsUploaded);
+      }
     }
   } catch (error) {
     failSubmissionAttempt(project, normalizedAttemptId);
