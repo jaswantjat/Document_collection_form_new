@@ -22,6 +22,10 @@ const {
   completeSubmissionAttempt,
   failSubmissionAttempt,
 } = require('./lib/submissionAttempts');
+const {
+  recordFormNotification,
+  shouldSkipDuplicateFormNotification,
+} = require('./lib/formNotificationDedupe');
 const { getSpaFallbackResponseKind } = require('./lib/spaFallback');
 const {
   DEFAULT_TEST_CODES,
@@ -1053,6 +1057,11 @@ async function fireFormNotification(project, {
     + `| pending=${payload.documents.pending_labels.join(' | ')}`
   );
 
+  if (shouldSkipDuplicateFormNotification(project, payload)) {
+    console.log(`[FormNotifications] ${eventType} skipped for ${project.code}: duplicate payload inside dedupe window`);
+    return true;
+  }
+
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -1072,6 +1081,8 @@ async function fireFormNotification(project, {
       return false;
     }
 
+    recordFormNotification(project, payload);
+    saveDB();
     console.log(`[FormNotifications] ${eventType} sent for ${project.code} → HTTP ${res.status}`);
     return true;
   } catch (err) {
