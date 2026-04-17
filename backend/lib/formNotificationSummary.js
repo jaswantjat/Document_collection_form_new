@@ -207,11 +207,8 @@ function getRepresentationSignatureStatus(formData) {
 }
 
 function getFinalSignatureStatus(formData) {
-  const signatures = formData?.signatures || {};
-  const signedCount = [signatures.customerSignature, signatures.repSignature].filter(Boolean).length;
-  if (signedCount === 2) return 'completas (2/2)';
-  if (signedCount === 1) return 'parciales (1/2)';
-  return 'pendientes (0/2)';
+  const hasCustomerSignature = Boolean(formData?.signatures?.customerSignature);
+  return hasCustomerSignature ? 'completa (1/1)' : 'pendiente (0/1)';
 }
 
 function getEnergyCertificateStatus(formData) {
@@ -255,7 +252,6 @@ function buildPendingItems(formData, missingDocLabels) {
   }
 
   if (!formData?.signatures?.customerSignature) pending.push('Firma final del cliente');
-  if (!formData?.signatures?.repSignature) pending.push('Firma final comercial');
 
   return uniq(pending);
 }

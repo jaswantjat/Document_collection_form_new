@@ -1,8 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { getProjectAccess } from './helpers/projectAccess';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+const VALID_JPEG_BUFFER = readFileSync(path.resolve(process.cwd(), 'app/public/autoritzacio-representacio.jpg'));
 
 function makePhoto(id: string) {
   return {
@@ -115,6 +118,70 @@ function createMockPdfImageData() {
 }
 
 test.describe('AI fallback', () => {
+  test('AI-00: single-image DNI uploads use the fast extractor path', async ({ page, request }) => {
+    const projectCode = 'ELT20250005';
+    await request.post(`${API_BASE}/api/test/reset-property-docs/${projectCode}`);
+    const { customerUrl } = await getProjectAccess(request, projectCode);
+
+    let singleCalls = 0;
+    let batchCalls = 0;
+
+    await page.route('**/api/extract-dni-batch', async (route) => {
+      batchCalls += 1;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'batch should not be used for a single image' }),
+      });
+    });
+
+    await page.route('**/api/extract', async (route) => {
+      const requestBody = route.request().postDataJSON();
+      if (requestBody?.documentType !== 'dniAuto') {
+        await route.fallback();
+        return;
+      }
+
+      singleCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          side: 'front',
+          extraction: {
+            extractedData: {
+              fullName: 'Geert Elschot',
+              dniNumber: 'Z3806141Z',
+            },
+            confidence: 0.96,
+            isCorrectDocument: true,
+            documentTypeDetected: 'passport',
+            identityDocumentKind: 'passport',
+            needsManualReview: false,
+            confirmedByUser: true,
+          },
+          needsManualReview: false,
+          message: 'Datos extraídos correctamente.',
+        }),
+      });
+    });
+
+    await page.goto(customerUrl);
+    await expect(page.locator('h1').first()).toContainText('Documentos');
+
+    await page.getByTestId('dni-input').setInputFiles({
+      name: 'passport-front.jpg',
+      mimeType: 'image/jpeg',
+      buffer: VALID_JPEG_BUFFER,
+    });
+
+    await expect(page.getByText('Geert Elschot')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('Z3806141Z')).toBeVisible({ timeout: 30000 });
+    await expect.poll(() => singleCalls).toBe(1);
+    await expect.poll(() => batchCalls).toBe(0);
+  });
+
   test('AI-01: failed IBI extraction preserves the upload and still allows follow-up completion', async ({ page, request }) => {
     const projectCode = 'ELT20250005';
     await request.post(`${API_BASE}/api/test/restore-base-flow/${projectCode}`);

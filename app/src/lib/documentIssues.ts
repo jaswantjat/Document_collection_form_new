@@ -8,11 +8,28 @@ const DEFAULT_ISSUE_MESSAGES: Record<DocumentIssueCode, string> = {
   'wrong-side': 'La imagen corresponde a la cara equivocada. Revisa el documento y vuelve a subirlo.',
 };
 
+function isCustomerSafeTemporaryDetail(message?: string): boolean {
+  const trimmed = message?.trim();
+  if (!trimmed) return false;
+  if (/^extract unavailable$/i.test(trimmed)) return false;
+
+  return /an[aá]lisis|autom[aá]tica|configurado|conexi[oó]n|contacta|cr[eé]ditos|demasiadas solicitudes|documento|error|imagen|int[eé]ntalo|servicio/i.test(trimmed);
+}
+
 export function getDocumentIssueMessage(code: DocumentIssueCode, message?: string): string {
-  if (code === 'temporary-error') {
-    return DEFAULT_ISSUE_MESSAGES[code];
-  }
   const trimmedMessage = message?.trim();
+  if (code === 'temporary-error') {
+    if (!isCustomerSafeTemporaryDetail(trimmedMessage)) {
+      return DEFAULT_ISSUE_MESSAGES[code];
+    }
+    if (trimmedMessage?.startsWith('Hemos guardado')) {
+      return trimmedMessage;
+    }
+    return `${DEFAULT_ISSUE_MESSAGES[code]} ${trimmedMessage}`;
+  }
+  if (code === 'manual-review' && trimmedMessage) {
+    return trimmedMessage;
+  }
   return trimmedMessage || DEFAULT_ISSUE_MESSAGES[code];
 }
 

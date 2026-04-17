@@ -22,6 +22,10 @@ import {
   isDNIBackRequired,
   shouldStoreAsAdditionalIdentityDocument,
 } from '@/lib/identityDocument';
+import {
+  normalizeSingleDniExtractionResponse,
+  type DniBatchLikeResponse,
+} from '@/lib/dniExtraction';
 import { createDocumentIssue } from '@/lib/documentIssues';
 import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePhotoAssets, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
@@ -222,6 +226,23 @@ function buildStoredDocumentFromPreparedItem(prepared: PreparedDniItem): StoredD
 function getStoredIdentityFilesMessage(files: StoredDocumentFile[]): string {
   const count = files.length;
   return `Archivos del documento guardados: ${count} archivo${count !== 1 ? 's' : ''}.`;
+}
+
+async function extractPreparedDniFiles(preparedFiles: PreparedDniItem[]): Promise<DniBatchLikeResponse> {
+  if (preparedFiles.length !== 1) {
+    const response = await extractDniBatch(preparedFiles.map((item) => item.base64));
+    return {
+      success: response.success,
+      message: response.message,
+      results: response.results?.map((result) => ({
+        ...result,
+        extraction: result.extraction as AIExtraction | undefined,
+      })),
+    };
+  }
+
+  const response = await extractDocument(preparedFiles[0].base64, 'dniAuto');
+  return normalizeSingleDniExtractionResponse(response);
 }
 
 // ── Document progress strip ────────────────────────────────────────────────────
@@ -787,7 +808,7 @@ function DNICard({
     if (preparedFiles.length === 0) return;
 
     try {
-      const res = await extractDniBatch(preparedFiles.map((item) => item.base64));
+      const res = await extractPreparedDniFiles(preparedFiles);
       let acceptedCount = 0;
       let fallbackCount = 0;
       let nextIssue: DNIData['issue'] = null;

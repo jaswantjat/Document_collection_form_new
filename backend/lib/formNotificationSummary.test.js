@@ -133,17 +133,16 @@ test('buildFormNotificationPayload summarizes a new submission in Spanish with p
     'NIF de la empresa',
     'Firmas de representación',
     'Firma final del cliente',
-    'Firma final comercial',
   ]);
   assert.equal(payload.statuses.identity, 'completa');
   assert.equal(payload.statuses.representation_documents, 'pendientes (0/3)');
   assert.equal(payload.statuses.representation_signatures, 'pendientes (0/3)');
-  assert.equal(payload.statuses.final_signatures, 'pendientes (0/2)');
+  assert.equal(payload.statuses.final_signatures, 'pendiente (0/1)');
   assert.match(payload.teams_message, /Nuevo formulario enviado/);
   assert.match(payload.teams_message, /Asesor: Luciano/);
   assert.match(payload.teams_message, /Rellenado por: Jaswant Jat \(Cliente\)/);
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260001/);
-  assert.match(payload.teams_message, /Pendiente \(10\):/);
+  assert.match(payload.teams_message, /Pendiente \(9\):/);
   assert.doesNotMatch(payload.teams_message, /Estado actual:/);
   assert.doesNotMatch(payload.teams_message, /Producto:/);
 });
@@ -212,7 +211,7 @@ test('buildFormNotificationPayload marks updates with no pending items when the 
   assert.equal(payload.documents.progress_label, '7/7');
   assert.equal(payload.sections.representacion, 'completa');
   assert.equal(payload.statuses.representation_signatures, 'completas (2/2)');
-  assert.equal(payload.statuses.final_signatures, 'completas (2/2)');
+  assert.equal(payload.statuses.final_signatures, 'completa (1/1)');
   assert.match(payload.teams_message, /Formulario actualizado \(3 envíos\)/);
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260002/);
   assert.match(payload.teams_message, /Estado: Todo completo\. No hay nada pendiente\./);
@@ -272,15 +271,14 @@ test('buildFormNotificationPayload handles passport uploads, deferred signatures
   assert.equal(payload.statuses.energy_certificate, 'aplazado');
   assert.equal(payload.statuses.representation_documents, 'parciales (1/2)');
   assert.equal(payload.statuses.representation_signatures, 'aplazadas (0/2)');
-  assert.equal(payload.statuses.final_signatures, 'parciales (1/2)');
+  assert.equal(payload.statuses.final_signatures, 'completa (1/1)');
   assert.deepEqual(payload.documents.pending_labels, [
     'Poder de representación',
     'Firmas de representación aplazadas',
-    'Firma final comercial',
   ]);
   assert.doesNotMatch(payload.teams_message, /DNI trasera/);
   assert.doesNotMatch(payload.teams_message, /Certificado energético\n- Certificado energético/);
   assert.match(payload.teams_message, /Rellenado por: Informatica/);
-  assert.match(payload.teams_message, /Pendiente \(3\):/);
+  assert.match(payload.teams_message, /Pendiente \(2\):/);
   assert.doesNotMatch(payload.teams_message, /Certificado energético: aplazado/);
 });
