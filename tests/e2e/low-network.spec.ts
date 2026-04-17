@@ -130,6 +130,62 @@ test.describe('Low-network resilience', () => {
     await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 30000 });
   });
 
+  test('E2E-NET-02C: review submit survives an upload delay longer than the old 30s timeout', async ({ page, request }) => {
+    test.setTimeout(90_000);
+    const projectCode = 'ELT20250005';
+    const customerUrl = `/?code=${projectCode}`;
+
+    const projectResponse = await request.get(`${BACKEND}/api/project/${projectCode}`, { timeout: 15000 });
+    const projectBody = await projectResponse.json();
+    const formData = projectBody.project?.formData;
+    expect(formData).toBeTruthy();
+
+    const saveResponse = await request.post(`${BACKEND}/api/project/${projectCode}/save`, {
+      data: {
+        source: 'customer',
+        formData: {
+          ...formData,
+          additionalBankDocuments: [
+            {
+              id: 'slow-extra-doc',
+              type: 'other',
+              files: [{
+                id: 'slow-extra-file',
+                filename: 'slow-upload.pdf',
+                mimeType: 'application/pdf',
+                dataUrl: `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64')}`,
+                timestamp: Date.now(),
+                sizeBytes: 2_000_000,
+              }],
+              extraction: null,
+              issue: null,
+            },
+          ],
+        },
+      },
+      timeout: 15000,
+    });
+    expect(saveResponse.status()).toBe(200);
+
+    await page.route(`**/api/project/${projectCode}/upload-assets*`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 31_000));
+      await route.continue();
+    });
+
+    await page.goto(customerUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación', { timeout: 30000 });
+    await page.getByTestId('review-submit-btn').click();
+
+    await expect(page.getByTestId('review-upload-wait-modal')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 70000 });
+    await expect(page.getByText(/hemos recibido tu documentación correctamente/i)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/No hemos podido terminar de subir tus archivos/i)).toHaveCount(0);
+  });
+
   test('E2E-NET-03: follow-up submit recovers from failed pre-upload and one failed submit attempt', async ({ page, request }) => {
     const customerUrl = '/?code=ELT20250005';
     let uploadFailures = 0;

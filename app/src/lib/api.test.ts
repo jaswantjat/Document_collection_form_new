@@ -382,6 +382,7 @@ describe('submitForm', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('preUploadAssets', () => {
   const preview = 'data:image/jpeg;base64,ZmFrZQ==';
+  const pdfDataUrl = 'data:application/pdf;base64,ZmFrZQ==';
 
   function makeFormData() {
     return {
@@ -405,6 +406,26 @@ describe('preUploadAssets', () => {
       representation: {} as Parameters<typeof preUploadAssets>[1]['representation'],
       energyCertificate: { status: 'not-started' } as Parameters<typeof preUploadAssets>[1]['energyCertificate'],
       signatures: { customerSignature: null, repSignature: null },
+    } as Parameters<typeof preUploadAssets>[1];
+  }
+
+  function makeLargeBankDocFormData(fileCount: number) {
+    return {
+      ...makeFormData(),
+      dni: { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] },
+      additionalBankDocuments: Array.from({ length: fileCount }, (_, index) => ({
+        id: `bank-doc-${index}`,
+        type: 'other' as const,
+        customLabel: `Documento ${index}`,
+        files: [{
+          id: `bank-file-${index}`,
+          filename: `doc-${index}.pdf`,
+          mimeType: 'application/pdf',
+          dataUrl: pdfDataUrl,
+          timestamp: index + 1,
+          sizeBytes: 900_000,
+        }],
+      })),
     } as Parameters<typeof preUploadAssets>[1];
   }
 
@@ -453,7 +474,9 @@ describe('preUploadAssets', () => {
   it('rejects non-OK upload responses', async () => {
     mockFetch({ success: false, message: 'upload failed' }, 503);
     await expect(preUploadAssets('ELT-UPLOAD-003', makeFormData())).rejects.toThrow('upload failed');
-  });
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  }, 15000);
 
   it('includes property photo asset keys in the upload manifest', async () => {
     mockFetch({ success: true, savedKeys: ['dniFront', 'roof_0'] });
@@ -544,6 +567,46 @@ describe('preUploadAssets', () => {
     expect(String(calledUrl)).toContain('token=customer-token-20250001');
     expect(options.headers['x-project-token']).toBe('customer-token-20250001');
   });
+
+  it('splits large asset uploads into smaller requests with the full active manifest', async () => {
+    mockFetch({ success: true, savedKeys: ['bankDocument_0', 'bankDocument_1'] });
+
+    await preUploadAssets('ELT-UPLOAD-008', makeLargeBankDocFormData(2));
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstEntries = Array.from((fetchMock.mock.calls[0][1].body as FormData).entries());
+    const secondEntries = Array.from((fetchMock.mock.calls[1][1].body as FormData).entries());
+
+    expect(firstEntries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['bankDocument_0', 'bankDocument_1']));
+    expect(secondEntries.find(([key]) => key === 'activeKeys')?.[1]).toBe(JSON.stringify(['bankDocument_0', 'bankDocument_1']));
+    expect(firstEntries.some(([key]) => key === 'bankDocument_0')).toBe(true);
+    expect(firstEntries.some(([key]) => key === 'bankDocument_1')).toBe(false);
+    expect(secondEntries.some(([key]) => key === 'bankDocument_1')).toBe(true);
+  });
+
+  it('retries transient upload failures and resumes from already-saved batches', async () => {
+    const response = { ok: true, status: 200, json: vi.fn().mockResolvedValue({ success: true, savedKeys: [] }) };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response)
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(preUploadAssets('ELT-UPLOAD-009', makeLargeBankDocFormData(2))).rejects.toThrow('Failed to fetch');
+    await expect(preUploadAssets('ELT-UPLOAD-009', makeLargeBankDocFormData(2))).resolves.toEqual({
+      success: true,
+      savedKeys: ['bankDocument_0', 'bankDocument_1'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    const resumedEntries = Array.from((fetchMock.mock.calls[4][1].body as FormData).entries());
+    expect(resumedEntries.some(([key]) => key === 'bankDocument_0')).toBe(false);
+    expect(resumedEntries.some(([key]) => key === 'bankDocument_1')).toBe(true);
+  }, 15000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

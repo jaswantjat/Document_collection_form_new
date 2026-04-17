@@ -51,10 +51,20 @@ interface ApiResponseShape {
 interface UploadAssetDescriptor {
   fieldName: string;
   fingerprint: string;
+  estimatedBytes: number;
   append: (fd: globalThis.FormData) => boolean;
 }
 
 const assetFingerprintCache = new Map<string, Map<string, string>>();
+const ASSET_UPLOAD_MAX_BATCH_BYTES = 1_500_000;
+const ASSET_UPLOAD_BASE_TIMEOUT_MS = 30_000;
+const ASSET_UPLOAD_TIMEOUT_STEP_MS = 40_000;
+const ASSET_UPLOAD_MAX_TIMEOUT_MS = 120_000;
+const ASSET_UPLOAD_MAX_ATTEMPTS = 3;
+const ASSET_UPLOAD_RETRY_DELAYS_MS = [0, 1_500, 4_000];
+
+type UploadApiResponse = { success: boolean; savedKeys?: string[]; message?: string; error?: string };
+type UploadApiError = Error & { retryable?: boolean };
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return null;
@@ -103,6 +113,15 @@ function dataUrlFingerprint(dataUrl: string): string {
   return `${dataUrl.length}:${dataUrl.slice(0, 48)}:${dataUrl.slice(-48)}`;
 }
 
+function estimateDataUrlBytes(dataUrl: string): number {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return dataUrl.length;
+
+  const base64 = dataUrl.slice(commaIndex + 1);
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
 function pushPhotoDescriptor(
   descriptors: UploadAssetDescriptor[],
   fieldName: string,
@@ -112,6 +131,7 @@ function pushPhotoDescriptor(
   descriptors.push({
     fieldName,
     fingerprint: `photo:${photo.id}:${photo.timestamp}:${photo.sizeBytes}:${dataUrlFingerprint(photo.preview)}`,
+    estimatedBytes: Math.max(photo.sizeBytes || 0, estimateDataUrlBytes(photo.preview)),
     append: (fd) => appendPhoto(fd, fieldName, photo),
   });
 }
@@ -126,6 +146,7 @@ function pushDataUrlDescriptor(
   descriptors.push({
     fieldName,
     fingerprint: `${versionHint}:${dataUrlFingerprint(dataUrl)}`,
+    estimatedBytes: estimateDataUrlBytes(dataUrl),
     append: (fd) => appendDataUrl(fd, fieldName, dataUrl),
   });
 }
@@ -143,6 +164,7 @@ function pushStoredDocumentDescriptors(
     descriptors.push({
       fieldName,
       fingerprint: `file:${file?.id}:${file?.filename}:${file?.mimeType}:${file?.sizeBytes}:${file?.timestamp}:${dataFingerprint}`,
+      estimatedBytes: Math.max(file?.sizeBytes || 0, file?.dataUrl ? estimateDataUrlBytes(file.dataUrl) : 0),
       append: (fd) => appendStoredDocument(fd, fieldName, file),
     });
   });
@@ -191,6 +213,7 @@ function buildAssetUploadDescriptors(formData: AppFormData): UploadAssetDescript
       descriptors.push({
         fieldName: file.assetKey,
         fingerprint: `bank:${entry.id}:${entry.type}:${entry.customLabel ?? ''}:${file.id}:${file.filename}:${file.mimeType}:${file.sizeBytes}:${file.timestamp}:${file.dataUrl ? dataUrlFingerprint(file.dataUrl) : 'asset-only'}`,
+        estimatedBytes: Math.max(file.sizeBytes || 0, file.dataUrl ? estimateDataUrlBytes(file.dataUrl) : 0),
         append: (fd) => appendStoredDocument(fd, file.assetKey!, file),
       });
     });
@@ -204,6 +227,123 @@ function sameAssetKeySet(existing: Iterable<string>, next: Iterable<string>): bo
   const nextKeys = [...next].sort();
   if (currentKeys.length !== nextKeys.length) return false;
   return currentKeys.every((key, index) => key === nextKeys[index]);
+}
+
+function splitAssetUploadBatches(descriptors: UploadAssetDescriptor[]): UploadAssetDescriptor[][] {
+  const batches: UploadAssetDescriptor[][] = [];
+  let currentBatch: UploadAssetDescriptor[] = [];
+  let currentBytes = 0;
+
+  descriptors.forEach((descriptor) => {
+    const nextBytes = currentBytes + descriptor.estimatedBytes;
+    if (currentBatch.length > 0 && nextBytes > ASSET_UPLOAD_MAX_BATCH_BYTES) {
+      batches.push(currentBatch);
+      currentBatch = [descriptor];
+      currentBytes = descriptor.estimatedBytes;
+      return;
+    }
+    currentBatch.push(descriptor);
+    currentBytes = nextBytes;
+  });
+
+  if (currentBatch.length > 0) batches.push(currentBatch);
+  return batches;
+}
+
+function buildAssetUploadFormData(activeKeys: string[], descriptors: UploadAssetDescriptor[]): globalThis.FormData {
+  const fd = new globalThis.FormData();
+  fd.append('activeKeys', JSON.stringify(activeKeys));
+  descriptors.forEach((descriptor) => {
+    descriptor.append(fd);
+  });
+  return fd;
+}
+
+function getAssetUploadTimeoutMs(descriptors: UploadAssetDescriptor[]): number {
+  const totalBytes = descriptors.reduce((sum, descriptor) => sum + descriptor.estimatedBytes, 0);
+  const extraMegabytes = Math.max(0, Math.ceil(totalBytes / 1_000_000) - 1);
+  return Math.min(
+    ASSET_UPLOAD_MAX_TIMEOUT_MS,
+    ASSET_UPLOAD_BASE_TIMEOUT_MS + (extraMegabytes * ASSET_UPLOAD_TIMEOUT_STEP_MS),
+  );
+}
+
+function createUploadApiError(message: string, retryable: boolean): UploadApiError {
+  const error = new Error(message) as UploadApiError;
+  error.retryable = retryable;
+  return error;
+}
+
+function isRetryableUploadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if ((error as UploadApiError).retryable === true) return true;
+  return (
+    error.name === 'AbortError'
+    || error.name === 'TimeoutError'
+    || /abort|fetch|network|timed? out|load failed|signal timed out/i.test(error.message)
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function performAssetUploadRequest(
+  code: string,
+  activeKeys: string[],
+  descriptors: UploadAssetDescriptor[],
+  token?: string,
+): Promise<UploadApiResponse> {
+  const res = await fetch(buildProjectApiUrl(code, '/upload-assets', token), {
+    method: 'POST',
+    headers: token ? { 'x-project-token': token } : {},
+    body: buildAssetUploadFormData(activeKeys, descriptors),
+    signal: AbortSignal.timeout(getAssetUploadTimeoutMs(descriptors)),
+  });
+
+  let body: UploadApiResponse;
+  try {
+    body = await res.json() as UploadApiResponse;
+  } catch {
+    throw createUploadApiError('Respuesta inválida del servidor.', true);
+  }
+
+  if (!res.ok || body.success === false) {
+    throw createUploadApiError(
+      body.message || body.error || 'No se pudieron subir los archivos.',
+      res.status === 408 || res.status === 429 || res.status >= 500,
+    );
+  }
+
+  return body;
+}
+
+async function uploadAssetBatch(
+  code: string,
+  activeKeys: string[],
+  descriptors: UploadAssetDescriptor[],
+  token?: string,
+): Promise<UploadApiResponse> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < ASSET_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+    if (ASSET_UPLOAD_RETRY_DELAYS_MS[attempt] > 0) {
+      await sleep(ASSET_UPLOAD_RETRY_DELAYS_MS[attempt]);
+    }
+
+    try {
+      return await performAssetUploadRequest(code, activeKeys, descriptors, token);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableUploadError(error) || attempt === ASSET_UPLOAD_MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('No se pudieron subir los archivos.');
 }
 
 function buildProjectApiUrl(code: string, pathSuffix: string, token?: string): string {
@@ -246,27 +386,32 @@ export async function preUploadAssets(
     return { success: true, savedKeys: [] };
   }
 
-  const fd = new globalThis.FormData();
-  fd.append('activeKeys', JSON.stringify(activeKeys));
-  changedDescriptors.forEach((descriptor) => {
-    descriptor.append(fd);
-  });
+  const batches = changedDescriptors.length > 0 ? splitAssetUploadBatches(changedDescriptors) : [[]];
+  const committedFingerprintMap = previousFingerprintMap ? new Map(previousFingerprintMap) : new Map<string, string>();
+  let manifestSynced = false;
 
-  const res = await fetch(buildProjectApiUrl(code, '/upload-assets', token), {
-    method: 'POST',
-    headers: token ? { 'x-project-token': token } : {},
-    body: fd,
-    signal: AbortSignal.timeout(30000),
-  });
-  const body = await readJsonOrThrow<{ success: boolean; savedKeys?: string[] }>(
-    res,
-    'No se pudieron subir los archivos.'
-  );
+  for (const batch of batches) {
+    await uploadAssetBatch(code, activeKeys, batch, token);
+
+    if (!manifestSynced) {
+      [...committedFingerprintMap.keys()].forEach((key) => {
+        if (!nextFingerprintMap.has(key)) committedFingerprintMap.delete(key);
+      });
+      manifestSynced = true;
+    }
+
+    batch.forEach((descriptor) => {
+      committedFingerprintMap.set(descriptor.fieldName, descriptor.fingerprint);
+    });
+
+    if (committedFingerprintMap.size === 0) assetFingerprintCache.delete(code);
+    else assetFingerprintCache.set(code, new Map(committedFingerprintMap));
+  }
 
   if (nextFingerprintMap.size === 0) assetFingerprintCache.delete(code);
   else assetFingerprintCache.set(code, nextFingerprintMap);
 
-  return body;
+  return { success: true, savedKeys: activeKeys };
 }
 
 export async function fetchProject(
