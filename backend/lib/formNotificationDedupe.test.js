@@ -23,7 +23,17 @@ function makePayload(overrides = {}) {
       form: 'https://documentos.eltex.es/?code=ELT20260077',
     },
     documents: {
+      uploaded_keys: ['dni_front'],
+      missing_keys: ['dni_back', 'electricity_bill'],
+      progress_label: '1/3',
       pending_labels: ['Factura de luz', 'Firma final comercial'],
+    },
+    statuses: {
+      identity: 'pendiente (falta la trasera)',
+      electricity_bill: 'pendiente',
+    },
+    additional_documents: {
+      labels: [],
     },
     ...overrides,
   };
@@ -78,7 +88,34 @@ test('shouldSkipDuplicateFormNotification allows changed pending items immediate
   const original = makePayload();
   const changed = makePayload({
     documents: {
+      uploaded_keys: ['dni_front'],
+      missing_keys: ['electricity_bill'],
+      progress_label: '2/3',
       pending_labels: ['Firma final comercial'],
+    },
+  });
+
+  recordFormNotification(project, original, '2026-04-17T10:00:00.000Z');
+
+  assert.equal(
+    shouldSkipDuplicateFormNotification(project, changed, Date.parse('2026-04-17T10:00:30.000Z')),
+    false
+  );
+});
+
+test('shouldSkipDuplicateFormNotification allows changed uploaded docs even when pending items stay the same', () => {
+  const project = {};
+  const original = makePayload();
+  const changed = makePayload({
+    documents: {
+      uploaded_keys: ['dni_front', 'dni_back'],
+      missing_keys: ['electricity_bill'],
+      progress_label: '2/3',
+      pending_labels: ['Factura de luz', 'Firma final comercial'],
+    },
+    statuses: {
+      identity: 'completa',
+      electricity_bill: 'pendiente',
     },
   });
 

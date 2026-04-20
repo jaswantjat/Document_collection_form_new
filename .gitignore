@@ -46,6 +46,7 @@ test_*.py
 *_test.py
 *.test.js
 *.spec.js
+!backend/lib/formNotificationProjectState.test.js
 .gstack/
 
 # Playwright

@@ -8,8 +8,21 @@ function buildFormNotificationFingerprint(payload) {
     assessor: payload?.project?.assessor || null,
     customerName: payload?.customer?.name || null,
     formLink: payload?.links?.form || null,
+    uploadedKeys: Array.isArray(payload?.documents?.uploaded_keys)
+      ? payload.documents.uploaded_keys
+      : [],
+    missingKeys: Array.isArray(payload?.documents?.missing_keys)
+      ? payload.documents.missing_keys
+      : [],
+    progressLabel: payload?.documents?.progress_label || null,
     pendingLabels: Array.isArray(payload?.documents?.pending_labels)
       ? payload.documents.pending_labels
+      : [],
+    statuses: payload?.statuses && typeof payload.statuses === 'object'
+      ? payload.statuses
+      : {},
+    additionalDocumentLabels: Array.isArray(payload?.additional_documents?.labels)
+      ? payload.additional_documents.labels
       : [],
   });
 }
