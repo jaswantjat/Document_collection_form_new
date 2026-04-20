@@ -20,6 +20,14 @@ function getIbiPages(formData) {
   return formData?.ibi?.photo ? [formData.ibi.photo] : [];
 }
 
+function hasPhotoLikeValue(photo) {
+  return Boolean(photo);
+}
+
+function hasRenderedDocumentAsset(representation, key) {
+  return Boolean(representation?.renderedDocuments?.[key]);
+}
+
 function getFirstElectricityData(formData) {
   const pages = getElectricityPages(formData);
   const merged = {};
@@ -281,7 +289,7 @@ function buildDashboardSummary(project) {
           key: `electricity_${index}`,
           label: `Factura luz — pág. ${index + 1}`,
           shortLabel: `Luz ${index + 1}`,
-          present: !!page?.photo?.preview || !!assetFiles[`electricity_${index}`],
+          present: Boolean(page?.photo || page?.extraction || assetFiles[`electricity_${index}`]),
           dataUrl: null,
           mimeType: null,
           needsManualReview: !!page?.extraction?.needsManualReview,
@@ -318,7 +326,11 @@ function buildDashboardSummary(project) {
       key: 'dniFront',
       label: 'DNI frontal',
       shortLabel: 'DNI frontal',
-      present: !!formData?.dni?.front?.photo?.preview || !!assetFiles.dniFront,
+      present: Boolean(
+        hasPhotoLikeValue(formData?.dni?.front?.photo)
+        || formData?.dni?.front?.extraction
+        || assetFiles.dniFront
+      ),
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.dni?.front?.extraction?.needsManualReview,
@@ -328,7 +340,11 @@ function buildDashboardSummary(project) {
       key: 'dniBack',
       label: 'DNI trasera',
       shortLabel: 'DNI trasera',
-      present: !!formData?.dni?.back?.photo?.preview || !!assetFiles.dniBack,
+      present: Boolean(
+        hasPhotoLikeValue(formData?.dni?.back?.photo)
+        || formData?.dni?.back?.extraction
+        || assetFiles.dniBack
+      ),
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.dni?.back?.extraction?.needsManualReview,
@@ -367,9 +383,15 @@ function buildDashboardSummary(project) {
   );
 
   if (location === 'cataluna') {
-    const ivaPresent = Boolean(representation.ivaCertificateSignature);
-    const genPresent = Boolean(representation.generalitatSignature);
-    const repPresent = Boolean(representation.representacioSignature);
+    const ivaPresent = Boolean(
+      representation.ivaCertificateSignature || hasRenderedDocumentAsset(representation, 'catalunaIva')
+    );
+    const genPresent = Boolean(
+      representation.generalitatSignature || hasRenderedDocumentAsset(representation, 'catalunaGeneralitat')
+    );
+    const repPresent = Boolean(
+      representation.representacioSignature || hasRenderedDocumentAsset(representation, 'catalunaRepresentacio')
+    );
     signedDocuments.push(
       {
         key: 'cataluna-iva',
@@ -394,8 +416,12 @@ function buildDashboardSummary(project) {
       }
     );
   } else if (location === 'madrid' || location === 'valencia') {
-    const ivaEsPresent = Boolean(representation.ivaCertificateEsSignature);
-    const poderPresent = Boolean(representation.poderRepresentacioSignature);
+    const ivaEsPresent = Boolean(
+      representation.ivaCertificateEsSignature || hasRenderedDocumentAsset(representation, 'spainIva')
+    );
+    const poderPresent = Boolean(
+      representation.poderRepresentacioSignature || hasRenderedDocumentAsset(representation, 'spainPoder')
+    );
     signedDocuments.push(
       {
         key: 'spain-iva',

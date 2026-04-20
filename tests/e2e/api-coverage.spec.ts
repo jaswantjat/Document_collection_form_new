@@ -190,6 +190,55 @@ function buildStrippedDashboardFormData() {
   };
 }
 
+function buildSubmittedDashboardSummaryFormData() {
+  return {
+    dni: {
+      front: {
+        photo: { id: 'dni-front', timestamp: 1, sizeBytes: 100 },
+        extraction: {
+          extractedData: { fullName: 'SERGIO CAPARROS RUIZ' },
+          needsManualReview: false,
+        },
+      },
+      back: {
+        photo: { id: 'dni-back', timestamp: 1, sizeBytes: 100 },
+        extraction: {
+          extractedData: { address: 'LES PERDIUS 13' },
+          needsManualReview: false,
+        },
+      },
+      originalPdfs: [],
+    },
+    ibi: {
+      photo: null,
+      pages: [{ id: 'ibi-1', timestamp: 1, sizeBytes: 100 }],
+      originalPdfs: [],
+      extraction: null,
+    },
+    electricityBill: {
+      pages: [{
+        photo: { id: 'bill-1', timestamp: 1, sizeBytes: 100 },
+        extraction: {
+          extractedData: { titular: 'SERGIO CAPARROS RUIZ' },
+          needsManualReview: false,
+        },
+      }],
+      originalPdfs: [],
+    },
+    contract: { originalPdfs: [], extraction: null },
+    representation: {
+      location: 'cataluna',
+      renderedDocuments: {
+        catalunaIva: { generatedAt: '2026-04-20T16:50:51.331Z', templateVersion: '2026-04-04.2' },
+        catalunaGeneralitat: { generatedAt: '2026-04-20T16:50:51.331Z', templateVersion: '2026-04-04.2' },
+        catalunaRepresentacio: { generatedAt: '2026-04-20T16:50:51.331Z', templateVersion: '2026-04-04.2' },
+      },
+    },
+    signatures: {},
+    energyCertificate: { status: 'not-started' },
+  };
+}
+
 test.describe('API Coverage', () => {
   test('API-01: GET /api/project/:code stays public and code-based', async ({ request }) => {
     const res = await getWithRetry(request, `${BASE}/api/project/${VALID_CODE}`);
@@ -341,6 +390,62 @@ test.describe('API Coverage', () => {
       documentsPresent: 2,
       documentsTotal: 4,
       documentsRemaining: 2,
+    });
+  });
+
+  test('API-04c: dashboard summary matches stripped submitted data and rendered document metadata', async ({ request }) => {
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+    const accessToken = createBody.project.accessToken as string;
+
+    const submitRes = await request.post(`${BASE}/api/project/${code}/submit?token=${encodeURIComponent(accessToken)}`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        formData: buildSubmittedDashboardSummaryFormData(),
+        source: 'customer',
+        attemptId: `${code}-attempt-1`,
+      },
+      timeout: 15000,
+    });
+    expect(submitRes.status()).toBe(200);
+
+    const dashToken = await loginDashboard(request);
+    const dashboardRes = await request.get(`${BASE}/api/dashboard`, {
+      headers: { 'x-dashboard-token': dashToken },
+      timeout: 15000,
+    });
+    expect(dashboardRes.status()).toBe(200);
+    const dashboardBody = await dashboardRes.json();
+    const project = dashboardBody.projects.find((entry: { code: string }) => entry.code === code);
+
+    expect(project.summary.documents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'dniFront', present: true }),
+      expect.objectContaining({ key: 'dniBack', present: true }),
+      expect.objectContaining({ key: 'ibi', present: true }),
+    ]));
+    expect(project.summary.electricityPages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'electricity_0', present: true }),
+    ]));
+    expect(project.summary.signedDocuments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'cataluna-iva', present: true, status: 'complete' }),
+      expect.objectContaining({ key: 'cataluna-generalitat', present: true, status: 'complete' }),
+      expect.objectContaining({ key: 'cataluna-representacio', present: true, status: 'complete' }),
+    ]));
+    expect(project.summary.counts).toMatchObject({
+      documentsPresent: 4,
+      documentsTotal: 4,
+      documentsRemaining: 0,
+      signedFormsPresent: 3,
+      signedFormsTotal: 3,
     });
   });
 
