@@ -328,6 +328,31 @@ describe('listDashboardExportEntries', () => {
 
     expect(archivePaths).toContain('5_fotos_inmueble/tejado_1.jpg');
   });
+
+  it('preserves stored asset extensions for stripped primary documents and electricity pages', () => {
+    const project = makeProject('cataluna');
+    project.formData = {
+      ...project.formData!,
+      dni: {
+        ...project.formData!.dni,
+        front: { photo: null, extraction: null },
+      },
+      electricityBill: {
+        ...project.formData!.electricityBill,
+        pages: [],
+      },
+    } as DashboardProjectExportSource['formData'] & Record<string, unknown>;
+    project.assetFiles = {
+      ...project.assetFiles,
+      dniFront: '/uploads/assets/ELTZIP001/dniFront.png',
+      electricity_0: '/uploads/assets/ELTZIP001/electricity_0.webp',
+    };
+
+    const archivePaths = listDashboardExportEntries(project).map((entry) => entry.archivePath);
+
+    expect(archivePaths).toContain('1_documentos/dni_frontal.png');
+    expect(archivePaths).toContain('1_documentos/factura_luz_pag_1.webp');
+  });
 });
 
 describe('buildProjectZipBlob', () => {

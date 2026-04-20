@@ -211,62 +211,112 @@ function buildDisplayAddress(project: any) {
   return pieces.join(', ') || null;
 }
 
-function toAssetItem(key: string, label: string, dataUrl: string | null | undefined): DashboardAssetItem | null {
-  if (!dataUrl || typeof dataUrl !== 'string') return null;
+function toAssetItem(key: string, label: string, source: string | null | undefined): DashboardAssetItem | null {
+  if (!source || typeof source !== 'string') return null;
   return {
     key,
     label,
+    dataUrl: source,
+    mimeType: getMimeType(source) ?? getPathMimeType(source),
+  };
+}
+
+function getSummaryDocumentMap(project: any): Map<string, Partial<DashboardDocumentItem>> {
+  const summaryDocuments = Array.isArray(project?.summary?.documents)
+    ? project.summary.documents as Partial<DashboardDocumentItem>[]
+    : [];
+
+  return new Map<string, Partial<DashboardDocumentItem>>(summaryDocuments
+    .filter((item) => item && typeof item.key === 'string')
+    .map((item) => [item.key as string, item]));
+}
+
+function getStoredAssetKeys(assetFiles: Record<string, string>, prefix: string) {
+  return Object.keys(assetFiles).filter((key) => key.startsWith(prefix)).sort();
+}
+
+function buildDocumentItem({
+  summaryItem,
+  key,
+  label,
+  shortLabel,
+  present,
+  dataUrl,
+  needsManualReview,
+  extractedData,
+}: {
+  summaryItem?: Partial<DashboardDocumentItem>;
+  key: string;
+  label: string;
+  shortLabel: string;
+  present: boolean;
+  dataUrl: string | null;
+  needsManualReview: boolean;
+  extractedData: Record<string, any> | null;
+}): DashboardDocumentItem {
+  return {
+    key,
+    label: summaryItem?.label ?? label,
+    shortLabel: summaryItem?.shortLabel ?? shortLabel,
+    present: summaryItem?.present ?? present,
     dataUrl,
-    mimeType: getMimeType(dataUrl),
+    mimeType: getMimeType(dataUrl) ?? getPathMimeType(dataUrl),
+    needsManualReview: summaryItem?.needsManualReview ?? needsManualReview,
+    extractedData,
   };
 }
 
 export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
   const formData = project?.formData || {};
+  const assetFiles = project?.assetFiles || {};
+  const summaryDocuments = getSummaryDocumentMap(project);
   const ibiPages = getIbiPages(formData);
   const primaryIbiPage = ibiPages[0] || null;
+  const ibiAssetKeys = getStoredAssetKeys(assetFiles, 'ibi_');
+  const primaryIbiAsset = ibiAssetKeys.length > 0 ? assetFiles[ibiAssetKeys[0]] : null;
 
-  const staticDocs: DashboardDocumentItem[] = [
-    {
+  return [
+    buildDocumentItem({
+      summaryItem: summaryDocuments.get('dniFront'),
       key: 'dniFront',
       label: 'DNI frontal',
       shortLabel: 'DNI frontal',
-      present: Boolean(formData?.dni?.front?.photo?.preview),
-      dataUrl: formData?.dni?.front?.photo?.preview || null,
-      mimeType: getMimeType(formData?.dni?.front?.photo?.preview),
+      present: Boolean(formData?.dni?.front?.photo?.preview || assetFiles.dniFront),
+      dataUrl: formData?.dni?.front?.photo?.preview || assetFiles.dniFront || null,
       needsManualReview: Boolean(formData?.dni?.front?.extraction?.needsManualReview),
       extractedData: formData?.dni?.front?.extraction?.extractedData || null,
-    },
-    {
+    }),
+    buildDocumentItem({
+      summaryItem: summaryDocuments.get('dniBack'),
       key: 'dniBack',
       label: 'DNI trasera',
       shortLabel: 'DNI trasera',
-      present: Boolean(formData?.dni?.back?.photo?.preview),
-      dataUrl: formData?.dni?.back?.photo?.preview || null,
-      mimeType: getMimeType(formData?.dni?.back?.photo?.preview),
+      present: Boolean(formData?.dni?.back?.photo?.preview || assetFiles.dniBack),
+      dataUrl: formData?.dni?.back?.photo?.preview || assetFiles.dniBack || null,
       needsManualReview: Boolean(formData?.dni?.back?.extraction?.needsManualReview),
       extractedData: formData?.dni?.back?.extraction?.extractedData || null,
-    },
-    {
+    }),
+    buildDocumentItem({
+      summaryItem: summaryDocuments.get('ibi'),
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: ibiPages.length > 0,
-      dataUrl: primaryIbiPage?.preview || null,
-      mimeType: getMimeType(primaryIbiPage?.preview),
+      present: ibiPages.length > 0 || ibiAssetKeys.length > 0,
+      dataUrl: primaryIbiPage?.preview || primaryIbiAsset || null,
       needsManualReview: Boolean(formData?.ibi?.extraction?.needsManualReview),
       extractedData: formData?.ibi?.extraction?.extractedData || null,
-    },
+    }),
   ];
-
-  return staticDocs;
 }
 
 export function getDashboardElectricityPages(project: any): DashboardDocumentItem[] {
   const formData = project?.formData || {};
   const pages = getElectricityPages(formData);
+  const assetFiles = project?.assetFiles || {};
+  const summaryPages = Array.isArray(project?.summary?.electricityPages) ? project.summary.electricityPages : [];
+  const storedKeys = getStoredAssetKeys(assetFiles, 'electricity_');
 
-  if (pages.length === 0) {
+  if (pages.length === 0 && storedKeys.length === 0 && summaryPages.length === 0) {
     return [{
       key: 'electricity_0',
       label: 'Factura de luz',
@@ -279,16 +329,24 @@ export function getDashboardElectricityPages(project: any): DashboardDocumentIte
     }];
   }
 
-  return pages.map((page: any, i: number) => ({
-    key: `electricity_${i}`,
-    label: `Factura luz — pág. ${i + 1}`,
-    shortLabel: `Luz ${i + 1}`,
-    present: Boolean(page?.photo?.preview),
-    dataUrl: page?.photo?.preview || null,
-    mimeType: getMimeType(page?.photo?.preview),
-    needsManualReview: Boolean(page?.extraction?.needsManualReview),
-    extractedData: page?.extraction?.extractedData || null,
-  }));
+  const sourcePages = pages.length > 0 ? pages : summaryPages;
+
+  return sourcePages.map((page: any, i: number) => {
+    const summaryPage = summaryPages[i] || null;
+    const storedAsset = assetFiles[`electricity_${i}`] || null;
+    const preview = page?.photo?.preview || page?.dataUrl || storedAsset || null;
+
+    return {
+      key: summaryPage?.key ?? `electricity_${i}`,
+      label: summaryPage?.label ?? `Factura luz — pág. ${i + 1}`,
+      shortLabel: summaryPage?.shortLabel ?? `Luz ${i + 1}`,
+      present: summaryPage?.present ?? Boolean(page?.photo?.preview || storedAsset),
+      dataUrl: preview,
+      mimeType: getMimeType(preview) ?? getPathMimeType(preview),
+      needsManualReview: summaryPage?.needsManualReview ?? Boolean(page?.extraction?.needsManualReview),
+      extractedData: page?.extraction?.extractedData || null,
+    };
+  });
 }
 
 export function getDashboardSignedPdfItems(project: any): DashboardSignedPdfItem[] {
@@ -308,6 +366,7 @@ export function getDashboardSignedPdfItems(project: any): DashboardSignedPdfItem
 export function getDashboardEnergyCertificateSummary(project: any): DashboardEnergyCertificateSummary {
   const summary = project?.summary?.energyCertificate;
   const ecData = project?.formData?.energyCertificate;
+  const rendered = ecData?.renderedDocument?.imageDataUrl || project?.assetFiles?.energyCert || null;
 
   if (summary) {
     const rawStatus =
@@ -316,8 +375,6 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
         : summary.status === 'skipped'
           ? 'skipped'
           : 'pending';
-
-    const rendered = ecData?.renderedDocument?.imageDataUrl || null;
 
     // Guard: downgrade 'completed' → 'pending' whenever field validation fails,
     // regardless of whether a renderedDocument exists. An empty field means the
@@ -343,7 +400,6 @@ export function getDashboardEnergyCertificateSummary(project: any): DashboardEne
   // Fallback path (no project.summary): always re-validate fields before trusting 'completed'.
   // A renderedDocument alone is not sufficient — any empty required field downgrades to pending.
   if (energy?.status === 'completed') {
-    const rendered = energy?.renderedDocument?.imageDataUrl || null;
     if (isEnergyCertificateReadyToComplete(energy)) {
       return {
         status: 'completed',

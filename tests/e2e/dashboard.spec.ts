@@ -376,7 +376,7 @@ test.describe('Dashboard QA', () => {
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
     await expect(page.getByText(code)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Pendientes' }).click();
+    await page.getByRole('button', { name: 'En curso' }).click();
     await expect(page.getByText(code)).toBeVisible();
 
     const csvDownload = page.waitForEvent('download');

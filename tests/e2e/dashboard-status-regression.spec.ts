@@ -1,0 +1,171 @@
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { APPROVED_ASSESSOR, loginDashboard } from './helpers/projectAccess';
+
+const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
+
+function uniquePhone() {
+  const suffix = Date.now().toString().slice(-8);
+  return `+346${suffix}`;
+}
+
+function makeStrippedPhoto(id: string) {
+  return { id, timestamp: 1, sizeBytes: 100 };
+}
+
+function buildPartialFormData() {
+  return {
+    dni: {
+      front: { photo: makeStrippedPhoto('dni-front'), extraction: null },
+      back: { photo: null, extraction: null },
+      originalPdfs: [],
+    },
+    ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
+    electricityBill: { pages: [], originalPdfs: [] },
+    representation: {},
+    signatures: {},
+    contract: { originalPdfs: [], extraction: null },
+    energyCertificate: { status: 'not-started' },
+  };
+}
+
+function buildSubmittedFormData() {
+  return {
+    dni: {
+      front: { photo: makeStrippedPhoto('dni-front'), extraction: null },
+      back: { photo: makeStrippedPhoto('dni-back'), extraction: null },
+      originalPdfs: [],
+    },
+    ibi: {
+      photo: null,
+      pages: [makeStrippedPhoto('ibi-1')],
+      originalPdfs: [],
+      extraction: null,
+    },
+    electricityBill: {
+      pages: [{ photo: makeStrippedPhoto('bill-1'), extraction: null }],
+      originalPdfs: [],
+    },
+    representation: {},
+    signatures: {},
+    contract: { originalPdfs: [], extraction: null },
+    energyCertificate: { status: 'not-started' },
+  };
+}
+
+async function openDashboard(page: Page, token: string) {
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+  await page.evaluate((dashboardToken: string) => {
+    sessionStorage.setItem('dashboard_token', dashboardToken);
+  }, token);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+}
+
+async function createDashboardProject(request: APIRequestContext, customerName: string) {
+  const dashboardToken = await loginDashboard(request);
+  const response = await request.post(`${API_BASE}/api/dashboard/project`, {
+    data: {
+      phone: uniquePhone(),
+      assessor: APPROVED_ASSESSOR,
+      customerName,
+    },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-dashboard-token': dashboardToken,
+    },
+    timeout: 15000,
+  });
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.project?.code).toBeTruthy();
+  expect(body.project?.accessToken).toBeTruthy();
+  return {
+    code: body.project.code as string,
+    accessToken: body.project.accessToken as string,
+  };
+}
+
+async function uploadAssets(request: APIRequestContext, code: string, assetKeys: string[]) {
+  const multipart: Record<string, unknown> = {
+    activeKeys: JSON.stringify(assetKeys),
+  };
+
+  assetKeys.forEach((key) => {
+    multipart[key] = {
+      name: `${key}.jpg`,
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from('fake-image'),
+    };
+  });
+
+  const response = await request.post(`${API_BASE}/api/project/${code}/upload-assets`, {
+    multipart,
+    timeout: 15000,
+  });
+  expect(response.status()).toBe(200);
+}
+
+test.describe('Dashboard status regressions', () => {
+  test('dashboard separates untouched, in-progress, and submitted projects after binary stripping', async ({ page, request }) => {
+    const stamp = `dash-state-${Date.now()}`;
+    const pending = await createDashboardProject(request, `${stamp} pending`);
+    const inProgress = await createDashboardProject(request, `${stamp} progress`);
+    const submitted = await createDashboardProject(request, `${stamp} submitted`);
+
+    await uploadAssets(request, inProgress.code, ['dniFront']);
+    const saveRes = await request.post(
+      `${API_BASE}/api/project/${inProgress.code}/save?token=${encodeURIComponent(inProgress.accessToken)}`,
+      {
+        data: { formData: buildPartialFormData(), source: 'customer' },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+      },
+    );
+    expect(saveRes.status()).toBe(200);
+
+    await uploadAssets(request, submitted.code, ['dniFront', 'dniBack', 'ibi_0', 'electricity_0']);
+    const submitRes = await request.post(
+      `${API_BASE}/api/project/${submitted.code}/submit?token=${encodeURIComponent(submitted.accessToken)}`,
+      {
+        data: {
+          formData: buildSubmittedFormData(),
+          source: 'customer',
+          attemptId: `${submitted.code}-attempt-1`,
+        },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+      },
+    );
+    expect(submitRes.status()).toBe(200);
+
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    const searchInput = page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...');
+    await searchInput.fill(stamp);
+    const rows = page.locator('tbody tr');
+    await expect(rows).toHaveCount(3);
+
+    await page.getByRole('button', { name: 'Pendientes' }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText(pending.code);
+
+    await page.getByRole('button', { name: 'En curso' }).click();
+    await expect(rows).toHaveCount(1);
+    const inProgressRow = rows.first();
+    await expect(inProgressRow).toContainText(inProgress.code);
+    await expect(inProgressRow.locator('td').nth(4)).toContainText('Recibido');
+    await expect(inProgressRow.locator('td').nth(9)).toContainText('En curso');
+
+    await page.getByRole('button', { name: 'Enviados' }).click();
+    await expect(rows).toHaveCount(1);
+    const submittedRow = rows.first();
+    await expect(submittedRow).toContainText(submitted.code);
+    await expect(submittedRow.locator('td').nth(4)).toContainText('Frontal');
+    await expect(submittedRow.locator('td').nth(4)).toContainText('Trasera');
+    await expect(submittedRow.locator('td').nth(5)).toContainText('Recibido');
+    await expect(submittedRow.locator('td').nth(6)).toContainText('1 página');
+    await expect(submittedRow.locator('td').nth(9)).toContainText('Enviado');
+    await expect(submittedRow.locator('td').nth(9)).toContainText('Completo');
+  });
+});

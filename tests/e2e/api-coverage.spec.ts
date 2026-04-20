@@ -171,6 +171,25 @@ async function loginDashboard(request: any) {
   return loginBody.token as string;
 }
 
+function buildStrippedDashboardFormData() {
+  return {
+    dni: {
+      front: { photo: { id: 'dni-front', timestamp: 1, sizeBytes: 100 }, extraction: null },
+      back: { photo: null, extraction: null },
+      originalPdfs: [],
+    },
+    ibi: { photo: null, pages: [], originalPdfs: [], extraction: null },
+    electricityBill: {
+      pages: [{ photo: { id: 'bill-1', timestamp: 1, sizeBytes: 100 }, extraction: null }],
+      originalPdfs: [],
+    },
+    contract: { originalPdfs: [], extraction: null },
+    representation: {},
+    signatures: {},
+    energyCertificate: { status: 'not-started' },
+  };
+}
+
 test.describe('API Coverage', () => {
   test('API-01: GET /api/project/:code stays public and code-based', async ({ request }) => {
     const res = await getWithRetry(request, `${BASE}/api/project/${VALID_CODE}`);
@@ -261,6 +280,68 @@ test.describe('API Coverage', () => {
     const secondProject = await request.get(`${BASE}/api/project/${code}`, { timeout: 15000 });
     const secondBody = await secondProject.json();
     expect(secondBody.project.assetFiles.dniFront).toBeUndefined();
+  });
+
+  test('API-04b: dashboard summary reflects stripped asset-backed progress correctly', async ({ request }) => {
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+    const accessToken = createBody.project.accessToken as string;
+
+    const uploadRes = await request.post(`${BASE}/api/project/${code}/upload-assets?token=${encodeURIComponent(accessToken)}`, {
+      multipart: {
+        activeKeys: JSON.stringify(['dniFront', 'electricity_0']),
+        dniFront: {
+          name: 'dni-front.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-image'),
+        },
+        electricity_0: {
+          name: 'electricity.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-image'),
+        },
+      },
+      timeout: 15000,
+    });
+    expect(uploadRes.status()).toBe(200);
+
+    const saveRes = await request.post(`${BASE}/api/project/${code}/save?token=${encodeURIComponent(accessToken)}`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { formData: buildStrippedDashboardFormData(), source: 'customer' },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
+    const dashToken = await loginDashboard(request);
+    const dashboardRes = await request.get(`${BASE}/api/dashboard`, {
+      headers: { 'x-dashboard-token': dashToken },
+      timeout: 15000,
+    });
+    expect(dashboardRes.status()).toBe(200);
+    const dashboardBody = await dashboardRes.json();
+    const project = dashboardBody.projects.find((entry: { code: string }) => entry.code === code);
+
+    expect(project.summary.documents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'dniFront', present: true }),
+      expect.objectContaining({ key: 'dniBack', present: false }),
+    ]));
+    expect(project.summary.electricityPages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'electricity_0', present: true }),
+    ]));
+    expect(project.summary.counts).toMatchObject({
+      documentsPresent: 2,
+      documentsTotal: 4,
+      documentsRemaining: 2,
+    });
   });
 
   test('API-05: GET /api/project/:code/download-zip returns a ZIP file after dashboard login', async ({ request }) => {

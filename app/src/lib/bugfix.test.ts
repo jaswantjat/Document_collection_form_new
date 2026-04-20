@@ -184,31 +184,35 @@ describe('BUG-1 — Auto-save backup preserves and restores contract.originalPdf
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('BUG-2 — DeferredAssetButtons stable-ref and test attributes', () => {
-  it('DeferredAssetButtons source has data-testid on view button', async () => {
+  async function readDeferredAssetButtonsSource() {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+    return readFileSync(
+      new URL('../../src/components/dashboard/DashboardDocumentActions.tsx', import.meta.url),
+      'utf8'
+    );
+  }
+
+  it('DeferredAssetButtons source has data-testid on view button', async () => {
+    const src = await readDeferredAssetButtonsSource();
     expect(src).toContain('data-testid="view-asset-btn"');
     expect(src).toContain('data-testid="download-asset-btn"');
     expect(src).toContain('data-testid="asset-action-buttons"');
   });
 
   it('DeferredAssetButtons is wrapped in React.memo', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+    const src = await readDeferredAssetButtonsSource();
     expect(src).toContain('React.memo(function DeferredAssetButtons');
   });
 
   it('DeferredAssetButtons uses stable refs to avoid stale closures', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+    const src = await readDeferredAssetButtonsSource();
     expect(src).toContain('loadProjectDetailRef');
     expect(src).toContain('resolveAssetsRef');
     expect(src).toContain('loadProjectDetailRef.current = loadProjectDetail');
   });
 
   it('view button has aria-busy attribute for accessibility and test polling', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+    const src = await readDeferredAssetButtonsSource();
     expect(src).toContain('aria-busy={loading === \'view\'}');
     expect(src).toContain('aria-busy={loading === \'download\'}');
   });

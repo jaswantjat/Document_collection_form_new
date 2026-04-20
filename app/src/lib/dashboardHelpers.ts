@@ -48,6 +48,15 @@ export function extensionFromMimeType(mimeType: string | null | undefined, dataU
   return 'jpg';
 }
 
+function mimeTypeFromAssetPath(assetPath: string | null | undefined) {
+  if (!assetPath) return null;
+  const lower = assetPath.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
 export function sanitizeFilename(input: string) {
   return input
     .normalize('NFD')
@@ -248,7 +257,7 @@ export function getDocumentAssetsFromProject(project: { formData?: unknown; asse
       key: `ibi-${index}`,
       label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
       dataUrl: assetFiles[k] as string,
-      mimeType: 'image/jpeg' as const,
+      mimeType: mimeTypeFromAssetPath(assetFiles[k] as string),
     }));
   }
 
@@ -261,7 +270,7 @@ export function getDocumentAssetsFromProject(project: { formData?: unknown; asse
   const assetPath = project?.assetFiles?.[key];
   if (assetPath) {
     const label = key === 'dniFront' ? 'DNI frontal' : key === 'dniBack' ? 'DNI trasera' : key;
-    return [{ key, label, dataUrl: assetPath as string, mimeType: 'image/jpeg' as const }];
+    return [{ key, label, dataUrl: assetPath as string, mimeType: mimeTypeFromAssetPath(assetPath as string) }];
   }
 
   return [];
@@ -285,6 +294,6 @@ export function getElectricityAssetsFromProject(project: { formData?: unknown; a
     key: k,
     label: `Factura luz — pág. ${index + 1}`,
     dataUrl: assetFiles[k] as string,
-    mimeType: 'image/jpeg' as const,
+    mimeType: mimeTypeFromAssetPath(assetFiles[k] as string),
   }));
 }

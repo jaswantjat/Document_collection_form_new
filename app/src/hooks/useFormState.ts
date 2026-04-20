@@ -333,6 +333,8 @@ export const useFormState = (
 ) => {
   const preserveRepresentationSignatures =
     options?.preserveRepresentationSignaturesOnDocumentChange ?? false;
+  const saveSource = options?.source;
+  const projectToken = options?.projectToken;
   const [formData, setFormData] = useState<FormData>(() => normalizeFormData(savedFormData));
   const [documentProcessing, setDocumentProcessing] = useState<Record<DocumentSlotKey, DocumentProcessingState>>(
     () => createInitialDocumentProcessing(normalizeFormData(savedFormData))
@@ -360,6 +362,27 @@ export const useFormState = (
     syncSavedFormData(savedFormData);
   }, [projectCode, savedFormData]);
 
+  const persistLatestProgress = useEffectEvent((snapshot: string, cleanData: FormData) => {
+    if (!projectCode) return;
+
+    saveProgress(projectCode, cleanData, saveSource, projectToken).then(() => {
+      lastSavedPayload.current = snapshot;
+      if (consecutiveSaveFailures.current > 0) {
+        consecutiveSaveFailures.current = 0;
+        toast.dismiss('save-error');
+      }
+    }).catch((err: unknown) => {
+      consecutiveSaveFailures.current += 1;
+      console.error('[useFormState] Auto-save failed:', err);
+      if (consecutiveSaveFailures.current >= 2) {
+        toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {
+          id: 'save-error',
+          duration: 5000,
+        });
+      }
+    });
+  });
+
   // Auto-save with debounce
   useEffect(() => {
     if (!projectCode) return;
@@ -379,22 +402,7 @@ export const useFormState = (
       // when the user navigates sections without editing anything.
       const snapshot = JSON.stringify(cleanData);
       if (snapshot === lastSavedPayload.current) return;
-      saveProgress(projectCode, cleanData, options?.source, options?.projectToken).then(() => {
-        lastSavedPayload.current = snapshot;
-        if (consecutiveSaveFailures.current > 0) {
-          consecutiveSaveFailures.current = 0;
-          toast.dismiss('save-error');
-        }
-      }).catch((err: unknown) => {
-        consecutiveSaveFailures.current += 1;
-        console.error('[useFormState] Auto-save failed:', err);
-        if (consecutiveSaveFailures.current >= 2) {
-          toast.warning('No se pudo guardar el progreso — comprueba tu conexión', {
-            id: 'save-error',
-            duration: 5000,
-          });
-        }
-      });
+      persistLatestProgress(snapshot, cleanData);
     }, 2000);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [formData, projectCode]);
@@ -418,18 +426,21 @@ export const useFormState = (
     ]),
   ].join('|');
   const lastPhotoFingerprint = useRef('');
+  const uploadLatestAssets = useEffectEvent(() => {
+    if (!projectCode) return;
+    preUploadAssets(projectCode, formData, projectToken).catch(() => {});
+  });
   useEffect(() => {
     if (!projectCode) return;
     if (photoFingerprint === lastPhotoFingerprint.current) return;
     lastPhotoFingerprint.current = photoFingerprint;
     if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
     progressiveUploadTimer.current = setTimeout(() => {
-      preUploadAssets(projectCode, formData, options?.projectToken).catch(() => {});
+      uploadLatestAssets();
     }, 800);
     return () => {
       if (progressiveUploadTimer.current) clearTimeout(progressiveUploadTimer.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoFingerprint, projectCode]);
 
   const setDocumentProcessingState = useCallback((slotKey: DocumentSlotKey, nextState: DocumentProcessingState) => {

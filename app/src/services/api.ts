@@ -10,6 +10,7 @@ import { withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocumen
 import { getPropertyPhotoGroups, type PropertyPhotoFormData } from '@/lib/propertyPhotoGroups';
 
 const API_BASE = '/api';
+const DASHBOARD_API_TIMEOUT_MS = 15000;
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
@@ -19,7 +20,7 @@ type DeepPartial<T> = {
       : T[K];
 };
 
-type DashboardProjectRecord = ProjectData & {
+export type DashboardProjectRecord = ProjectData & {
   summary?: Record<string, unknown>;
   submissionCount?: number;
 };
@@ -454,6 +455,7 @@ export async function dashboardLogin(password: string): Promise<{ success: boole
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -462,12 +464,14 @@ export async function dashboardLogout(token: string): Promise<void> {
   await fetch(`${API_BASE}/dashboard/logout`, {
     method: 'POST',
     headers: { 'x-dashboard-token': token },
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
 }
 
 export async function fetchDashboard(token: string): Promise<{ success: boolean; projects?: DashboardProjectRecord[]; error?: string }> {
   const res = await fetch(`${API_BASE}/dashboard`, {
     headers: { 'x-dashboard-token': token },
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -478,6 +482,7 @@ export async function fetchDashboardProject(
 ): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string }> {
   const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
     headers: { 'x-dashboard-token': token },
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -503,6 +508,7 @@ export async function createDashboardProject(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-dashboard-token': token },
     body: JSON.stringify(data),
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -514,6 +520,7 @@ export async function resendDashboardProjectLink(
   const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}/resend`, {
     method: 'POST',
     headers: { 'x-dashboard-token': token },
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -617,6 +624,7 @@ export async function deleteProject(
   const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}`, {
     method: 'DELETE',
     headers: { 'x-dashboard-token': dashboardToken },
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }
@@ -630,6 +638,7 @@ export async function adminUpdateFormData(
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
     body: JSON.stringify({ formDataPatch }),
+    signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
   });
   return readJsonResponse(res);
 }

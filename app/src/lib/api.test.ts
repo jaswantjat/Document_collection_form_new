@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  adminUpdateFormData,
   createDashboardProject,
   resendDashboardProjectLink,
   fetchProject,
@@ -155,6 +156,13 @@ describe('dashboardLogin', () => {
     mockFetchNetworkError('Connection refused');
     await expect(dashboardLogin('pass')).rejects.toThrow('Connection refused');
   });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true });
+    await dashboardLogin('pass');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +194,13 @@ describe('fetchDashboard', () => {
     mockFetchNetworkError();
     await expect(fetchDashboard('token')).rejects.toThrow();
   });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true, projects: [] });
+    await fetchDashboard('token');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -208,6 +223,13 @@ describe('fetchDashboardProject', () => {
     const headers = fetchMock.mock.calls[0][1].headers;
     expect(calledUrl).toContain('ELT001');
     expect(headers['x-dashboard-token']).toBe('tok-xyz');
+  });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    await fetchDashboardProject('ELT001', 'tok-xyz');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
   });
 });
 
@@ -248,6 +270,16 @@ describe('createDashboardProject', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('asesor');
   });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    await createDashboardProject({
+      phone: '+34612345678',
+      assessor: 'Sergi Guillen Cavero',
+    }, 'dash-token');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -276,6 +308,13 @@ describe('resendDashboardProjectLink', () => {
     const result = await resendDashboardProjectLink('ELT404', 'dash-token');
     expect(result.success).toBe(false);
     expect(result.error).toBe('PROJECT_NOT_FOUND');
+  });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true, project: { code: 'ELT001' } });
+    await resendDashboardProjectLink('ELT001', 'dash-token');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
   });
 });
 
@@ -686,5 +725,37 @@ describe('deleteProject', () => {
     const calledUrl: string = fetchMock.mock.calls[0][0];
     expect(calledUrl).not.toContain('ELT/001');
     expect(calledUrl).toContain('ELT%2F001');
+  });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true });
+    await deleteProject('ELT001', 'tok');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// adminUpdateFormData
+// ─────────────────────────────────────────────────────────────────────────────
+describe('adminUpdateFormData', () => {
+  it('sends the dashboard token and JSON patch body', async () => {
+    mockFetch({ success: true, formData: { dni: {} } });
+    await adminUpdateFormData('ELT001', { dni: { front: null } }, 'dash-token');
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [calledUrl, options] = fetchMock.mock.calls[0];
+    const body = JSON.parse(options.body);
+
+    expect(String(calledUrl)).toContain('/api/project/ELT001/admin-formdata');
+    expect(options.headers['x-dashboard-token']).toBe('dash-token');
+    expect(body.formDataPatch).toEqual({ dni: { front: null } });
+  });
+
+  it('uses a bounded request timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
+    mockFetch({ success: true, formData: {} });
+    await adminUpdateFormData('ELT001', { dni: { front: null } }, 'dash-token');
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
   });
 });
