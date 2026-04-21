@@ -70,6 +70,19 @@ describe('energyCertificateFlow', () => {
     expect(hasEnergyCertificateDecision(energy)).toBe(true);
   });
 
+  it('keeps completed energy as completed when heatingEmitterType is omitted', () => {
+    const energy = makeValidEnergyCertificate({
+      thermal: {
+        ...makeValidEnergyCertificate().thermal,
+        heatingEmitterType: null,
+        radiatorMaterial: null,
+      },
+    });
+
+    expect(getCustomerEnergyFlowStatus(energy)).toBe('completed');
+    expect(hasEnergyCertificateDecision(energy)).toBe(true);
+  });
+
   it('downgrades invalid completed energy to pending', () => {
     const energy = makeValidEnergyCertificate({
       housing: {

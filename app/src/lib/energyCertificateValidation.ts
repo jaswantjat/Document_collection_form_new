@@ -56,7 +56,6 @@ export function validateEcStep(stepKey: StepKey, data: EnergyCertificateData): R
     if (t.hasAirConditioning === true && !String(t.airConditioningDetails ?? '').trim()) {
       errs.thermalAirConditioningDetails = 'Introduce la marca y año del aire acondicionado';
     }
-    if (!t.heatingEmitterType) errs.thermalHeatingEmitterType = 'Selecciona el tipo de calefacción';
     if ((t.heatingEmitterType === 'radiadores-agua' || t.heatingEmitterType === 'radiadores-electricos') && !t.radiatorMaterial) {
       errs.thermalRadiatorMaterial = 'Selecciona el material de los radiadores';
     }

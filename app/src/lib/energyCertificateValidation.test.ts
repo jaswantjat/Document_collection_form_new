@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { validateEcStep } from './energyCertificateValidation';
+import {
+  isEnergyCertificateReadyToComplete,
+  validateEcStep,
+} from './energyCertificateValidation';
 import type { EnergyCertificateData } from '@/types';
 
 describe('Energy Certificate Validation - New Rules', () => {
@@ -30,6 +33,8 @@ describe('Energy Certificate Validation - New Rules', () => {
         airConditioningDetails: '',
         heatingEmitterType: 'radiadores-agua',
         radiatorMaterial: 'aluminio',
+        tipoFase: 'monofasica',
+        tipoFaseConfirmed: true,
       },
       additional: {
         soldProduct: 'solo-paneles',
@@ -102,6 +107,14 @@ describe('Energy Certificate Validation - New Rules', () => {
       data.thermal.airConditioningDetails = '';
       const errors = validateEcStep('thermal', data);
       expect(errors).not.toHaveProperty('thermalAirConditioningDetails');
+    });
+
+    it('Scenario 7b: heatingEmitterType = null should NOT produce thermalHeatingEmitterType error', () => {
+      const data = createBaseData();
+      data.thermal.heatingEmitterType = null;
+      data.thermal.radiatorMaterial = null;
+      const errors = validateEcStep('thermal', data);
+      expect(errors).not.toHaveProperty('thermalHeatingEmitterType');
     });
   });
 
@@ -191,6 +204,14 @@ describe('Energy Certificate Validation - New Rules', () => {
       const errors = validateEcStep('additional', data);
       expect(errors).toHaveProperty('additionalSolarPanelDetails');
       expect(errors.additionalSolarPanelDetails).toBe('Introduce los detalles de la instalación fotovoltaica');
+    });
+
+    it('UNIT-COND-07: omitting heatingEmitterType still keeps a full EC ready to complete', () => {
+      const data = createBaseData();
+      data.thermal.heatingEmitterType = null;
+      data.thermal.radiatorMaterial = null;
+
+      expect(isEnergyCertificateReadyToComplete(data)).toBe(true);
     });
   });
 });

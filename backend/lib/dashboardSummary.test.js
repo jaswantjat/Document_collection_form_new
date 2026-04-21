@@ -118,3 +118,76 @@ test('buildDashboardSummary keeps signed documents present when only rendered do
     ]
   );
 });
+
+test('buildDashboardSummary keeps completed energy certificates completed when heating type is omitted', () => {
+  const summary = buildDashboardSummary({
+    code: 'ELT20260071',
+    customerName: 'Cliente',
+    formData: {
+      dni: {
+        front: { photo: null, extraction: null },
+        back: { photo: null, extraction: null },
+        originalPdfs: [],
+      },
+      ibi: {
+        photo: null,
+        pages: [],
+        extraction: null,
+        originalPdfs: [],
+      },
+      electricityBill: {
+        pages: [],
+        originalPdfs: [],
+      },
+      representation: {
+        location: 'other',
+        renderedDocuments: {},
+      },
+      signatures: {},
+      contract: { extraction: null, originalPdfs: [] },
+      energyCertificate: {
+        status: 'completed',
+        housing: {
+          cadastralReference: '',
+          habitableAreaM2: '100',
+          floorCount: '2',
+          bedroomCount: '3',
+          doorsByOrientation: { north: '1', south: '1', east: '1', west: '1' },
+          windowsByOrientation: { north: '1', south: '1', east: '1', west: '1' },
+          windowFrameMaterial: 'pvc',
+          doorMaterial: 'Madera',
+          windowGlassType: 'doble',
+          averageFloorHeight: '2.7-3.2m',
+          hasShutters: false,
+          shutterWindowCount: '',
+        },
+        thermal: {
+          thermalInstallationType: 'caldera',
+          boilerFuelType: 'gas',
+          equipmentDetails: 'Caldera 2022',
+          hasAirConditioning: false,
+          airConditioningType: null,
+          airConditioningDetails: '',
+          heatingEmitterType: null,
+          radiatorMaterial: null,
+          tipoFase: 'monofasica',
+          tipoFaseConfirmed: true,
+        },
+        additional: {
+          soldProduct: 'solo-paneles',
+          isExistingCustomer: false,
+          hasSolarPanels: false,
+          solarPanelDetails: '',
+        },
+        customerSignature: null,
+        renderedDocument: null,
+        completedAt: '2026-04-21T08:00:00.000Z',
+        skippedAt: null,
+      },
+    },
+    assetFiles: {},
+  });
+
+  assert.equal(summary.energyCertificate.status, 'completed');
+  assert.equal(summary.counts.energyCertificatePresent, true);
+});

@@ -234,9 +234,6 @@ function isEcDataComplete(ec) {
   ) {
     return false;
   }
-  if (!thermal.heatingEmitterType) {
-    return false;
-  }
   if (
     (thermal.heatingEmitterType === 'radiadores-agua'
       || thermal.heatingEmitterType === 'radiadores-electricos')

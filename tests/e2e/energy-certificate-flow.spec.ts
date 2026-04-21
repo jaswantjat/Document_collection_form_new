@@ -27,6 +27,62 @@ async function openEnergyCertificate(page: Page) {
   await expect(page.locator('h1').first()).toContainText('Certificado energético');
 }
 
+async function fillHousingStep(page: Page) {
+  await page.getByRole('spinbutton', { name: /tamaño/i }).fill('120');
+  await page.getByRole('spinbutton', { name: /plantas/i }).fill('2');
+  await page.getByRole('spinbutton', { name: /dormitorios/i }).fill('3');
+  await page.getByRole('button', { name: 'Entre 2,7m y 3,2m' }).click();
+
+  const doorSection = page.locator('p', { hasText: 'Nº PUERTAS Exterior' }).locator('xpath=..');
+  const doorInputs = doorSection.locator('input');
+  for (let index = 0; index < 4; index += 1) {
+    await doorInputs.nth(index).fill('1');
+  }
+
+  const windowSection = page.locator('p', { hasText: 'Nº VENTANAS Exterior' }).locator('xpath=..');
+  const windowInputs = windowSection.locator('input');
+  for (let index = 0; index < 4; index += 1) {
+    await windowInputs.nth(index).fill('2');
+  }
+
+  await page.getByRole('button', { name: 'PVC' }).click();
+  await page.getByPlaceholder('Madera').fill('Madera');
+  await page.getByRole('button', { name: 'Doble vidrio' }).click();
+  const shutterLabel = page.locator('p', { hasText: '¿Ventanas con persiana?' });
+  await shutterLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
+  await page.getByTestId('energy-cert-next-btn').click();
+}
+
+async function fillThermalStep(page: Page, options: { selectHeatingType?: boolean } = {}) {
+  const { selectHeatingType = true } = options;
+
+  await page.getByRole('button', { name: 'Caldera (ACS y calefacción)' }).click();
+  await page.getByRole('button', { name: 'Gas', exact: true }).click();
+  await page.getByPlaceholder('Marca y año de la instalación').fill('Samsung 2020');
+  const acLabel = page.locator('p', { hasText: '¿Aire Acondicionado?' });
+  await acLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
+
+  if (selectHeatingType) {
+    await page.getByRole('button', { name: 'Radiadores de Agua' }).click();
+    await page.getByRole('button', { name: 'Aluminio' }).click();
+  }
+
+  await page.getByRole('button', { name: 'Monofásica' }).click();
+  await page.getByTestId('energy-cert-next-btn').click();
+}
+
+async function fillAdditionalStep(page: Page) {
+  await page.getByRole('button', { name: /paneles solares/i }).click();
+
+  const existingCustomerLabel = page.locator('p', { hasText: '¿Cliente de Eltex?' });
+  await existingCustomerLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
+
+  const solarPanelsLabel = page.locator('p', { hasText: '¿Placas solares?' });
+  await solarPanelsLabel.locator('xpath=..').getByRole('button', { name: 'No', exact: true }).click();
+
+  await page.getByTestId('energy-cert-next-btn').click();
+}
+
 test.describe('Energy Certificate Flow Tests', () => {
   test.beforeEach(async ({ request }) => {
     // Restore full base state: property docs done + EC not-started
@@ -135,5 +191,46 @@ test.describe('Energy Certificate Flow Tests', () => {
     await page.getByTestId('review-submit-btn').click();
 
     await expect(page.locator('h1').first()).toContainText('¡Todo listo');
+  });
+
+  test('E2E-FLOW-05: thermal step stays completable when heating type is omitted', async ({ page, request }) => {
+    const { customerUrl } = await getProjectAccess(request, EC05_CODE);
+    await page.goto(customerUrl);
+    await page.waitForLoadState('networkidle');
+
+    await openEnergyCertificate(page);
+    await fillHousingStep(page);
+    await fillThermalStep(page, { selectHeatingType: false });
+
+    await expect(page.getByText('¿Qué producto/s se está vendiendo?')).toBeVisible();
+    await fillAdditionalStep(page);
+
+    const confirmButton = page.getByTestId('energy-cert-confirm-btn');
+    await expect(confirmButton).toBeEnabled({ timeout: 15000 });
+    await confirmButton.click();
+
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await expect(page.getByText('Certificado energético — confirmado')).toBeVisible();
+
+    await expect.poll(async () => {
+      const response = await request.get(`${BACKEND}/api/project/${EC05_CODE}`, { timeout: 15000 });
+      if (!response.ok()) {
+        return null;
+      }
+
+      const body = await response.json();
+      const energyCertificate = body.project?.formData?.energyCertificate;
+      return JSON.stringify({
+        status: energyCertificate?.status ?? null,
+        heatingEmitterType: energyCertificate?.thermal?.heatingEmitterType ?? null,
+        radiatorMaterial: energyCertificate?.thermal?.radiatorMaterial ?? null,
+        hasCompletedAt: Boolean(energyCertificate?.completedAt),
+      });
+    }, { timeout: 20000 }).toBe(JSON.stringify({
+      status: 'completed',
+      heatingEmitterType: null,
+      radiatorMaterial: null,
+      hasCompletedAt: true,
+    }));
   });
 });
