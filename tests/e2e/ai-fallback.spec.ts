@@ -276,4 +276,96 @@ test.describe('AI fallback', () => {
     await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 30000 });
     expect(extractionCalls).toBeGreaterThan(0);
   });
+
+  test('AI-02: offline IBI PDF upload shows a friendly error and recovers after reconnect', async ({ page, request }) => {
+    const projectCode = 'ELT20250005';
+    await request.post(`${API_BASE}/api/test/reset-property-docs/${projectCode}`);
+    const { customerUrl } = await getProjectAccess(request, projectCode);
+    let pdfConversionAvailable = false;
+
+    await page.route('**/api/pdf-to-images', async (route) => {
+      if (pdfConversionAvailable) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            images: [
+              {
+                name: 'ibi-offline-page-1.svg',
+                mimeType: 'image/svg+xml',
+                data: createMockPdfImageData(),
+              },
+            ],
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'pdf conversion unavailable' }),
+      });
+    });
+
+    await page.route('**/api/extract', async (route) => {
+      const requestBody = route.request().postDataJSON();
+      if (requestBody?.documentType !== 'ibi') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          extraction: {
+            extractedData: {
+              referenciaCatastral: '1234567VK1234A0001RT',
+              titular: 'IAN EDUARDO DROMUNDO HERNANDEZ',
+              direccion: 'Calle Mayor 1',
+            },
+            confidence: 0.96,
+            isCorrectDocument: true,
+            documentTypeDetected: 'ibi',
+            needsManualReview: false,
+            confirmedByUser: true,
+          },
+          needsManualReview: false,
+          message: 'Datos extraídos correctamente.',
+        }),
+      });
+    });
+
+    await page.goto(customerUrl);
+    await expect(page.locator('h1').first()).toContainText('Documentos');
+
+    const pdfBuffer = await createPdfBuffer();
+
+    await page.context().setOffline(true);
+    await page.getByTestId('ibi-input').setInputFiles({
+      name: 'ibi-offline.pdf',
+      mimeType: 'application/pdf',
+      buffer: pdfBuffer,
+    });
+
+    await expect(page.getByText(/no se pudo convertir el pdf sin conexión/i)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/Failed to fetch dynamically imported module/i)).toHaveCount(0);
+
+    await page.context().setOffline(false);
+    pdfConversionAvailable = true;
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('h1').first()).toContainText('Documentos');
+    await page.getByTestId('ibi-input').setInputFiles({
+      name: 'ibi-offline.pdf',
+      mimeType: 'application/pdf',
+      buffer: pdfBuffer,
+    });
+
+    await expect(page.getByText(/PDF original guardado: 1 archivo/i)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('1234567VK1234A0001RT')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/no se pudo convertir el pdf sin conexión/i)).toHaveCount(0);
+  });
 });

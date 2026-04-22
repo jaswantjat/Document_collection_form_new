@@ -54,6 +54,9 @@ const {
   renderedImageToPdfBuffer,
 } = require('./lib/pdfGenerationRoutes');
 const { registerAutocropperRoutes } = require('./lib/autocropperRoutes');
+const { createLogger } = require('./lib/logger');
+const { createDatabasePersistence } = require('./lib/databasePersistence');
+const { buildRuntimeHealth } = require('./lib/runtimeHealth');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -88,6 +91,8 @@ function getStirlingApiKey() {
 
 loadEnvFiles();
 
+const logger = createLogger({ service: 'document-collection-backend' });
+
 const isProduction =
   process.env.NODE_ENV === 'production'
   || process.env.RAILWAY_ENVIRONMENT !== undefined;
@@ -118,16 +123,19 @@ fs.mkdirSync(assetUploadDir, { recursive: true });
 
 const initialOpenRouterApiKey = getOpenRouterApiKey();
 if (!initialOpenRouterApiKey) {
-  console.warn('⚠️  OPENROUTER_API_KEY not set in .env — AI extraction will fail');
-  console.warn(`   Checked: ${ENV_PATHS.join(' | ')}`);
+  logger.warn('startup.openrouter_missing', {
+    checkedPaths: ENV_PATHS,
+    failureReason: 'OPENROUTER_API_KEY not configured',
+  });
 } else {
-  console.log(
-    '✅ OPENROUTER_API_KEY loaded:',
-    `${initialOpenRouterApiKey.slice(0, 8)}...`
-  );
+  logger.info('startup.openrouter_loaded', {
+    keyPreview: `${initialOpenRouterApiKey.slice(0, 8)}...`,
+  });
 }
 if (trustProxy !== false) {
-  console.log(`✅ Express trust proxy configured: ${String(trustProxy)}`);
+  logger.info('startup.trust_proxy_configured', {
+    trustProxy: String(trustProxy),
+  });
 }
 
 if (isProduction) {
@@ -136,8 +144,9 @@ if (isProduction) {
     (key) => !process.env[key] || process.env[key] === 'your_openrouter_api_key_here'
   );
   if (missing.length > 0) {
-    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
-    console.error('   Server cannot start in production without these values.');
+    logger.error('startup.required_env_missing', {
+      missing,
+    });
     process.exit(1);
   }
 }
@@ -193,67 +202,22 @@ app.use(
 app.use(express.json({ limit: '25mb' }));
 app.use('/uploads', express.static(uploadDir));
 
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'document-collection-backend',
-    timestamp: new Date().toISOString(),
-    environment: isProduction ? 'production' : 'development',
-  });
-});
-
-function loadDB() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, 'utf8');
-      const parsed = JSON.parse(raw);
-      const changed = ensureDefaultTestProjects(parsed, {
-        isProduction,
-        seedSampleData: process.env.SEED_SAMPLE_DATA,
-      });
-      if (changed) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf8');
-      }
-      return parsed;
-    }
-  } catch (error) {
-    console.error('Error loading DB, starting fresh:', error.message);
-  }
-
-  return {
+const persistence = createDatabasePersistence({
+  dbFile: DB_FILE,
+  createDefaultDatabase: () => ({
     projects: getDefaultProjects({
       isProduction,
       seedSampleData: process.env.SEED_SAMPLE_DATA,
     }),
-  };
-}
-
-let saveDBWriting = false;
-let saveDBDirty = false;
-function saveDB() {
-  saveDBDirty = true;
-  if (saveDBWriting) return;
-
-  function doWrite() {
-    if (!saveDBDirty) return;
-    saveDBDirty = false;
-    saveDBWriting = true;
-    const snapshot = JSON.stringify(database, null, 2);
-    fs.writeFile(DB_FILE, snapshot, 'utf8', (err) => {
-      saveDBWriting = false;
-      if (err) {
-        console.error('Error saving DB:', err.message);
-      }
-      if (saveDBDirty) {
-        doWrite();
-      }
-    });
-  }
-
-  setImmediate(doWrite);
-}
-
-const database = loadDB();
+  }),
+  postProcessDatabase: (database) => ensureDefaultTestProjects(database, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+  }),
+  logger: logger.child({ module: 'database' }),
+});
+const database = persistence.database;
+const saveDB = persistence.saveDatabase;
 
 function buildCustomerProjectUrl(code) {
   const params = new URLSearchParams({ code });
@@ -381,6 +345,7 @@ function serializeProject(project, { includeAccessToken = false } = {}) {
     assessorId: project.assessorId,
     formData: project.formData,
     assetFiles: project.assetFiles || {},
+    deliveryStatus: project.deliveryStatus || {},
     lastActivity: project.lastActivity,
     createdAt: project.createdAt,
     submissionCount: Array.isArray(project.submissions) ? project.submissions.length : 0,
@@ -429,6 +394,57 @@ const DASHBOARD_LOGIN_MAX_ATTEMPTS = 10;
 const dashboardSessions = new Map();
 const dashboardLoginAttempts = new Map();
 
+function getRuntimeHealth() {
+  const persistenceStatus = persistence.getStatus();
+  return buildRuntimeHealth({
+    service: 'document-collection-backend',
+    environment: isProduction ? 'production' : 'development',
+    persistence: persistenceStatus,
+    checks: {
+      dataDirectory: {
+        ok: true,
+        required: true,
+        message: DATA_DIR,
+      },
+      database: {
+        ok: persistenceStatus.ready,
+        required: true,
+        message: persistenceStatus.lastLoadSource,
+      },
+      openRouter: {
+        ok: Boolean(initialOpenRouterApiKey),
+        required: isProduction,
+        message: initialOpenRouterApiKey ? 'configured' : 'missing',
+      },
+      dashboardPassword: {
+        ok: Boolean(DASHBOARD_PASSWORD),
+        required: isProduction,
+        message: DASHBOARD_PASSWORD ? 'configured' : 'missing',
+      },
+      stirlingPdf: {
+        ok: Boolean(getStirlingApiKey()),
+        required: false,
+        message: getStirlingApiKey() ? 'configured' : 'missing',
+      },
+      formNotifications: {
+        ok: Boolean(process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL),
+        required: false,
+        message: process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL ? 'configured' : 'missing',
+      },
+      docflowWebhook: {
+        ok: Boolean(process.env.ELTEX_DOCFLOW_WEBHOOK_URL),
+        required: false,
+        message: process.env.ELTEX_DOCFLOW_WEBHOOK_URL ? 'configured' : 'missing',
+      },
+    },
+  });
+}
+
+app.get('/health', (_req, res) => {
+  const health = getRuntimeHealth();
+  res.status(health.ready ? 200 : 503).json(health);
+});
+
 function purgeExpiredDashboardSessions() {
   const now = Date.now();
   for (const [token, expiresAt] of dashboardSessions.entries()) {
@@ -448,7 +464,9 @@ function getLoginAttemptEntry(ip) {
 }
 
 if (isProduction && !DASHBOARD_PASSWORD) {
-  console.warn('⚠️  DASHBOARD_PASSWORD not set; dashboard login is disabled until configured.');
+  logger.warn('startup.dashboard_password_missing', {
+    failureReason: 'Dashboard login is disabled until configured.',
+  });
 }
 
 app.post('/api/dashboard/login', (req, res) => {
@@ -546,6 +564,8 @@ registerProjectRoutes({
   FORM_NOTIFICATIONS_WEBHOOK_SECRET,
   LEGACY_DOCFLOW_WEBHOOK_SECRET,
   getProjectSnapshot,
+  getRuntimeHealth,
+  logger,
 });
 
 registerDashboardRoutes({
@@ -569,6 +589,7 @@ registerDashboardRoutes({
   getElectricityPages,
   renderedImageToPdfBuffer,
   uuidv4,
+  logger,
 });
 
 registerPdfConversionRoutes({
@@ -577,6 +598,7 @@ registerPdfConversionRoutes({
   pdfUpload,
   STIRLING_PDF_URL,
   getStirlingApiKey,
+  logger,
 });
 
 registerExtractionRoutes({
@@ -630,29 +652,42 @@ app.use((err, req, res, _next) => {
   const message = isProduction
     ? 'Internal server error'
     : err.message || 'Internal server error';
-  console.error(`[ERROR] ${req.method} ${req.path} → ${status}: ${err.message}`);
+  logger.error('request.unhandled_error', {
+    route: req.path,
+    method: req.method,
+    statusCode: status,
+    failureReason: err.message,
+  }, err);
   if (!res.headersSent) {
-    res.status(status).json({ success: false, error: message });
+    res.status(status).json({
+      success: false,
+      error: 'INTERNAL_SERVER_ERROR',
+      message,
+    });
   }
 });
 
 const servers = [];
 const primaryServer = app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  if (isProduction) {
-    console.log('✅ Production mode: serving frontend from dist/');
-  } else {
-    console.log(`🔧 Development mode: proxying to Vite at ${viteDevProxyTarget}`);
-  }
+  logger.info('startup.server_listening', {
+    port: PORT,
+    mode: isProduction ? 'production' : 'development',
+    frontendMode: isProduction ? 'dist' : `vite-proxy:${viteDevProxyTarget}`,
+  });
 
   const availableTestProjects = DEFAULT_TEST_CODES
     .map((code) => database.projects[code])
     .filter(Boolean);
   if (!isProduction && availableTestProjects.length > 0) {
-    console.log('Test codes: ELT20250001 (solar) | ELT20250002 (aerothermal) | ELT20250003 (solar) | ELT20250004 (solar-ec) | ELT20250005 (ec-flow)');
-    console.log('Test phones: +34612345678 | +34623456789 | +34655443322 | +34666000004 | +34666000005');
+    logger.info('startup.test_projects_available', {
+      codes: DEFAULT_TEST_CODES,
+      phones: ['+34612345678', '+34623456789', '+34655443322', '+34666000004', '+34666000005'],
+    });
     availableTestProjects.forEach((project) => {
-      console.log(`🔗 ${project.code}: ${buildCustomerProjectUrl(project.code)}`);
+      logger.info('startup.test_project_link', {
+        projectCode: project.code,
+        customerUrl: buildCustomerProjectUrl(project.code),
+      });
     });
   }
 });
@@ -664,12 +699,23 @@ if (!isProduction) {
 
 if (isProduction && PORT !== LEGACY_COMPAT_PORT) {
   const compatServer = app.listen(LEGACY_COMPAT_PORT, () => {
-    console.log(`✅ Legacy compatibility listener active on http://localhost:${LEGACY_COMPAT_PORT}`);
+    logger.info('startup.legacy_listener_active', {
+      port: LEGACY_COMPAT_PORT,
+    });
   });
   compatServer.on('error', (error) => {
-    console.warn(`⚠️  Failed to bind legacy compatibility port ${LEGACY_COMPAT_PORT}: ${error.message}`);
+    logger.warn('startup.legacy_listener_failed', {
+      port: LEGACY_COMPAT_PORT,
+      failureReason: error.message,
+    }, error);
   });
   servers.push(compatServer);
 }
 
-registerGracefulShutdown({ servers });
+registerGracefulShutdown({
+  servers,
+  logger: {
+    log: (message) => logger.info('shutdown.lifecycle', { message }),
+    error: (message, error) => logger.error('shutdown.lifecycle', { message }, error),
+  },
+});

@@ -5,15 +5,75 @@ type ApiImage = { name: string; data: string; mimeType: string };
 // uploads skip it entirely.
 let pdfjsCache: Promise<typeof import('pdfjs-dist')> | null = null;
 
+function isPdfChunkImportError(error: Pick<Error, 'message' | 'name'>): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('failed to fetch dynamically imported module')
+    || message.includes('importing a module script failed')
+    || message.includes('failed to load module script')
+    || message.includes('load failed for the module')
+    || message.includes('loading chunk')
+    || message.includes('error loading')
+    || message === 'load failed'
+    || error.name === 'ChunkLoadError'
+  );
+}
+
+function isOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function isLikelyNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('failed to fetch')
+    || message.includes('networkerror')
+    || message.includes('network request failed')
+    || message.includes('load failed')
+  );
+}
+
+function normalizePdfConversionError(
+  error: unknown,
+  context?: { backendError?: unknown }
+): Error {
+  const fallbackMessage = 'No se pudo leer el PDF. Comprueba que no esté protegido con contraseña y vuelve a intentarlo.';
+  const candidate = error instanceof Error ? error : new Error(String(error ?? fallbackMessage));
+  const offlineLikeFailure = isOffline() || isLikelyNetworkError(context?.backendError);
+
+  if (offlineLikeFailure && isPdfChunkImportError(candidate)) {
+    return new Error('No se pudo convertir el PDF sin conexión. Vuelve a conectarte o sube fotos del documento.');
+  }
+
+  if (isPdfChunkImportError(candidate)) {
+    return new Error('No se pudo cargar el lector de PDF. Recarga la página e inténtalo de nuevo.');
+  }
+
+  if (
+    candidate.message.startsWith('No se pudo ')
+    || candidate.message.startsWith('Error al convertir')
+  ) {
+    return candidate;
+  }
+
+  return new Error(fallbackMessage);
+}
+
 function getPdfjs(): Promise<typeof import('pdfjs-dist')> {
   if (!pdfjsCache) {
-    pdfjsCache = import('pdfjs-dist').then((pdfjs) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url,
-      ).toString();
-      return pdfjs;
-    });
+    pdfjsCache = import('pdfjs-dist')
+      .then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url,
+        ).toString();
+        return pdfjs;
+      })
+      .catch((error) => {
+        pdfjsCache = null;
+        throw error;
+      });
   }
   return pdfjsCache;
 }
@@ -103,9 +163,27 @@ async function convertInBrowser(file: File): Promise<File[]> {
 }
 
 export async function pdfToImageFiles(file: File): Promise<File[]> {
+  if (isOffline()) {
+    try {
+      return await convertInBrowser(file);
+    } catch (error) {
+      throw normalizePdfConversionError(error);
+    }
+  }
+
   try {
     return await convertViaBackend(file);
-  } catch {
-    return await convertInBrowser(file);
+  } catch (backendError) {
+    try {
+      return await convertInBrowser(file);
+    } catch (browserError) {
+      console.error('PDF conversion fallback failed:', browserError, 'backend error:', backendError);
+      throw normalizePdfConversionError(browserError, { backendError });
+    }
   }
 }
+
+export const __pdfToImagesTestUtils = {
+  isPdfChunkImportError,
+  normalizePdfConversionError,
+};

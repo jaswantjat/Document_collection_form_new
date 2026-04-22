@@ -19,6 +19,9 @@ test.describe('Smoke tests', () => {
     const response = await request.get(`${API_BASE}/api/health`, {
       failOnStatusCode: false,
     });
-    expect([200, 404]).toContain(response.status());
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.ready).toBe(true);
+    expect(['ok', 'degraded']).toContain(body.status);
   });
 });

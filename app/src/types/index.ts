@@ -2,6 +2,29 @@
 
 export type ProductType = 'solar' | 'aerothermal' | 'solar-aerothermal';
 export type EnergyCertificateStatus = 'not-started' | 'in-progress' | 'skipped' | 'completed';
+export type DeliveryChannelKey = 'formNotifications' | 'docflowNewOrder' | 'docflowDocUpdate';
+export type DeliveryOutcome = 'idle' | 'configured' | 'delivered' | 'failed' | 'skipped' | 'disabled';
+
+export interface DeliveryAttemptRecord {
+  attemptedAt: string;
+  eventType: string | null;
+  outcome: DeliveryOutcome;
+  statusCode: number | null;
+  message: string | null;
+}
+
+export interface DeliveryChannelStatus {
+  configured: boolean;
+  state: DeliveryOutcome;
+  lastEventType: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastStatusCode: number | null;
+  lastError: string | null;
+  recentAttempts: DeliveryAttemptRecord[];
+}
+
+export type DeliveryStatusMap = Partial<Record<DeliveryChannelKey, DeliveryChannelStatus>>;
 
 export interface ProjectData {
   code: string;
@@ -14,6 +37,7 @@ export interface ProjectData {
   assessor: string;
   assessorId: string;
   formData: FormData | null;
+  deliveryStatus?: DeliveryStatusMap;
   lastActivity: string | null;
   createdAt: string;
 }

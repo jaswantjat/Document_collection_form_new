@@ -26,6 +26,7 @@ attached_assets/
 # Uploads and temporary files
 backend/uploads/
 backend/db.json
+backend/db.last-known-good.json
 backend/output-poder.pdf
 *.log
 *.bak

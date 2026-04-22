@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { DashboardProjectRecord } from '@/services/api';
+import { getDeliveryStatusViewModels } from '@/lib/deliveryStatus';
 import { getDashboardProjectSummary } from '@/lib/dashboardProject';
 import {
   formatDate,
@@ -36,6 +37,71 @@ import {
 } from './DashboardDocumentPanels';
 import type { LoadProjectDetail } from './DashboardDocumentActions';
 import { InfoCard, ProductBadge } from './DashboardShared';
+
+function DeliveryStatusSection({
+  deliveryStatus,
+}: {
+  deliveryStatus: DashboardProjectRecord['deliveryStatus'];
+}) {
+  const items = getDeliveryStatusViewModels(deliveryStatus);
+
+  return (
+    <section className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900">Estado de notificaciones</h3>
+        <p className="text-xs text-gray-500">
+          Último estado conocido de las integraciones de salida del expediente.
+        </p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        {items.map((item) => {
+          const toneClass =
+            item.tone === 'emerald'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : item.tone === 'amber'
+                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                : item.tone === 'red'
+                  ? 'border-red-200 bg-red-50 text-red-800'
+                  : 'border-gray-200 bg-gray-50 text-gray-700';
+
+          return (
+            <div key={item.key} className={`rounded-xl border p-3 ${toneClass}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide opacity-75">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">{item.state}</p>
+                </div>
+                {item.lastStatusCode ? (
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold">
+                    HTTP {item.lastStatusCode}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-3 space-y-1 text-xs">
+                <p>
+                  Último intento: {item.lastAttemptAt ? formatDate(item.lastAttemptAt) : '—'}
+                </p>
+                <p>
+                  Último éxito: {item.lastSuccessAt ? formatDate(item.lastSuccessAt) : '—'}
+                </p>
+                <p>
+                  Evento: {item.lastEventType || '—'}
+                </p>
+                {item.lastError ? (
+                  <p className="font-medium text-red-700">Error: {item.lastError}</p>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export function ProjectDetailModal({
   projectCode,
@@ -209,6 +275,7 @@ export function ProjectDetailModal({
                   <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
                 </div>
 
+                <DeliveryStatusSection deliveryStatus={project.deliveryStatus} />
                 <CompanyDisplay representation={project.formData?.representation} />
                 <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
                 <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />

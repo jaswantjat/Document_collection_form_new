@@ -1,0 +1,40 @@
+name: Post Deploy Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public frontend base URL
+        required: true
+        default: https://documentos.eltex.es
+      api_base_url:
+        description: Public API base URL
+        required: true
+        default: https://documentos.eltex.es
+      project_code:
+        description: Known project code for detail smoke
+        required: false
+      notification_channel:
+        description: Optional deliveryStatus channel to verify
+        required: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SMOKE_BASE_URL: ${{ inputs.base_url }}
+      SMOKE_API_BASE_URL: ${{ inputs.api_base_url }}
+      SMOKE_PROJECT_CODE: ${{ inputs.project_code }}
+      SMOKE_NOTIFICATION_CHANNEL: ${{ inputs.notification_channel }}
+      SMOKE_DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run post-deploy smoke checks
+        run: node scripts/production-smoke.mjs

@@ -54,7 +54,9 @@ function registerDashboardRoutes({
   getElectricityPages,
   renderedImageToPdfBuffer,
   uuidv4,
+  logger,
 }) {
+  const routeLogger = logger.child({ module: 'dashboardRoutes' });
   app.get('/api/dashboard', requireDashboardAuth, (_req, res) => {
     const projects = Object.values(database.projects)
       .map((project) => serializeDashboardProject(project))
@@ -144,12 +146,19 @@ function registerDashboardRoutes({
     try {
       await fs.promises.rm(projectAssetsDir, { recursive: true, force: true });
     } catch (err) {
-      console.warn(`[delete] Could not remove asset directory for ${code}:`, err.message);
+      routeLogger.warn('dashboard.project_delete.asset_cleanup_failed', {
+        route: '/api/dashboard/project/:code',
+        projectCode: code,
+        failureReason: err.message,
+      }, err);
     }
 
     delete database.projects[code];
     saveDB();
-    console.log(`[delete] Project ${code} deleted by admin`);
+    routeLogger.info('dashboard.project_delete.completed', {
+      route: '/api/dashboard/project/:code',
+      projectCode: code,
+    });
     res.json({ success: true });
   });
 

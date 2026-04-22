@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci --legacy-peer-deps
+
+      - name: Install app dependencies
+        run: npm --prefix app ci --legacy-peer-deps
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint app
+        run: npm run lint:app
+
+      - name: Run frontend tests
+        run: npm run test:app
+
+      - name: Run backend tests
+        run: npm run test:backend
+
+      - name: Build app
+        run: npm run build:app
+
+      - name: Start backend
+        run: |
+          PORT=3002 npm --prefix backend run dev > /tmp/eltex-backend.log 2>&1 &
+          echo $! > /tmp/eltex-backend.pid
+
+      - name: Start frontend
+        run: |
+          E2E_API_BASE_URL=http://127.0.0.1:3002 npm --prefix app run dev -- --host 127.0.0.1 --port 5003 > /tmp/eltex-frontend.log 2>&1 &
+          echo $! > /tmp/eltex-frontend.pid
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3002/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/eltex-backend.log
+          exit 1
+
+      - name: Wait for frontend
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5003/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/eltex-frontend.log
+          exit 1
+
+      - name: Run critical Playwright suite
+        env:
+          E2E_BASE_URL: http://127.0.0.1:5003
+          E2E_API_BASE_URL: http://127.0.0.1:3002
+        run: npm run test:e2e:critical
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+            /tmp/eltex-backend.log
+            /tmp/eltex-frontend.log

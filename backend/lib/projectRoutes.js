@@ -5,6 +5,7 @@ const {
   shouldSkipDuplicateFormNotification,
 } = require('./formNotificationDedupe');
 const { extractCompletedDocKeys } = require('./formNotificationProjectState');
+const { recordDeliveryAttempt } = require('./deliveryStatus');
 
 function checkCataloniaPDFs(formData) {
   if (!formData) {
@@ -52,6 +53,7 @@ function createFormNotificationSender({
   FORM_NOTIFICATIONS_WEBHOOK_SECRET,
   getProjectSnapshot,
   saveDB,
+  logger,
 }) {
   return async function fireFormNotification(
     project,
@@ -63,7 +65,16 @@ function createFormNotificationSender({
     } = {}
   ) {
     const webhookUrl = process.env.ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL;
-    if (!webhookUrl) return true;
+    if (!webhookUrl) {
+      recordDeliveryAttempt(project, 'formNotifications', {
+        configured: false,
+        eventType,
+        outcome: 'disabled',
+        message: 'ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL not configured.',
+      });
+      saveDB();
+      return true;
+    }
 
     const payload = buildFormNotificationPayload({
       eventType,
@@ -78,16 +89,29 @@ function createFormNotificationSender({
       publicFormBaseUrl: process.env.ELTEX_PUBLIC_FORM_BASE_URL,
     });
 
-    console.log(
-      `[FormNotifications] ${eventType} payload for ${project.code}: `
-      + `source=${payload.source} | uploaded=${payload.documents.uploaded_keys.join(', ') || 'none'} `
-      + `| pending=${payload.documents.pending_labels.join(' | ')}`
-    );
+    logger.info('form_notification.payload', {
+      route: '/api/project/:code/submit',
+      projectCode: project.code,
+      eventType,
+      source: payload.source,
+      uploadedKeys: payload.documents.uploaded_keys,
+      pendingLabels: payload.documents.pending_labels,
+    });
 
     if (shouldSkipDuplicateFormNotification(project, payload)) {
-      console.log(
-        `[FormNotifications] ${eventType} skipped for ${project.code}: duplicate payload inside dedupe window`
-      );
+      recordDeliveryAttempt(project, 'formNotifications', {
+        configured: true,
+        eventType,
+        outcome: 'skipped',
+        message: 'Duplicate payload inside dedupe window.',
+      });
+      saveDB();
+      logger.info('form_notification.skipped', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        eventType,
+        reason: 'duplicate payload inside dedupe window',
+      });
       return true;
     }
 
@@ -104,27 +128,77 @@ function createFormNotificationSender({
 
       if (!response.ok) {
         const responseText = await response.text().catch(() => '');
-        console.error(
-          `[FormNotifications] ${eventType} failed for ${project.code}: HTTP ${response.status}${responseText ? ` ${responseText.slice(0, 200)}` : ''}`
-        );
+        recordDeliveryAttempt(project, 'formNotifications', {
+          configured: true,
+          eventType,
+          outcome: 'failed',
+          statusCode: response.status,
+          message: responseText ? responseText.slice(0, 200) : `HTTP ${response.status}`,
+        });
+        saveDB();
+        logger.error('form_notification.failed', {
+          route: '/api/project/:code/submit',
+          projectCode: project.code,
+          eventType,
+          statusCode: response.status,
+          failureReason: responseText ? responseText.slice(0, 200) : 'non-ok response',
+        });
         return false;
       }
 
       recordFormNotification(project, payload);
+      recordDeliveryAttempt(project, 'formNotifications', {
+        configured: true,
+        eventType,
+        outcome: 'delivered',
+        statusCode: response.status,
+        message: 'Notification delivered.',
+      });
       saveDB();
-      console.log(`[FormNotifications] ${eventType} sent for ${project.code} → HTTP ${response.status}`);
+      logger.info('form_notification.delivered', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        eventType,
+        statusCode: response.status,
+      });
       return true;
     } catch (err) {
-      console.error(`[FormNotifications] ${eventType} failed for ${project.code}:`, err.message);
+      recordDeliveryAttempt(project, 'formNotifications', {
+        configured: true,
+        eventType,
+        outcome: 'failed',
+        message: err.message,
+      });
+      saveDB();
+      logger.error('form_notification.failed', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        eventType,
+        failureReason: err.message,
+      }, err);
       return false;
     }
   };
 }
 
-function createDocFlowSenders({ LEGACY_DOCFLOW_WEBHOOK_SECRET, getProjectSnapshot }) {
+function createDocFlowSenders({
+  LEGACY_DOCFLOW_WEBHOOK_SECRET,
+  getProjectSnapshot,
+  saveDB,
+  logger,
+}) {
   async function fireDocFlowNewOrder(project, docsUploaded = []) {
     const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
-    if (!webhookUrl) return true;
+    if (!webhookUrl) {
+      recordDeliveryAttempt(project, 'docflowNewOrder', {
+        configured: false,
+        eventType: 'new_order',
+        outcome: 'disabled',
+        message: 'ELTEX_DOCFLOW_WEBHOOK_URL not configured.',
+      });
+      saveDB();
+      return true;
+    }
 
     const snapshot = getProjectSnapshot(project.formData);
     const payload = {
@@ -145,13 +219,15 @@ function createDocFlowSenders({ LEGACY_DOCFLOW_WEBHOOK_SECRET, getProjectSnapsho
       docs_uploaded: docsUploaded,
     };
 
-    console.log(
-      `[DocFlow] new_order payload for ${project.code}: customer_name=${JSON.stringify(payload.customer_name)} `
-      + `| first_name=${JSON.stringify(payload.first_name)} | last_name=${JSON.stringify(payload.last_name)} `
-      + `| locale=${JSON.stringify(payload.locale)} | product_type=${JSON.stringify(payload.product_type)} `
-      + `| phone=${payload.phone} | contract_date=${payload.contract_date} `
-      + `| assessor=${JSON.stringify(payload.assessor)} | docs_uploaded=${docsUploaded.join(', ') || 'none'}`
-    );
+    logger.info('docflow.new_order.payload', {
+      route: '/api/project/:code/submit',
+      projectCode: project.code,
+      eventType: 'new_order',
+      docsUploaded,
+      assessor: payload.assessor,
+      locale: payload.locale,
+      productType: payload.product_type,
+    });
 
     try {
       const response = await fetch(webhookUrl, {
@@ -163,29 +239,135 @@ function createDocFlowSenders({ LEGACY_DOCFLOW_WEBHOOK_SECRET, getProjectSnapsho
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(5000),
       });
-      console.log(`[DocFlow] new_order sent for ${project.code} → HTTP ${response.status}`);
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '');
+        recordDeliveryAttempt(project, 'docflowNewOrder', {
+          configured: true,
+          eventType: 'new_order',
+          outcome: 'failed',
+          statusCode: response.status,
+          message: responseText ? responseText.slice(0, 200) : `HTTP ${response.status}`,
+        });
+        saveDB();
+        logger.error('docflow.new_order.failed', {
+          route: '/api/project/:code/submit',
+          projectCode: project.code,
+          statusCode: response.status,
+          failureReason: responseText ? responseText.slice(0, 200) : 'non-ok response',
+        });
+        return false;
+      }
+
+      recordDeliveryAttempt(project, 'docflowNewOrder', {
+        configured: true,
+        eventType: 'new_order',
+        outcome: 'delivered',
+        statusCode: response.status,
+        message: 'Webhook delivered.',
+      });
+      saveDB();
+      logger.info('docflow.new_order.delivered', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        statusCode: response.status,
+      });
       return true;
     } catch (err) {
-      console.error(`[DocFlow] new_order failed for ${project.code}:`, err.message);
+      recordDeliveryAttempt(project, 'docflowNewOrder', {
+        configured: true,
+        eventType: 'new_order',
+        outcome: 'failed',
+        message: err.message,
+      });
+      saveDB();
+      logger.error('docflow.new_order.failed', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        failureReason: err.message,
+      }, err);
       return false;
     }
   }
 
-  function fireDocFlowDocUpdate(orderCode, docsUploaded) {
+  async function fireDocFlowDocUpdate(project, docsUploaded) {
     const webhookUrl = process.env.ELTEX_DOCFLOW_WEBHOOK_URL;
-    if (!webhookUrl) return;
+    if (!webhookUrl) {
+      recordDeliveryAttempt(project, 'docflowDocUpdate', {
+        configured: false,
+        eventType: 'doc_update',
+        outcome: 'disabled',
+        message: 'ELTEX_DOCFLOW_WEBHOOK_URL not configured.',
+      });
+      saveDB();
+      return true;
+    }
 
-    console.log(`[DocFlow] doc_update payload for ${orderCode}: docs_uploaded=${docsUploaded.join(', ') || 'none'}`);
-    fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET,
-      },
-      body: JSON.stringify({ type: 'doc_update', order_id: orderCode, docs_uploaded: docsUploaded }),
-    })
-      .then((response) => console.log(`[DocFlow] doc_update sent for ${orderCode} → HTTP ${response.status}`))
-      .catch((err) => console.error(`[DocFlow] doc_update failed for ${orderCode}:`, err.message));
+    logger.info('docflow.doc_update.payload', {
+      route: '/api/project/:code/submit',
+      projectCode: project.code,
+      eventType: 'doc_update',
+      docsUploaded,
+    });
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET,
+        },
+        body: JSON.stringify({ type: 'doc_update', order_id: project.code, docs_uploaded: docsUploaded }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '');
+        recordDeliveryAttempt(project, 'docflowDocUpdate', {
+          configured: true,
+          eventType: 'doc_update',
+          outcome: 'failed',
+          statusCode: response.status,
+          message: responseText ? responseText.slice(0, 200) : `HTTP ${response.status}`,
+        });
+        saveDB();
+        logger.error('docflow.doc_update.failed', {
+          route: '/api/project/:code/submit',
+          projectCode: project.code,
+          statusCode: response.status,
+          failureReason: responseText ? responseText.slice(0, 200) : 'non-ok response',
+        });
+        return false;
+      }
+
+      recordDeliveryAttempt(project, 'docflowDocUpdate', {
+        configured: true,
+        eventType: 'doc_update',
+        outcome: 'delivered',
+        statusCode: response.status,
+        message: 'Webhook delivered.',
+      });
+      saveDB();
+      logger.info('docflow.doc_update.delivered', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        statusCode: response.status,
+      });
+      return true;
+    } catch (err) {
+      recordDeliveryAttempt(project, 'docflowDocUpdate', {
+        configured: true,
+        eventType: 'doc_update',
+        outcome: 'failed',
+        message: err.message,
+      });
+      saveDB();
+      logger.error('docflow.doc_update.failed', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        failureReason: err.message,
+      }, err);
+      return false;
+    }
   }
 
   return { fireDocFlowNewOrder, fireDocFlowDocUpdate };
@@ -226,19 +408,29 @@ function registerProjectRoutes({
   FORM_NOTIFICATIONS_WEBHOOK_SECRET,
   LEGACY_DOCFLOW_WEBHOOK_SECRET,
   getProjectSnapshot,
+  getRuntimeHealth,
+  logger,
 }) {
+  const routeLogger = logger.child({ module: 'projectRoutes' });
   const fireFormNotification = createFormNotificationSender({
     FORM_NOTIFICATIONS_WEBHOOK_SECRET,
     getProjectSnapshot,
     saveDB,
+    logger: routeLogger.child({ integration: 'formNotifications' }),
   });
   const { fireDocFlowNewOrder, fireDocFlowDocUpdate } = createDocFlowSenders({
     LEGACY_DOCFLOW_WEBHOOK_SECRET,
     getProjectSnapshot,
+    saveDB,
+    logger: routeLogger.child({ integration: 'docflow' }),
   });
 
   app.get('/api/health', (_req, res) => {
-    res.json({ success: true, message: 'Backend is running', timestamp: new Date().toISOString() });
+    const health = getRuntimeHealth();
+    res.status(health.ready ? 200 : 503).json({
+      success: health.ready,
+      ...health,
+    });
   });
 
   app.get('/api/project/:code', requireProject, (req, res) => {
@@ -300,6 +492,7 @@ function registerProjectRoutes({
       assessor: assessor.trim(),
       assessorId: assessorId ? String(assessorId).trim() : assessor.trim(),
       formData: null,
+      deliveryStatus: {},
       submissions: [],
       lastActivity: null,
       createdAt: new Date().toISOString(),
@@ -431,7 +624,12 @@ function registerProjectRoutes({
 
       const docsUploaded = extractCompletedDocKeys(formData, project.assetFiles, existingFormData);
       const notificationLabel = hasFormNotificationsWebhookConfigured() ? 'FormNotifications' : 'DocFlow';
-      console.log(`[${notificationLabel}] ${project.code} docs detected: ${docsUploaded.join(', ') || 'none'}`);
+      routeLogger.info('submission.docs_detected', {
+        route: '/api/project/:code/submit',
+        projectCode: project.code,
+        notificationTarget: notificationLabel,
+        docsUploaded,
+      });
 
       if (!project.docflowNewOrderSent) {
         project.docflowNewOrderSent = true;
@@ -457,7 +655,7 @@ function registerProjectRoutes({
           submittedAt: submission.timestamp,
         });
       } else {
-        fireDocFlowDocUpdate(project.code, docsUploaded);
+        void fireDocFlowDocUpdate(project, docsUploaded);
       }
     } catch (error) {
       failSubmissionAttempt(project, normalizedAttemptId);
@@ -471,7 +669,11 @@ function registerProjectRoutes({
     (req, res, next) => {
       assetUpload.fields(ASSET_FIELDS)(req, res, (err) => {
         if (err) {
-          console.error('[upload-assets] multer error:', err);
+          routeLogger.warn('asset_upload.multer_error', {
+            route: '/api/project/:code/upload-assets',
+            projectCode: req.project?.code || req.params.code,
+            failureReason: err.message || 'multer error',
+          }, err);
           return res.status(400).json({
             success: false,
             message: err.message || 'Error al subir archivos.',

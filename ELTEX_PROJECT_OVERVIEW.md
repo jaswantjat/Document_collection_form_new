@@ -151,7 +151,7 @@ Custom domain: documentos.eltex.es
 
 ### Customer
 - Receives a unique project URL: `/?code=ELTXXXXXX`
-- No login required — the project code is their session token
+- No login required — the current production model uses the project code in the URL
 - Completes the form on mobile (mobile-first design)
 - Can return later and resume from their last incomplete step
 
@@ -449,6 +449,9 @@ A feature is "done" when:
 |---|---|
 | `OPENROUTER_API_KEY` | AI extraction (Gemini Flash) |
 | `DASHBOARD_PASSWORD` | Assessor dashboard login |
+| `STIRLING_PDF_API_KEY` | Upstream PDF-to-image conversion |
+| `ELTEX_FORM_NOTIFICATIONS_WEBHOOK_URL` | Preferred submit/update notification target |
+| `ELTEX_PUBLIC_FORM_BASE_URL` | Public customer-link base used in notifications |
 | `ELTEX_DOCFLOW_WEBHOOK_URL` | DocFlow CRM webhook endpoint |
 | `ELTEX_DOCFLOW_WEBHOOK_SECRET` | Webhook authentication header |
 | `PORT` | Set automatically by Railway |
@@ -457,22 +460,28 @@ A feature is "done" when:
 ### CI/CD Pipeline
 
 ```
-Developer pushes to main
+Developer pushes branch / opens PR
         │
         ▼
-GitHub receives push
+GitHub Actions CI
+        │  lint + unit + backend + build + critical Playwright
+        ▼
+Merge to main
         │
         ▼
-Railway detects push → starts build (Nixpacks)
+Railway detects push → starts build (Nixpacks, Node 20)
         │
         ▼
-Build: npm install → tsc → vite build
+Build: npm ci → tsc → vite build
         │
         ▼
 Deploy: replace running container
         │
         ▼
 Status: SUCCESS / FAILED (visible in Railway dashboard)
+        │
+        ▼
+Post-deploy smoke: `scripts/production-smoke.mjs` or GitHub workflow `Post Deploy Smoke`
 ```
 
 ---
@@ -482,27 +491,27 @@ Status: SUCCESS / FAILED (visible in Railway dashboard)
 - **HTTPS only** — enforced by Railway + custom domain TLS
 - **helmet** — sets secure HTTP headers (CSP, HSTS, X-Frame-Options, etc.)
 - **Rate limiting** — `express-rate-limit` on all API endpoints
-- **Access tokens** — each project has a `uuid-v4` token; all project mutations require it
+- **Customer access model** — customer access currently uses `/?code=...`; dashboard/admin remains password + session token protected
 - **Dashboard auth** — password-protected; session token returned on login
 - **Webhook secret** — `X-Eltex-Webhook-Secret` header validated by DocFlow
 - **No user PII in URLs** — project code contains no customer-identifiable information
 - **File upload validation** — `multer` enforces file type and size limits
 - **No direct DB access** — all data flows through the Express API
+- **Runtime readiness** — `/health` and `/api/health` now distinguish reachable vs ready and expose persistence status
+- **DB durability** — `db.json` writes use atomic temp-file rename plus `db.last-known-good.json` recovery
 
 ---
 
 ## 14. Testing
 
-### Unit Tests (Vitest) — 9 files, 227 tests
-- `app/src/lib/identityDocument.test.ts` — DNI/NIE type detection and back-side requirement logic
-- `app/src/lib/dashboardProject.test.ts` — Project summary / data resilience
-- `app/src/lib/energyCertificateValidation.test.ts` — EC field validation, conditional fields (shutters, A/C, solar panels)
-- `app/src/lib/signedDocumentOverlays.test.ts` — PDF signature overlay coordinates
-- `app/src/lib/provinceMapping.test.ts` — Province → region routing logic
-- `app/src/lib/phone.test.ts` — Phone number normalisation and lookup
-- `app/src/lib/photoValidation.test.ts` — Document photo and file validation rules
-- `app/src/lib/api.test.ts` — API client response handling
-- `app/src/lib/bugfix.test.ts` — Regression guards for known fixed bugs
+### Automated Checks
+- `npm run lint:app` — zero-warning frontend lint gate
+- `npm run test:app` — Vitest unit/regression coverage
+- `npm run test:backend` — backend node:test coverage
+- `npm run build:app` — production build gate
+- `npm run test:e2e:critical` — critical Playwright matrix
+- `.github/workflows/ci.yml` — PR / `main` gate
+- `.github/workflows/post-deploy-smoke.yml` — manual live smoke workflow
 
 ### E2E Tests (Playwright)
 - Smoke tests — full customer flow from phone entry to success
@@ -518,6 +527,7 @@ Status: SUCCESS / FAILED (visible in Railway dashboard)
 - [ ] Select Madrid → 2 documents to sign
 - [ ] Select other province → no signing
 - [ ] Submit form → DocFlow receives `new_order` with `assessor` field
+- [ ] `/health` and `/api/health` both report `ready: true`
 - [ ] Dashboard: Status column shows pending docs in Spanish labels
 - [ ] ZIP download contains all assets
 - [ ] Reload mid-form → session restored from IndexedDB

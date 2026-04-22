@@ -54,6 +54,7 @@ function createDashboardProjectRecord(input, generateProjectCode, createAccessTo
     assessor: input.assessor,
     assessorId: input.assessor,
     formData: null,
+    deliveryStatus: {},
     submissions: [],
     lastActivity: null,
     createdAt: nowIso,

@@ -6,7 +6,9 @@ function registerPdfConversionRoutes({
   pdfUpload,
   STIRLING_PDF_URL,
   getStirlingApiKey,
+  logger,
 }) {
+  const routeLogger = logger.child({ module: 'pdfConversionRoutes' });
   app.post('/api/pdf-to-images', pdfLimiter, pdfUpload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
@@ -54,7 +56,12 @@ function registerPdfConversionRoutes({
 
       if (!stirlingRes.ok) {
         const errorText = await stirlingRes.text().catch(() => '');
-        console.error(`[pdf-to-images] Stirling-PDF error ${stirlingRes.status}:`, errorText.slice(0, 200));
+        routeLogger.error('pdf_conversion.upstream_failed', {
+          route: '/api/pdf-to-images',
+          filename: req.file.originalname,
+          statusCode: stirlingRes.status,
+          failureReason: errorText.slice(0, 200),
+        });
         return res.status(502).json({
           success: false,
           message: `El servicio de conversión de PDF devolvió un error (${stirlingRes.status}).`,
@@ -65,7 +72,11 @@ function registerPdfConversionRoutes({
       try {
         zip = new AdmZip(Buffer.from(await stirlingRes.arrayBuffer()));
       } catch (error) {
-        console.error('[pdf-to-images] Failed to parse ZIP response:', error.message);
+        routeLogger.error('pdf_conversion.invalid_zip', {
+          route: '/api/pdf-to-images',
+          filename: req.file.originalname,
+          failureReason: error.message,
+        }, error);
         return res.status(502).json({
           success: false,
           message: 'La respuesta del servicio de conversión no era válida.',
@@ -94,12 +105,21 @@ function registerPdfConversionRoutes({
         };
       });
 
-      console.log(`[pdf-to-images] Converted "${req.file.originalname}" → ${images.length} image(s)`);
+      routeLogger.info('pdf_conversion.completed', {
+        route: '/api/pdf-to-images',
+        filename: req.file.originalname,
+        imageCount: images.length,
+      });
       return res.json({ success: true, images });
     } catch (err) {
-      console.error('[pdf-to-images] Unexpected error:', err);
       const message = err instanceof Error ? err.message : '';
       const likelyConnectivityIssue = /fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(message);
+      routeLogger.error('pdf_conversion.failed', {
+        route: '/api/pdf-to-images',
+        filename: req.file?.originalname || null,
+        failureReason: message || 'unexpected error',
+        retryable: likelyConnectivityIssue,
+      }, err);
       if (likelyConnectivityIssue) {
         return res.status(502).json({
           success: false,

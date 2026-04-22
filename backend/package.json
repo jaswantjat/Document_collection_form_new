@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test lib/*.test.js lib/*.node.js"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
