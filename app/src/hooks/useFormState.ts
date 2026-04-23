@@ -11,6 +11,7 @@ import { saveProgress, preUploadAssets } from '@/services/api';
 import { normalizeAdditionalBankDocuments, withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocuments';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { isElectricityBillRequired } from '@/lib/propertyDocsRequirements';
 
 const emptyDocSlot = (): DocSlot => ({ photo: null, extraction: null });
 const DOCUMENT_SLOT_KEYS: DocumentSlotKey[] = ['dniFront', 'dniBack', 'ibi'];
@@ -102,6 +103,12 @@ function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): Do
 
 const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null, issue: null });
 
+function normalizeCountValue(value: unknown): string {
+  if (value === '' || value === null || value === undefined) return '0';
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isNaN(parsed) || parsed < 0 ? '0' : String(parsed);
+}
+
 export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [], issue: null },
   ibi: { photo: null, pages: [], originalPdfs: [], extraction: null, issue: null },
@@ -114,16 +121,16 @@ export const initialFormData: FormData = {
     housing: {
       cadastralReference: '',
       habitableAreaM2: '',
-      floorCount: '',
+      floorCount: '0',
       averageFloorHeight: null,
-      bedroomCount: '',
-      doorsByOrientation: { north: '', east: '', south: '', west: '' },
-      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      bedroomCount: '0',
+      doorsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
+      windowsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
       windowFrameMaterial: null,
       doorMaterial: '',
       windowGlassType: null,
       hasShutters: null,
-      shutterWindowCount: '',
+      shutterWindowCount: '0',
     },
     thermal: {
       thermalInstallationType: null,
@@ -211,14 +218,25 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
     housing: {
       ...initialFormData.energyCertificate.housing,
       ...savedFormData?.energyCertificate?.housing,
+      floorCount: normalizeCountValue(savedFormData?.energyCertificate?.housing?.floorCount),
+      bedroomCount: normalizeCountValue(savedFormData?.energyCertificate?.housing?.bedroomCount),
       doorsByOrientation: {
         ...initialFormData.energyCertificate.housing.doorsByOrientation,
         ...savedFormData?.energyCertificate?.housing?.doorsByOrientation,
+        north: normalizeCountValue(savedFormData?.energyCertificate?.housing?.doorsByOrientation?.north),
+        east: normalizeCountValue(savedFormData?.energyCertificate?.housing?.doorsByOrientation?.east),
+        south: normalizeCountValue(savedFormData?.energyCertificate?.housing?.doorsByOrientation?.south),
+        west: normalizeCountValue(savedFormData?.energyCertificate?.housing?.doorsByOrientation?.west),
       },
       windowsByOrientation: {
         ...initialFormData.energyCertificate.housing.windowsByOrientation,
         ...savedFormData?.energyCertificate?.housing?.windowsByOrientation,
+        north: normalizeCountValue(savedFormData?.energyCertificate?.housing?.windowsByOrientation?.north),
+        east: normalizeCountValue(savedFormData?.energyCertificate?.housing?.windowsByOrientation?.east),
+        south: normalizeCountValue(savedFormData?.energyCertificate?.housing?.windowsByOrientation?.south),
+        west: normalizeCountValue(savedFormData?.energyCertificate?.housing?.windowsByOrientation?.west),
       },
+      shutterWindowCount: normalizeCountValue(savedFormData?.energyCertificate?.housing?.shutterWindowCount),
     },
     thermal: {
       ...initialFormData.energyCertificate.thermal,
@@ -286,7 +304,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
   };
 }
 
-export function getFormItems(): FormItem[] {
+export function getFormItems(productType: ProductType): FormItem[] {
   const items: FormItem[] = [
     {
       id: 'dniFront',
@@ -318,7 +336,9 @@ export function getFormItems(): FormItem[] {
     },
   ];
 
-  return items;
+  return isElectricityBillRequired(productType)
+    ? items
+    : items.filter((item) => item.id !== 'electricity');
 }
 
 export const useFormState = (
@@ -718,13 +738,13 @@ export const useFormState = (
   }, [formData.location, formData.representation]);
 
   const getProgress = useCallback(() => {
-    const items = getFormItems();
+    const items = getFormItems(productType);
     const completed = items.filter(item => item.isComplete(formData, productType)).length;
     return { completed, total: items.length, percent: Math.round((completed / items.length) * 100) };
   }, [formData, productType]);
 
   const canSubmit = useCallback((): boolean => {
-    const items = getFormItems();
+    const items = getFormItems(productType);
     return items.filter(i => i.required).every(i => i.isComplete(formData, productType));
   }, [formData, productType]);
 

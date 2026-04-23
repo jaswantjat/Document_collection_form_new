@@ -713,9 +713,9 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             type="button"
             data-testid="representation-defer-btn"
             onClick={handleDeferSignature}
-            className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 py-1.5 transition-colors"
+            className="btn-secondary w-full inline-flex items-center justify-center gap-2 py-3"
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-4 h-4" />
             Firmar más tarde
           </button>
         </div>

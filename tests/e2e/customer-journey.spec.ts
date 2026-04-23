@@ -193,6 +193,12 @@ test.describe('Customer Journey Regressions', () => {
     await page.goto(customerUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Documentos para firmar' })).toBeVisible({ timeout: 15000 });
 
+    const deferButton = page.getByTestId('representation-defer-btn');
+    await expect(deferButton).toBeVisible();
+    await expect(deferButton.locator('svg')).toBeVisible();
+    await expect(deferButton).toHaveCSS('border-top-style', 'solid');
+    await expect(deferButton).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+
     await page.waitForFunction(
       () => typeof (window as Window & { __eltexFillTestSignature?: () => void }).__eltexFillTestSignature === 'function',
       undefined,

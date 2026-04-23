@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
-import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset } from '@/types';
+import type { FormData, ProjectData, LocationRegion, ProductType, RenderedDocumentAsset } from '@/types';
 import { submitForm, preUploadAssets } from '@/services/api';
 import { clearSubmissionAttempt, getOrCreateSubmissionAttempt } from '@/lib/submissionAttempt';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 import { getCustomerEnergyFlowStatus } from '@/lib/energyCertificateFlow';
+import { hasRequiredPropertyDocs, isElectricityBillRequired } from '@/lib/propertyDocsRequirements';
 
 interface Props {
   project: ProjectData;
+  productType: ProductType;
   formData: FormData;
   source: 'customer' | 'assessor';
   projectToken?: string;
@@ -49,6 +51,7 @@ type PreUploadStatus = 'uploading' | 'retrying' | 'ready' | 'error';
 
 export function ReviewSection({
   project,
+  productType,
   formData,
   source,
   projectToken,
@@ -85,6 +88,7 @@ export function ReviewSection({
   const electricityIssue = electricityBill.issue ?? null;
 
   const energyStatus = getCustomerEnergyFlowStatus(formData.energyCertificate);
+  const showElectricityStatus = isElectricityBillRequired(productType);
 
   const dniDoneLabel = getIdentityDocumentDoneLabel(dni);
   const getIssueHint = (issue: { message: string } | null, fallback: string) => issue?.message || fallback;
@@ -116,7 +120,7 @@ export function ReviewSection({
       actionLabel: 'Subir',
       resolved: ibiBool,
     },
-    {
+    ...(showElectricityStatus ? [{
       id: 'electricity',
       description: 'Última factura de la luz',
       hint: electricityBool
@@ -133,7 +137,7 @@ export function ReviewSection({
       section: 'property-docs',
       actionLabel: 'Subir',
       resolved: electricityBool,
-    },
+    }] : []),
   ];
 
   const repItem: ChecklistItem | null = needsRepresentation ? {
@@ -190,7 +194,7 @@ export function ReviewSection({
   const attentionItems = allChecklistItems.filter((item) => item.status === 'attention');
   const doneItems = allChecklistItems.filter((item) => item.status === 'done');
 
-  const docsAllDone = dniDone && ibiBool && electricityBool;
+  const docsAllDone = hasRequiredPropertyDocs(formData, productType);
   const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((resolvedCount / totalCount) * 100);

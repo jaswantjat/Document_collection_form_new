@@ -11,8 +11,12 @@ import { PropertyDocsSection } from '@/sections/PropertyDocsSection';
 import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
-import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { hasEnergyCertificateDecision } from '@/lib/energyCertificateFlow';
+import {
+  getInitialCustomerSection,
+  getLikelyNextCustomerSection,
+  hasExistingRepresentationFlow,
+} from '@/lib/customerSectionRouting';
 import { getLocationInfo } from '@/lib/provinceMapping';
 import { mergeProjectWithDeviceBackup } from '@/lib/projectBackupMerge';
 import { prefetchCustomerSection } from '@/lib/sectionPrefetch';
@@ -85,79 +89,12 @@ function DashboardApp() {
   );
 }
 
-// ── Helpers for smart section routing ─────────────────────────────────────────
-function hasPropertyDocsDone(formData: FormData | null): boolean {
-  if (!formData) return false;
-  return !!(
-    isIdentityDocumentComplete(formData.dni)
-    && (formData.ibi?.photo || formData.ibi?.pages?.length)
-    && formData.electricityBill?.pages?.length
-  );
-}
-
-function hasRepresentationDone(formData: FormData | null, location: string | null): boolean {
-  if (!formData || !location) return false;
-  if (location === 'other') return true;
-  const rep = formData.representation;
-  if (!rep) return false;
-  if (location === 'cataluna') {
-    return !!(rep.ivaCertificateSignature && rep.generalitatSignature && rep.representacioSignature);
-  }
-  if (location === 'madrid' || location === 'valencia') {
-    return !!(rep.ivaCertificateEsSignature && rep.poderRepresentacioSignature);
-  }
-  return false;
-}
-
-function hasHolderTypeConfirmed(formData: FormData | null): boolean {
-  return !!formData?.representation?.holderTypeConfirmed;
-}
-
-function hasExistingRepresentationFlow(formData: FormData | null): boolean {
-  if (!formData) return false;
-  const location = formData.location ?? formData.representation?.location ?? null;
-  return hasRepresentationDone(formData, location);
-}
-
 function getInitialSection(
   project: ProjectData | null,
   urlCode: string | null
 ): Section | 'phone' {
   if (!project || !urlCode) return urlCode ? 'property-docs' : 'phone';
-
-  const fd = project.formData;
-  const location = fd?.location ?? fd?.representation?.location ?? null;
-  const holderTypeConfirmed = hasHolderTypeConfirmed(fd);
-  const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
-  const hasEnergyDecision = hasEnergyCertificateDecision(fd?.energyCertificate);
-
-  // Try to restore the last saved section before recomputing from scratch.
-  const saved = readSavedSection(urlCode);
-  if (saved) {
-    // If the user was on representation but it's now done, advance past it.
-    if (saved === 'representation' && hasRepresentationDone(fd, location)) {
-      return hasEnergyDecision ? 'review' : 'energy-certificate';
-    }
-    // Advanced sections (energy-certificate, review) must always be restored even when
-    // followUpDocumentFlow is true — the user was legitimately past property-docs.
-    if (saved === 'energy-certificate' || saved === 'review') {
-      return saved;
-    }
-    // For earlier sections only restore if not in a follow-up flow that needs property docs.
-    if (!followUpDocumentFlow) {
-      if (saved !== 'representation' || (!!location && location !== 'other')) {
-        return saved;
-      }
-    }
-  }
-
-  if (followUpDocumentFlow) return 'review';
-  if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
-  if (location === 'other') return hasEnergyDecision ? 'review' : 'energy-certificate';
-  if (location && !holderTypeConfirmed) return 'province-selection';
-  if (location) return 'representation';
-  if (hasPropertyDocsDone(fd)) return 'province-selection';
-  return 'property-docs';
+  return getInitialCustomerSection(project, readSavedSection(urlCode));
 }
 
 function getLikelyNextSection(
@@ -165,41 +102,7 @@ function getLikelyNextSection(
   formData: FormData,
   followUpDocumentFlow: boolean
 ): Section | null {
-  const location = formData.location ?? formData.representation?.location ?? null;
-  const holderTypeConfirmed = hasHolderTypeConfirmed(formData);
-  switch (currentSection) {
-    case 'property-docs':
-      if (followUpDocumentFlow) {
-        return hasEnergyCertificateDecision(formData.energyCertificate)
-          ? 'review'
-          : 'energy-certificate';
-      }
-      if (!location) return 'province-selection';
-      if (!holderTypeConfirmed) return 'province-selection';
-      return location === 'other'
-        ? (
-          hasEnergyCertificateDecision(formData.energyCertificate)
-            ? 'review'
-            : 'energy-certificate'
-        )
-        : 'representation';
-    case 'province-selection':
-      return location === 'other'
-        ? (
-          hasEnergyCertificateDecision(formData.energyCertificate)
-            ? 'review'
-            : 'energy-certificate'
-        )
-        : 'representation';
-    case 'representation':
-      return hasEnergyCertificateDecision(formData.energyCertificate)
-        ? 'review'
-        : 'energy-certificate';
-    case 'energy-certificate':
-      return 'review';
-    default:
-      return null;
-  }
+  return getLikelyNextCustomerSection(currentSection, formData, followUpDocumentFlow);
 }
 
 // ── Section persistence: restore current section on page reload ───────────────
@@ -629,6 +532,7 @@ function FormApp() {
         return (
           <ReviewSection
             project={activeProject}
+            productType={activeProject.productType}
             formData={formData}
             source={source}
             canSubmit={canSubmit()}
