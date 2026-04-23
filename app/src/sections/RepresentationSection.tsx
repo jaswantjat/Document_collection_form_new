@@ -713,7 +713,7 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             type="button"
             data-testid="representation-defer-btn"
             onClick={handleDeferSignature}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-100"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
           >
             <span className="flex items-start gap-3">
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">

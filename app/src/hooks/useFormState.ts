@@ -11,6 +11,7 @@ import { saveProgress, preUploadAssets } from '@/services/api';
 import { normalizeAdditionalBankDocuments, withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocuments';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { isElectricityRequired } from '@/lib/propertyDocsProgress';
 
 const emptyDocSlot = (): DocSlot => ({ photo: null, extraction: null });
 const DOCUMENT_SLOT_KEYS: DocumentSlotKey[] = ['dniFront', 'dniBack', 'ibi'];
@@ -326,7 +327,7 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
   };
 }
 
-export function getFormItems(): FormItem[] {
+export function getFormItems(productType: ProductType): FormItem[] {
   const items: FormItem[] = [
     {
       id: 'dniFront',
@@ -358,7 +359,9 @@ export function getFormItems(): FormItem[] {
     },
   ];
 
-  return items;
+  return isElectricityRequired(productType)
+    ? items
+    : items.filter((item) => item.id !== 'electricity');
 }
 
 export const useFormState = (
@@ -758,13 +761,13 @@ export const useFormState = (
   }, [formData.location, formData.representation]);
 
   const getProgress = useCallback(() => {
-    const items = getFormItems();
+    const items = getFormItems(productType);
     const completed = items.filter(item => item.isComplete(formData, productType)).length;
     return { completed, total: items.length, percent: Math.round((completed / items.length) * 100) };
   }, [formData, productType]);
 
   const canSubmit = useCallback((): boolean => {
-    const items = getFormItems();
+    const items = getFormItems(productType);
     return items.filter(i => i.required).every(i => i.isComplete(formData, productType));
   }, [formData, productType]);
 

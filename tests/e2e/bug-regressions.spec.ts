@@ -352,4 +352,103 @@ test.describe('Bug Regressions', () => {
     await expect(page.getByText('IBI o escritura')).toBeVisible();
     await expect(page.getByText('Factura de luz')).toHaveCount(0);
   });
+
+  test('REG-06: pure aerothermal review flow does not treat electricity as pending', async ({ page, request }) => {
+    const projectCode = 'ELT20250002';
+    const saveRes = await request.post(`${API_BASE}/api/project/${projectCode}/save`, {
+      data: {
+        source: 'customer',
+        formData: {
+          dni: {
+            front: { photo: makePhoto('dni-front-aero'), extraction: null },
+            back: { photo: makePhoto('dni-back-aero'), extraction: null },
+            originalPdfs: [],
+            issue: null,
+          },
+          ibi: {
+            photo: makePhoto('ibi-aero'),
+            pages: [],
+            originalPdfs: [],
+            extraction: null,
+            issue: null,
+          },
+          electricityBill: {
+            pages: [],
+            originalPdfs: [],
+            issue: null,
+          },
+          contract: { originalPdfs: [], extraction: null, issue: null },
+          additionalBankDocuments: [],
+          location: 'other',
+          representation: {
+            location: 'other',
+            isCompany: false,
+            holderTypeConfirmed: true,
+            companyName: '',
+            companyNIF: '',
+            companyAddress: '',
+            companyMunicipality: '',
+            companyPostalCode: '',
+            postalCode: '',
+            ivaPropertyAddress: '',
+            ivaCertificateSignature: null,
+            representacioSignature: null,
+            generalitatRole: 'titular',
+            generalitatSignature: null,
+            poderRepresentacioSignature: null,
+            ivaCertificateEsSignature: null,
+            renderedDocuments: {},
+          },
+          energyCertificate: {
+            status: 'not-started',
+            housing: {
+              cadastralReference: '',
+              habitableAreaM2: '',
+              floorCount: '0',
+              averageFloorHeight: null,
+              bedroomCount: '0',
+              doorsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
+              windowsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
+              windowFrameMaterial: null,
+              doorMaterial: '',
+              windowGlassType: null,
+              hasShutters: null,
+              shutterWindowCount: '0',
+            },
+            thermal: {
+              thermalInstallationType: null,
+              boilerFuelType: null,
+              equipmentDetails: '',
+              hasAirConditioning: null,
+              airConditioningType: null,
+              airConditioningDetails: '',
+              heatingEmitterType: null,
+              radiatorMaterial: null,
+            },
+            additional: {
+              soldProduct: null,
+              isExistingCustomer: null,
+              hasSolarPanels: null,
+              solarPanelDetails: '',
+            },
+            customerSignature: null,
+            renderedDocument: null,
+            completedAt: null,
+            skippedAt: null,
+          },
+          signatures: { customerSignature: null, repSignature: null },
+        },
+      },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
+    await page.goto(`/?code=${projectCode}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación', { timeout: 20000 });
+    await expect(page.getByText('Factura de luz')).toHaveCount(0);
+    await expect(page.getByTestId('review-submit-btn')).toContainText('Confirmar documentación');
+
+    await page.getByTestId('review-submit-btn').click();
+    await expect(page.locator('h1').first()).toContainText('¡Todo listo', { timeout: 20000 });
+  });
 });

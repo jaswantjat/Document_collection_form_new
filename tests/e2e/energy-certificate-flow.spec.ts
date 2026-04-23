@@ -137,6 +137,21 @@ test.describe('Energy Certificate Flow Tests', () => {
     // The cadastralReference field should show the seeded value from the server
     const cadastralInput = page.getByLabel('Referencia Catastral de la Vivienda');
     await expect(cadastralInput).toHaveValue('1234567VK1234A0001RT');
+
+    await page.getByRole('button', { name: 'Entre 2,7m y 3,2m' }).click();
+    await page.getByRole('button', { name: 'PVC' }).click();
+    await page.getByLabel('Material de las puertas').fill('Madera');
+    await page.getByRole('button', { name: 'Doble vidrio' }).click();
+    await page.getByRole('button', { name: /^No$/ }).click();
+    await page.getByRole('button', { name: /siguiente/i }).click();
+    await expect(page.getByText('Tipo de instalación térmica')).toBeVisible();
+
+    await page.waitForTimeout(1000);
+    await page.reload({ waitUntil: 'networkidle' });
+
+    await expect(page.locator('h1, h2').first()).toContainText('Confirma tu documentación');
+    await openEnergyCertificate(page);
+    await expect(page.getByText('Tipo de instalación térmica')).toBeVisible();
   });
 
   test('E2E-FLOW-03b: reload returns to review first and reopens EC at the saved sub-step', async ({ page, request }) => {
@@ -192,8 +207,16 @@ test.describe('Energy Certificate Flow Tests', () => {
     await openCustomerPage(page, access.customerUrl, 'Documentos');
     await expect(page.getByText('DNI / NIE').first()).toBeVisible();
 
-    // Clear localStorage while still on the form page (before beforeunload fires)
-    await page.evaluate(() => localStorage.clear());
+    // Clear browser-side backups while still on the form page (before beforeunload fires)
+    await page.evaluate(async () => {
+      localStorage.clear();
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase('eltex_form_db');
+        request.onsuccess = () => resolve();
+        request.onerror = () => resolve();
+        request.onblocked = () => resolve();
+      });
+    });
 
     // Navigate to blank — this flushes the beforeunload keepalive save (with cleared-docs state).
     // Must happen BEFORE restore-base-flow so the keepalive doesn't overwrite the restored state.
