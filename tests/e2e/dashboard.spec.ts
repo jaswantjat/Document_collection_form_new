@@ -638,23 +638,26 @@ test.describe('Dashboard QA', () => {
     await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
     await page.getByTestId('ver-expediente-btn').click();
-    await page.getByTestId('detail-upload-btn').click();
-    const uploadModal = page.getByTestId('admin-upload-modal');
-    await expect(uploadModal).toBeVisible();
-
-    await uploadModal.getByRole('button', { name: 'Documento adicional' }).click();
-    await uploadModal.getByTestId('admin-upload-file-input').setInputFiles({
-      name: 'irpf-2024.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'),
-    });
-
-    await expect(uploadModal.getByText('Documento adicional guardado correctamente.')).toBeVisible({ timeout: 15000 });
-    await uploadModal.getByTestId('admin-upload-close-btn').click();
-    await expect(uploadModal).toBeHidden({ timeout: 15000 });
-
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
+    const uploadsPanel = modal.getByTestId('document-uploads-panel');
+    await expect(uploadsPanel).toBeVisible();
+
+    const additionalDropzone = uploadsPanel.getByTestId(
+      'document-dropzone-additional-bank-document',
+    );
+    await additionalDropzone
+      .getByTestId('document-dropzone-input-additional-bank-document')
+      .setInputFiles({
+        name: 'irpf-2024.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'),
+      });
+
+    await expect(
+      additionalDropzone.getByText('Documento adicional guardado correctamente.'),
+    ).toBeVisible({ timeout: 15000 });
+
     await expect(modal.getByText('Documentos adicionales')).toBeVisible();
     await expect(modal.getByText('Documento adicional')).toBeVisible();
     await expect(modal.getByText('Revisar', { exact: true })).toHaveCount(0);
@@ -699,15 +702,16 @@ test.describe('Dashboard QA', () => {
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
     await page.getByTestId('ver-expediente-btn').click();
-    await page.getByTestId('detail-upload-btn').click();
-    await expect(page.getByTestId('admin-upload-modal')).toBeVisible();
-
-    await page.getByTestId('admin-upload-file-input').setInputFiles(ADMIN_UPLOAD_FILE);
-    const uploadModal = page.getByTestId('admin-upload-modal');
-    await expect(uploadModal.getByText('Documento guardado correctamente.')).toBeVisible({ timeout: 15000 });
-    await uploadModal.getByTestId('admin-upload-close-btn').click();
-    await expect(uploadModal).toBeHidden({ timeout: 15000 });
-    await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();
+    const detailModal = page.getByTestId('project-detail-modal');
+    await expect(detailModal).toBeVisible();
+    const dniFrontDropzone = detailModal.getByTestId('document-dropzone-dni-front');
+    await dniFrontDropzone
+      .getByTestId('document-dropzone-input-dni-front')
+      .setInputFiles(ADMIN_UPLOAD_FILE);
+    await expect(
+      dniFrontDropzone.getByText('Documento guardado correctamente.'),
+    ).toBeVisible({ timeout: 15000 });
+    await expect(detailModal.getByTitle('Descargar DNI frontal').first()).toBeVisible();
   });
 
   test('delete action requires confirmation and removes the project row', async ({ page, request }) => {

@@ -41,6 +41,24 @@ Eltex Document Collection Form. Mobile-first React + Vite frontend in `app/`, Ex
 - `app/src/sections/ReviewSection.tsx`
 - `backend/server.js`
 - `backend/lib/assetFiles.js`
+- `app/src/components/dashboard/DashboardProjectDetailModal.tsx`
+- `app/src/components/dashboard/DashboardDocumentUploadsPanel.tsx`
+- `app/src/components/dashboard/DocumentDropZone.tsx`
+- `app/src/lib/dashboardDocumentUpload.ts`
+
+## Dashboard upload UX
+- The legacy nested "Subir docs" modal (`DashboardAdminUploadModal`) has been
+  removed.
+- The project detail modal now embeds a `DashboardDocumentUploadsPanel` with
+  per-document drag-and-drop dropzones (`DocumentDropZone`) for DNI front/back,
+  IBI, electricity bill, and additional bank documents.
+- Upload orchestration (page preparation, AI extraction, patch building, save)
+  lives in `app/src/lib/dashboardDocumentUpload.ts` (`uploadAdminDocument`).
+- E2E tests use the testids `document-uploads-panel`,
+  `document-dropzone-<doc-type>`, and `document-dropzone-input-<doc-type>`.
+  The old `detail-upload-btn`, `admin-upload-modal`,
+  `admin-upload-file-input`, and `admin-upload-close-btn` testids no longer
+  exist.
 
 ## Session Log
 ### 2026-04-08
