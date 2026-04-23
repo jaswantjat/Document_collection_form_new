@@ -233,8 +233,11 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                 <p className="text-sm text-gray-400">No hay proyectos que coincidan.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-                <table className="table-fixed w-[1940px]">
+              <div
+                data-testid="dashboard-table-scroll"
+                className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm"
+              >
+                <table className="table-fixed min-w-[1940px] w-full">
                   <thead className="border-b border-gray-100 bg-gray-50">
                     <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                       <th className="w-[130px] whitespace-nowrap px-4 py-3 font-semibold">Last updated</th>
@@ -247,7 +250,9 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                       <th className="w-[240px] whitespace-nowrap px-4 py-3 font-semibold">Docs adicionales</th>
                       <th className="w-[190px] whitespace-nowrap px-4 py-3 font-semibold">Signed PDFs</th>
                       <th className="w-[200px] whitespace-nowrap px-4 py-3 font-semibold">Status</th>
-                      <th className="w-[180px] whitespace-nowrap px-4 py-3 font-semibold">Actions</th>
+                      <th className="sticky right-0 z-30 w-[180px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

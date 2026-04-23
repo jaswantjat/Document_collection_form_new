@@ -130,6 +130,26 @@ async function uploadCustomAssets(
 }
 
 test.describe('Dashboard status regressions', () => {
+  test('desktop dashboard keeps row actions visible without horizontal scrolling', async ({ page, request }) => {
+    const project = await createDashboardProject(request, `dash-actions-${Date.now()}`);
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(project.code);
+    const row = page.locator('tbody tr');
+    await expect(row).toHaveCount(1);
+
+    const scrollFrame = page.getByTestId('dashboard-table-scroll');
+    expect(await scrollFrame.evaluate((element) => element.scrollLeft)).toBe(0);
+
+    const detailButton = row.getByTestId('ver-expediente-btn');
+    const zipButton = row.getByTestId('dashboard-row-download-zip-btn');
+    await expect(detailButton).toBeVisible();
+    await expect(zipButton).toBeVisible();
+    await expect(detailButton).toBeInViewport();
+    await expect(zipButton).toBeInViewport();
+  });
+
   test('dashboard separates untouched, in-progress, and submitted projects after binary stripping', async ({ page, request }) => {
     const stamp = `dash-state-${Date.now()}`;
     const pending = await createDashboardProject(request, `${stamp} pending`);

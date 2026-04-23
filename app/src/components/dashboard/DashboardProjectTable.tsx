@@ -419,6 +419,9 @@ function AdditionalDocumentsTableCell({ items }: { items: DashboardAssetItem[] }
   );
 }
 
+const stickyActionsCellClass =
+  'sticky right-0 z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-gray-50';
+
 export function ProjectTableRow({
   project,
   summary,
@@ -495,7 +498,7 @@ export function ProjectTableRow({
 
   return (
     <>
-      <tr className="bg-white transition-colors hover:bg-gray-50">
+      <tr className="group bg-white transition-colors hover:bg-gray-50">
         <td className="border-b border-gray-100 px-4 py-3 align-top">
           <div className="space-y-1 text-sm">
             <p className="font-semibold text-gray-900">{formatDate(summary.lastUpdated)}</p>
@@ -589,27 +592,22 @@ export function ProjectTableRow({
             warnings={summary.warnings}
           />
         </td>
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
+        <td className={stickyActionsCellClass}>
           <div className="grid min-w-[180px] grid-cols-2 gap-1.5">
             <button
               type="button"
               data-testid="ver-expediente-btn"
+              title="Ver expediente"
               onClick={() => setShowDetail(true)}
-              className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
             >
               <Eye className="h-3 w-3" />
-              Ver expediente
+              Detalle
             </button>
             <button
               type="button"
-              onClick={() => void handleOpenForm()}
-              disabled={openingForm}
-              className="truncate rounded-lg border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700 hover:bg-gray-50"
-            >
-              {openingForm ? 'Abriendo...' : 'Formulario'}
-            </button>
-            <button
-              type="button"
+              data-testid="dashboard-row-download-zip-btn"
+              title="Descargar ZIP"
               disabled={downloading}
               onClick={async () => {
                 setDownloading(true);
@@ -621,10 +619,18 @@ export function ProjectTableRow({
                   setDownloading(false);
                 }
               }}
-              className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
             >
               <Download className="h-3 w-3" />
-              {downloading ? 'Descargando...' : 'Descargar ZIP'}
+              {downloading ? 'ZIP...' : 'ZIP'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleOpenForm()}
+              disabled={openingForm}
+              className="col-span-2 truncate rounded-lg border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              {openingForm ? 'Abriendo...' : 'Formulario'}
             </button>
             {deleteState === 'idle' ? (
               <button
