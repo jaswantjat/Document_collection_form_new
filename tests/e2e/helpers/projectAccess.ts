@@ -47,10 +47,21 @@ export async function getProjectAccess(
   assessorUrl: string;
 }> {
   const dashboardToken = await loginDashboard(request);
-  const response = await request.get(`${API_BASE}/api/dashboard/project/${projectCode}`, {
-    headers: { 'x-dashboard-token': dashboardToken },
-    timeout: 15000,
-  });
+  let response: Awaited<ReturnType<APIRequestContext['get']>> | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await request.get(`${API_BASE}/api/dashboard/project/${projectCode}`, {
+        headers: { 'x-dashboard-token': dashboardToken },
+        timeout: 15000,
+      });
+      break;
+    } catch (error) {
+      if (!isTransientRequestError(error) || attempt === 2) throw error;
+      await delay(250);
+    }
+  }
+
+  expect(response).toBeTruthy();
   expect(response.status()).toBe(200);
 
   const body = await response.json();

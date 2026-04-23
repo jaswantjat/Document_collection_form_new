@@ -15,6 +15,7 @@ import type {
   FormErrors,
   DocumentSlotKey,
   DocumentProcessingState,
+  ProductType,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
 import { createDocumentIssue } from '@/lib/documentIssues';
@@ -22,6 +23,7 @@ import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePh
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
 interface Props {
+  productType: ProductType;
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
@@ -1423,6 +1425,7 @@ function ElectricityCard({ pages, originalPdfs, issue, onAddPages, onRemovePage,
 
 // ── Main Section ───────────────────────────────────────────────────────────────
 export function PropertyDocsSection({
+  productType,
   dni,
   ibi,
   electricityBill,
@@ -1519,6 +1522,7 @@ export function PropertyDocsSection({
     ?? `${electricityBill.pages.length} imagen${electricityBill.pages.length !== 1 ? 'es' : ''}`;
 
   const { missingCount, slots } = getPropertyDocsProgress({
+    productType,
     dniDone,
     ibiDone,
     electricityDone: elecDone,

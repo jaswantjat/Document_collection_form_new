@@ -43,12 +43,13 @@ import {
 import {
   type DashboardAssetGroup,
   type DashboardAssetItem,
-  type DashboardDocumentItem,
   type DashboardEnergyCertificateSummary,
   type DashboardSignedPdfItem,
   type DashboardProjectSummary,
+  type DashboardStatusItem,
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
+import { approvedAssessors } from '@/lib/approvedAssessors';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import {
   formatDate, locationLabel, languageLabel,
@@ -59,7 +60,6 @@ import {
   getIbiPages, prepareAdminUploadPages,
   viewPDFInNewTab, downloadCSV,
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
-  getDocumentAssetsFromProject, getElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
 import { buildDashboardAdditionalBankDocumentPatch } from '@/lib/dashboardAdditionalBankDocuments';
 import { downloadProjectZip } from '@/lib/dashboardExport';
@@ -183,6 +183,91 @@ function DocImage({ src, alt, className }: { src: string; alt: string; className
   );
 }
 
+export const DeferredAssetButtons = React.memo(function DeferredAssetButtons({
+  projectCode,
+  loadProjectDetail,
+  resolveAssets,
+  onOpenDetail,
+}: {
+  projectCode: string;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+  resolveAssets: (project: any) => DashboardAssetItem[];
+  onOpenDetail?: () => void;
+}) {
+  const [loading, setLoading] = useState<'view' | 'download' | null>(null);
+  const loadProjectDetailRef = useRef(loadProjectDetail);
+  const resolveAssetsRef = useRef(resolveAssets);
+
+  useEffect(() => {
+    loadProjectDetailRef.current = loadProjectDetail;
+  }, [loadProjectDetail]);
+
+  useEffect(() => {
+    resolveAssetsRef.current = resolveAssets;
+  }, [resolveAssets]);
+
+  const run = useCallback(async (mode: 'view' | 'download') => {
+    setLoading(mode);
+    try {
+      const project = await loadProjectDetailRef.current(projectCode);
+      const assets = resolveAssetsRef.current(project);
+      const primaryAsset = assets[0];
+
+      if (!primaryAsset) {
+        onOpenDetail?.();
+        return;
+      }
+
+      if (mode === 'view') {
+        openDataUrlInNewTab(primaryAsset.dataUrl);
+      } else if (assets.length === 1) {
+        downloadDataUrlAsset(primaryAsset, projectCode);
+      } else {
+        onOpenDetail?.();
+      }
+    } finally {
+      setLoading(null);
+    }
+  }, [onOpenDetail, projectCode]);
+
+  return (
+    <div data-testid="asset-action-buttons" className="flex items-center gap-1.5">
+      <button
+        type="button"
+        data-testid="view-asset-btn"
+        aria-busy={loading === 'view'}
+        disabled={loading !== null}
+        onClick={(event) => {
+          event.stopPropagation();
+          void run('view');
+        }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        title="Ver archivo"
+      >
+        {loading === 'view'
+          ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          : <Eye className="w-3.5 h-3.5" />}
+      </button>
+      <button
+        type="button"
+        data-testid="download-asset-btn"
+        aria-busy={loading === 'download'}
+        disabled={loading !== null}
+        onClick={(event) => {
+          event.stopPropagation();
+          void run('download');
+        }}
+        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        title="Descargar archivo"
+      >
+        {loading === 'download'
+          ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          : <Download className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+});
+
 function AssetButtons({
   asset,
   projectCode,
@@ -223,90 +308,6 @@ function AssetButtons({
     </div>
   );
 }
-
-const DeferredAssetButtons = React.memo(function DeferredAssetButtons({
-  projectCode,
-  loadProjectDetail,
-  resolveAssets,
-  onOpenDetail,
-}: {
-  projectCode: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  resolveAssets: (project: any) => DashboardAssetItem[];
-  onOpenDetail?: () => void;
-}) {
-  const [loading, setLoading] = useState<'view' | 'download' | null>(null);
-  // Keep a stable ref so the async closure captures the latest props even
-  // after a parent re-render, preventing stale-element errors in test automation.
-  const loadProjectDetailRef = useRef(loadProjectDetail);
-  const resolveAssetsRef = useRef(resolveAssets);
-  useEffect(() => { loadProjectDetailRef.current = loadProjectDetail; }, [loadProjectDetail]);
-  useEffect(() => { resolveAssetsRef.current = resolveAssets; }, [resolveAssets]);
-
-  const run = async (mode: 'view' | 'download') => {
-    setLoading(mode);
-    try {
-      const project = await loadProjectDetailRef.current(projectCode);
-      const assets = resolveAssetsRef.current(project);
-
-      if (assets.length === 0) {
-        alert('No se encontraron archivos descargables para este documento.');
-        return;
-      }
-
-      if (mode === 'view') {
-        if (assets.length === 1) {
-          openDataUrlInNewTab(assets[0].dataUrl);
-        } else if (onOpenDetail) {
-          onOpenDetail();
-        } else {
-          openDataUrlInNewTab(assets[0].dataUrl);
-        }
-        return;
-      }
-
-      assets.forEach((asset) => downloadDataUrlAsset(asset, projectCode));
-    } catch (err) {
-      console.error('Deferred asset action failed:', err);
-      alert('No se pudo acceder a los archivos del documento.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5" data-testid="asset-action-buttons" data-loading={loading ?? 'none'}>
-      <button
-        type="button"
-        disabled={loading !== null}
-        aria-busy={loading === 'view'}
-        data-testid="view-asset-btn"
-        onClick={(event) => {
-          event.stopPropagation();
-          void run('view');
-        }}
-        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-        title="Ver archivo"
-      >
-        {loading === 'view' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
-      </button>
-      <button
-        type="button"
-        disabled={loading !== null}
-        aria-busy={loading === 'download'}
-        data-testid="download-asset-btn"
-        onClick={(event) => {
-          event.stopPropagation();
-          void run('download');
-        }}
-        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-        title="Descargar archivo"
-      >
-        {loading === 'download' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-      </button>
-    </div>
-  );
-});
 
 function SignedPdfButtons({
   projectCode,
@@ -472,254 +473,37 @@ function AutocropperButton({
   );
 }
 
-function DocumentTableCell({
-  item,
-  projectCode,
-  loadProjectDetail,
-  onOpenDetail,
-}: {
-  item?: DashboardDocumentItem;
-  projectCode: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  onOpenDetail: () => void;
-}) {
-  if (!item) {
-    return <span className="text-sm text-gray-300">—</span>;
-  }
-
-  if (!item.present) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-        <Clock className="w-3 h-3" />
-        Pendiente
-      </span>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5 min-w-[120px]">
-      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle className="w-3 h-3" />
-        Recibido
-      </div>
-      {item.needsManualReview && (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="w-3 h-3" />
-          Revisar
-        </div>
-      )}
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => getDocumentAssetsFromProject(project, item.key)}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
-  );
-}
-
-function DNITableCell({
-  frontItem,
-  backItem,
-  projectCode,
-  loadProjectDetail,
-  onOpenDetail,
-}: {
-  frontItem?: DashboardDocumentItem;
-  backItem?: DashboardDocumentItem;
-  projectCode: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  onOpenDetail: () => void;
-}) {
-  const hasFront = !!frontItem?.present;
-  const hasBack = !!backItem?.present;
-
-  if (!hasFront && !hasBack) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-        <Clock className="w-3 h-3" />
-        Pendiente
-      </span>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="space-y-1">
-        {hasFront && (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-              <CheckCircle className="w-2.5 h-2.5" />
-              {hasBack ? 'Frontal' : 'Recibido'}
-            </span>
-            {frontItem?.needsManualReview && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                Revisar
-              </span>
-            )}
-          </div>
-        )}
-        {hasBack && (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-              <CheckCircle className="w-2.5 h-2.5" />
-              Trasera
-            </span>
-            {backItem?.needsManualReview && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                Revisar
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => [
-          ...(hasFront && frontItem ? getDocumentAssetsFromProject(project, frontItem.key) : []),
-          ...(hasBack && backItem ? getDocumentAssetsFromProject(project, backItem.key) : []),
-        ]}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
-  );
-}
-
-function EcPdfTableButtons({
-  projectCode,
-  loadProjectDetail,
-}: {
-  projectCode: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-}) {
-  const [loading, setLoading] = useState<'view' | 'download' | null>(null);
-
-  const run = async (mode: 'view' | 'download') => {
-    setLoading(mode);
-    try {
-      const project = await loadProjectDetail(projectCode);
-      const pdfFactory = await buildEnergyCertificatePdfFactory(project);
-      if (mode === 'view') {
-        await viewPDFInNewTab(pdfFactory);
-      } else {
-        const blob = await pdfFactory();
-        downloadBlob(blob, `${projectCode}_certificado-energetico.pdf`);
-      }
-    } catch {
-      alert('No se pudo generar el certificado energético.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5 mt-2">
-      <button
-        type="button"
-        disabled={loading !== null}
-        onClick={(e) => { e.stopPropagation(); void run('view'); }}
-        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
-        title="Ver certificado energético"
-      >
-        {loading === 'view' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
-      </button>
-      <button
-        type="button"
-        disabled={loading !== null}
-        onClick={(e) => { e.stopPropagation(); void run('download'); }}
-        className="h-7 w-7 rounded-md inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
-        title="Descargar certificado energético"
-      >
-        {loading === 'download' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-      </button>
-    </div>
-  );
-}
-
-function SignedPdfsTableCell({
-  projectCode,
-  items,
-  loadProjectDetail,
-  energyCertificate,
-}: {
-  projectCode: string;
-  items: DashboardSignedPdfItem[];
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  energyCertificate?: DashboardEnergyCertificateSummary;
-}) {
-  const hasEc = energyCertificate?.status === 'completed';
-
-  if (!items.length && !hasEc) {
-    return <span className="text-sm text-gray-300">—</span>;
-  }
-
-  return (
-    <div className="space-y-2 min-w-[170px]">
-      {items.map((item) => {
-        const status = item.status ?? (item.present ? 'complete' : 'pending');
-        const borderClass =
-          status === 'complete' ? 'border-emerald-200 bg-emerald-50/60'
-          : status === 'deferred' ? 'border-amber-200 bg-amber-50/60'
-          : 'border-gray-200 bg-gray-50';
-        return (
-          <div key={item.key} className={`rounded-lg border px-2.5 py-2 ${borderClass}`}>
-            <p className={`text-[11px] font-semibold leading-tight ${status === 'complete' ? 'text-emerald-800' : status === 'deferred' ? 'text-amber-800' : 'text-gray-700'}`}>{item.label}</p>
-            {item.present ? (
-              <div className="mt-2">
-                <SignedPdfButtons projectCode={projectCode} item={item} loadProjectDetail={loadProjectDetail} compact />
-              </div>
-            ) : (
-              <p className={`mt-1 text-[11px] font-medium flex items-center gap-1 ${status === 'deferred' ? 'text-amber-600' : 'text-gray-400'}`}>
-                {status === 'deferred' && <AlertTriangle className="w-2.5 h-2.5 shrink-0" />}
-                {status === 'deferred' ? 'Firma diferida' : 'Pendiente'}
-              </p>
-            )}
-          </div>
-        );
-      })}
-      {hasEc && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-2.5 py-2">
-          <p className="text-[11px] font-semibold text-emerald-800 leading-tight">Certificado energético</p>
-          <EcPdfTableButtons projectCode={projectCode} loadProjectDetail={loadProjectDetail} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StatusCell({
-  allDocs,
+  items,
   submissionCount,
   energyCertificate,
   warnings,
 }: {
-  allDocs: DashboardDocumentItem[];
+  items: DashboardStatusItem[];
   submissionCount: number;
   energyCertificate?: DashboardEnergyCertificateSummary;
   warnings: import('@/lib/dashboardProject').DashboardWarning[];
 }) {
-  const pending = allDocs.filter(d => !d.present);
-  const allDone = pending.length === 0;
+  const toneClasses: Record<DashboardStatusItem['tone'], string> = {
+    success: 'border-emerald-200 bg-emerald-50/80 text-emerald-800',
+    pending: 'border-amber-200 bg-amber-50/80 text-amber-800',
+    warning: 'border-orange-200 bg-orange-50/80 text-orange-800',
+    muted: 'border-gray-200 bg-gray-50 text-gray-700',
+  };
 
   return (
-    <div className="space-y-1.5 min-w-[160px]">
-      {allDone ? (
-        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
-          <CheckCircle className="w-3.5 h-3.5" /> Completo
-        </span>
-      ) : (
-        <ul className="space-y-1">
-          {pending.map(d => (
-            <li key={d.key} className="flex items-center gap-1.5 text-xs text-amber-700">
-              <Clock className="w-3 h-3 shrink-0" />
-              {d.shortLabel || d.label}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="space-y-2 min-w-[280px]">
+      <ul className="space-y-1.5">
+        {items.map((item) => (
+          <li
+            key={item.key}
+            className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-xs ${toneClasses[item.tone]}`}
+          >
+            <span className="font-medium text-gray-800">{item.label}</span>
+            <span className="font-semibold whitespace-nowrap">{item.stateLabel}</span>
+          </li>
+        ))}
+      </ul>
       {submissionCount > 0 && (
         <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
           <CheckCircle className="w-3 h-3" /> {submissionCount} envío{submissionCount !== 1 ? 's' : ''}
@@ -750,90 +534,6 @@ function StatusCell({
             </li>
           ))}
         </ul>
-      )}
-    </div>
-  );
-}
-
-function ElectricityTableCell({
-  pages,
-  projectCode,
-  loadProjectDetail,
-  onOpenDetail,
-}: {
-  pages: DashboardDocumentItem[];
-  projectCode: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  onOpenDetail: () => void;
-}) {
-  const uploaded = pages.filter(p => p.present);
-  if (uploaded.length === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-        <Clock className="w-3 h-3" />
-        Pendiente
-      </span>
-    );
-  }
-
-  const manualReview = uploaded.filter((page) => page.needsManualReview).length;
-
-  return (
-    <div className="space-y-1.5 min-w-[130px]">
-      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle className="w-3 h-3" />
-        {uploaded.length} página{uploaded.length !== 1 ? 's' : ''}
-      </div>
-      {manualReview > 0 && (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="w-3 h-3" />
-          {manualReview} revisar
-        </div>
-      )}
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={getElectricityAssetsFromProject}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
-  );
-}
-
-function AdditionalDocumentsTableCell({
-  items,
-}: {
-  items: DashboardAssetItem[];
-}) {
-  if (items.length === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-        <FileText className="w-3 h-3" />
-        Sin docs
-      </span>
-    );
-  }
-
-  const manualReview = items.filter((item) => item.needsManualReview).length;
-  const firstFilename = items[0]?.filename?.trim() || items[0]?.label || 'Documento adicional';
-  const summaryLabel = items.length === 1
-    ? `1 archivo · ${firstFilename}`
-    : `${items.length} archivos · ${firstFilename} +${items.length - 1}`;
-
-  return (
-    <div className="max-w-[220px] min-w-0 space-y-1">
-      <p
-        className="flex w-full max-w-full min-w-0 items-center gap-1 overflow-hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-        title={summaryLabel}
-      >
-        <CheckCircle className="w-3 h-3 shrink-0" />
-        <span className="min-w-0 truncate">{summaryLabel}</span>
-      </p>
-      {manualReview > 0 && (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="w-3 h-3" />
-          {manualReview} revisar
-        </div>
       )}
     </div>
   );
@@ -1393,9 +1093,6 @@ function ProjectTableRow({
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const documents = summary?.documents ?? [];
-  const byKey = new Map(documents.map((item) => [item.key, item]));
-  const allDocs = [...documents, ...(summary?.electricityPages ?? [])];
 
   const handleOpenForm = async () => {
     const popup = window.open('', '_blank');
@@ -1451,18 +1148,12 @@ function ProjectTableRow({
     <>
     <tr className="bg-white hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <div className="space-y-1 text-sm">
-          <p className="font-semibold text-gray-900">{formatDate(summary.lastUpdated)}</p>
-          <p className="text-xs text-gray-400">Creado {formatDate(project.createdAt)}</p>
-        </div>
-      </td>
-
-      <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-eltex-blue bg-eltex-blue-light px-2 py-1 rounded-lg">
               {project.code}
             </span>
+            <ProductBadge type={project.productType} />
             {summary.isCompany && (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-md">
                 <Building2 className="w-3 h-3" />
@@ -1474,60 +1165,24 @@ function ProjectTableRow({
           {summary.isCompany && summary.companyName && (
             <p className="text-xs text-blue-700 font-medium truncate">{summary.companyName}</p>
           )}
-          <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
-            <User className="w-3 h-3 shrink-0" />
-            {project.assessor || '—'}
+          <p className="text-xs text-gray-500 truncate">{locationLabel(summary.location)}</p>
+          <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{summary.address || 'Sin dirección cargada'}</p>
+          <p className="text-[11px] text-gray-400">
+            Actualizado {formatDate(summary.lastUpdated)} · Creado {formatDate(project.createdAt)}
           </p>
         </div>
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <div className="space-y-2">
-          <ProductBadge type={project.productType} />
-          <p className="text-sm font-medium text-gray-800 truncate">{locationLabel(summary.location)}</p>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-gray-900">{project.assessor || '—'}</p>
+          <p className="text-xs text-gray-500">Asesor asignado</p>
         </div>
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <p className="text-sm text-gray-800 leading-relaxed line-clamp-3">{summary.address || '—'}</p>
-      </td>
-
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <DNITableCell
-          frontItem={byKey.get('dniFront') as DashboardDocumentItem}
-          backItem={byKey.get('dniBack') as DashboardDocumentItem}
-          projectCode={project.code}
-          loadProjectDetail={loadProjectDetail}
-          onOpenDetail={() => setShowDetail(true)}
-        />
-      </td>
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <DocumentTableCell
-          item={byKey.get('ibi') as DashboardDocumentItem}
-          projectCode={project.code}
-          loadProjectDetail={loadProjectDetail}
-          onOpenDetail={() => setShowDetail(true)}
-        />
-      </td>
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <ElectricityTableCell
-          pages={summary.electricityPages}
-          projectCode={project.code}
-          loadProjectDetail={loadProjectDetail}
-          onOpenDetail={() => setShowDetail(true)}
-        />
-      </td>
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <AdditionalDocumentsTableCell items={summary.additionalDocuments} />
-      </td>
-
-      <td className="px-4 py-3 align-top border-b border-gray-100">
-        <SignedPdfsTableCell projectCode={project.code} items={summary.signedDocuments} loadProjectDetail={loadProjectDetail} energyCertificate={summary.energyCertificate} />
-      </td>
-
-      <td className="px-4 py-3 align-top border-b border-gray-100">
         <StatusCell
-          allDocs={allDocs}
+          items={summary.statusItems}
           submissionCount={project.submissionCount}
           energyCertificate={summary.energyCertificate}
           warnings={summary.warnings}
@@ -1535,15 +1190,15 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <div className="grid grid-cols-2 gap-1.5 min-w-[180px]">
+        <div className="grid gap-1.5 min-w-[180px]">
           <button
             type="button"
             data-testid="ver-expediente-btn"
             onClick={() => setShowDetail(true)}
-            className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5"
+            className="px-3 py-2 rounded-lg text-xs font-semibold border border-eltex-blue/15 bg-eltex-blue text-white hover:bg-eltex-blue/90 flex items-center justify-center gap-1.5"
           >
             <Eye className="w-3 h-3" />
-            Ver expediente
+            Abrir expediente
           </button>
           <button
             type="button"
@@ -1553,32 +1208,18 @@ function ProjectTableRow({
           >
             {openingForm ? 'Abriendo...' : 'Formulario'}
           </button>
-          <button
-            type="button"
-            disabled={downloading}
-            onClick={async () => {
-              setDownloading(true);
-              try { await downloadProjectZip(project, { loadProjectDetail, token }); }
-              catch { alert('Error al descargar los archivos del expediente.'); }
-              finally { setDownloading(false); }
-            }}
-            className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 flex items-center justify-center gap-1.5"
-          >
-            <Download className="w-3 h-3" />
-            {downloading ? 'Descargando...' : 'Descargar ZIP'}
-          </button>
           {deleteState === 'idle' && (
             <button
               type="button"
               onClick={handleDeleteClick}
-              className="col-span-2 px-3 py-2 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1.5"
+              className="px-3 py-2 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1.5"
             >
               <Trash2 className="w-3 h-3" />
               Eliminar expediente
             </button>
           )}
           {deleteState === 'confirm' && (
-            <div className="col-span-2 flex gap-1">
+            <div className="flex gap-1">
               <button
                 type="button"
                 onClick={() => { void handleDeleteConfirm(); }}
@@ -1597,12 +1238,29 @@ function ProjectTableRow({
             </div>
           )}
           {deleteState === 'deleting' && (
-            <div className="col-span-2 px-3 py-2 rounded-lg text-xs text-red-500 flex items-center justify-center gap-1.5 border border-red-100 bg-red-50">
+            <div className="px-3 py-2 rounded-lg text-xs text-red-500 flex items-center justify-center gap-1.5 border border-red-100 bg-red-50">
               <RefreshCw className="w-3 h-3 animate-spin" />
               Eliminando...
             </div>
           )}
         </div>
+      </td>
+
+      <td className="px-4 py-3 align-top border-b border-gray-100">
+        <button
+          type="button"
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try { await downloadProjectZip(project, { loadProjectDetail, token }); }
+            catch { alert('Error al descargar los archivos del expediente.'); }
+            finally { setDownloading(false); }
+          }}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        >
+          <Download className="w-3 h-3" />
+          {downloading ? 'Descargando...' : 'ZIP'}
+        </button>
       </td>
     </tr>
     {showDetail && createPortal(
@@ -2234,8 +1892,8 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
   const [actionResult, setActionResult] = useState<DashboardProjectActionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<'all' | 'submitted' | 'pending'>('all');
   const [search, setSearch] = useState('');
+  const [assessorFilter, setAssessorFilter] = useState('all');
   const deferredSearch = useDeferredValue(search);
   const detailCacheRef = useRef<Map<string, any>>(new Map());
 
@@ -2293,7 +1951,6 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
   const handleProjectActionResult = useCallback(async (result: DashboardProjectActionResult) => {
     detailCacheRef.current.delete(result.project.code);
     setActionResult(result);
-    setFilter('all');
     setSearch(result.project.code);
     await load();
   }, [load]);
@@ -2309,8 +1966,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
 
   const filtered = useMemo(() => projectsWithSummary
     .filter(({ project, summary }) => {
-      if (filter === 'submitted' && project.submissionCount === 0) return false;
-      if (filter === 'pending' && project.submissionCount > 0) return false;
+      if (assessorFilter !== 'all' && project.assessor !== assessorFilter) return false;
 
       if (!deferredSearch.trim()) return true;
 
@@ -2329,7 +1985,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
       const leftDate = new Date(left.summary?.lastUpdated || 0).getTime();
       const rightDate = new Date(right.summary?.lastUpdated || 0).getTime();
       return rightDate - leftDate;
-    }), [deferredSearch, filter, projectsWithSummary]);
+    }), [assessorFilter, deferredSearch, projectsWithSummary]);
 
   const totalSubmitted = projects.filter((project) => project.submissionCount > 0).length;
   const totalPending = projects.length - totalSubmitted;
@@ -2416,22 +2072,22 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             />
           </div>
 
-          <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shrink-0">
-            {(['all', 'submitted', 'pending'] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  filter === item
-                    ? 'bg-eltex-blue text-white shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {item === 'all' ? 'Todos' : item === 'submitted' ? 'Enviados' : 'Pendientes'}
-              </button>
-            ))}
-          </div>
+          <label className="shrink-0">
+            <span className="sr-only">Filtrar por asesor</span>
+            <select
+              data-testid="dashboard-assessor-filter"
+              value={assessorFilter}
+              onChange={(event) => setAssessorFilter(event.target.value)}
+              className="form-input min-w-[240px]"
+            >
+              <option value="all">Todos los asesores</option>
+              {approvedAssessors.map((assessor) => (
+                <option key={assessor} value={assessor}>
+                  {assessor}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {error && (
@@ -2457,20 +2113,14 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             ) : (
               <>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                  <table className="table-fixed w-[1940px]">
+                  <table className="table-fixed min-w-[1180px] w-full">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">Last updated</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Project / customer</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[160px]">Product / region</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[220px]">Address</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[150px]">DNI / NIE</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[130px]">IBI / escritura</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[140px]">Factura luz</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[240px]">Docs adicionales</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[190px]">Signed PDFs</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[200px]">Status</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Actions</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[360px]">Expediente / cliente</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Asesor</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[340px]">Estado</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[190px]">Acciones</th>
+                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[110px]">ZIP</th>
                       </tr>
                     </thead>
                     <tbody>

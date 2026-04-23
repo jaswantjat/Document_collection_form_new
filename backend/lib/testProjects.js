@@ -132,6 +132,27 @@ function ensureResettableTestProject(database, code, options) {
   return database.projects?.[code] || null;
 }
 
+function resetTestProjectFixture(database, code, options) {
+  if (!RESETTABLE_TEST_CODES.includes(code)) return null;
+
+  const defaults = getDefaultProjects(options);
+  const nextProject = clone(defaults[code]);
+  if (!nextProject) return null;
+
+  database.projects = database.projects || {};
+  database.projects[code] = {
+    ...nextProject,
+    formData: clone(options.formData ?? buildBaseFlowFormData()),
+    submissions: [],
+    lastActivity: null,
+    assetFiles: {},
+    cataloniaPDFs: null,
+    docflowNewOrderSent: false,
+  };
+
+  return database.projects[code];
+}
+
 module.exports = {
   DEFAULT_TEST_CODES,
   RESETTABLE_TEST_CODES,
@@ -139,4 +160,5 @@ module.exports = {
   ensureDefaultTestProjects,
   ensureResettableTestProject,
   getDefaultProjects,
+  resetTestProjectFixture,
 };

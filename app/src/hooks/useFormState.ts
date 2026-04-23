@@ -101,6 +101,24 @@ function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): Do
 }
 
 const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null, issue: null });
+const DEFAULT_EC_COUNT = '0';
+
+function normalizeEcCount(value: string | null | undefined): string {
+  return value == null || String(value).trim() === ''
+    ? DEFAULT_EC_COUNT
+    : String(value);
+}
+
+function normalizeOrientationCounts(
+  value: Partial<EnergyCertificateData['housing']['doorsByOrientation']> | null | undefined
+) {
+  return {
+    north: normalizeEcCount(value?.north),
+    east: normalizeEcCount(value?.east),
+    south: normalizeEcCount(value?.south),
+    west: normalizeEcCount(value?.west),
+  };
+}
 
 export const initialFormData: FormData = {
   dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [], issue: null },
@@ -114,16 +132,26 @@ export const initialFormData: FormData = {
     housing: {
       cadastralReference: '',
       habitableAreaM2: '',
-      floorCount: '',
+      floorCount: DEFAULT_EC_COUNT,
       averageFloorHeight: null,
-      bedroomCount: '',
-      doorsByOrientation: { north: '', east: '', south: '', west: '' },
-      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      bedroomCount: DEFAULT_EC_COUNT,
+      doorsByOrientation: {
+        north: DEFAULT_EC_COUNT,
+        east: DEFAULT_EC_COUNT,
+        south: DEFAULT_EC_COUNT,
+        west: DEFAULT_EC_COUNT,
+      },
+      windowsByOrientation: {
+        north: DEFAULT_EC_COUNT,
+        east: DEFAULT_EC_COUNT,
+        south: DEFAULT_EC_COUNT,
+        west: DEFAULT_EC_COUNT,
+      },
       windowFrameMaterial: null,
       doorMaterial: '',
       windowGlassType: null,
       hasShutters: null,
-      shutterWindowCount: '',
+      shutterWindowCount: DEFAULT_EC_COUNT,
     },
     thermal: {
       thermalInstallationType: null,
@@ -229,6 +257,17 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
       ...savedFormData?.energyCertificate?.additional,
     },
   };
+  const normalizedEcDraft = {
+    ...rawEc,
+    housing: {
+      ...rawEc.housing,
+      floorCount: normalizeEcCount(rawEc.housing.floorCount),
+      bedroomCount: normalizeEcCount(rawEc.housing.bedroomCount),
+      doorsByOrientation: normalizeOrientationCounts(rawEc.housing.doorsByOrientation),
+      windowsByOrientation: normalizeOrientationCounts(rawEc.housing.windowsByOrientation),
+      shutterWindowCount: normalizeEcCount(rawEc.housing.shutterWindowCount),
+    },
+  };
 
   // Downgrade stale 'completed' status: if the saved data claims 'completed' but
   // the field data no longer passes full validation (e.g. data saved before per-step
@@ -237,9 +276,10 @@ export function normalizeFormData(savedFormData?: FormData | null): FormData {
   // This correction is in-memory only; it persists when the user re-completes the
   // survey and saves.
   const normalizedEc =
-    rawEc.status === 'completed' && !isEnergyCertificateReadyToComplete(rawEc)
-      ? { ...rawEc, status: 'in-progress' as const }
-      : rawEc;
+    normalizedEcDraft.status === 'completed'
+      && !isEnergyCertificateReadyToComplete(normalizedEcDraft)
+      ? { ...normalizedEcDraft, status: 'in-progress' as const }
+      : normalizedEcDraft;
   const holderTypeConfirmed = inferHolderTypeConfirmed(savedFormData?.representation);
 
   return {
