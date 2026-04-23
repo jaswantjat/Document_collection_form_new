@@ -14,6 +14,7 @@ import {
   getDashboardSignedPdfItems,
   getDashboardFinalSignatureAssets,
   getDashboardProjectSummary,
+  getDashboardStatusItems,
 } from './dashboardProject';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -738,5 +739,77 @@ describe('getDashboardProjectSummary — bad data resilience', () => {
     };
     const summary = getDashboardProjectSummary(project);
     expect(summary.warnings.some((w) => w.key === 'titular-mismatch')).toBe(false);
+  });
+});
+
+describe('getDashboardStatusItems', () => {
+  it('uses backend summary statusItems when list rows have no formData', () => {
+    const items = getDashboardStatusItems({
+      summary: {
+        statusItems: [
+          { key: 'dni', label: 'DNI / NIE', stateLabel: '✓', tone: 'success' },
+          { key: 'ibi', label: 'IBI / Escritura', stateLabel: 'pendiente', tone: 'pending' },
+        ],
+      },
+    });
+
+    expect(items).toEqual([
+      { key: 'dni', label: 'DNI / NIE', stateLabel: '✓', tone: 'success' },
+      { key: 'ibi', label: 'IBI / Escritura', stateLabel: 'pendiente', tone: 'pending' },
+    ]);
+  });
+
+  it('hides electricity for pure aerothermal projects in the queue status', () => {
+    const items = getDashboardStatusItems({
+      productType: 'aerothermal',
+      formData: {
+        dni: { front: { photo: makePhoto(), extraction: makeExtraction({ identityDocumentKind: 'nie-card' }) }, back: null },
+        ibi: { pages: [makePhoto()], extraction: null },
+        electricityBill: { pages: [] },
+      },
+    });
+
+    expect(items.some((item) => item.key === 'electricity')).toBe(false);
+  });
+
+  it('shows additional documents only after at least one file is uploaded', () => {
+    const withoutAdditionalDocs = getDashboardStatusItems({
+      formData: {
+        dni: { front: {}, back: {} },
+        ibi: { pages: [], extraction: null },
+        electricityBill: { pages: [] },
+        additionalBankDocuments: [],
+      },
+    });
+    const withAdditionalDocs = getDashboardStatusItems({
+      formData: {
+        dni: { front: {}, back: {} },
+        ibi: { pages: [], extraction: null },
+        electricityBill: { pages: [] },
+        additionalBankDocuments: [
+          {
+            id: 'extra',
+            type: 'other',
+            files: [{
+              id: 'file-1',
+              filename: 'irpf-2024.pdf',
+              mimeType: 'application/pdf',
+              dataUrl: makeDataUrl('application/pdf'),
+              timestamp: 1,
+              sizeBytes: 100,
+            }],
+          },
+        ],
+      },
+    });
+
+    expect(withoutAdditionalDocs.some((item) => item.key === 'additional-documents')).toBe(false);
+    expect(withAdditionalDocs).toContainEqual(
+      expect.objectContaining({
+        key: 'additional-documents',
+        label: 'Documento adicional',
+        stateLabel: '1 archivo',
+      }),
+    );
   });
 });

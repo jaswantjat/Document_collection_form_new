@@ -6,6 +6,10 @@ import {
 } from '@/lib/signedDocumentOverlays';
 import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
 import {
+  getIdentityDocumentPendingLabel,
+  isIdentityDocumentComplete,
+} from '@/lib/identityDocument';
+import {
   getAdditionalBankDocumentFileLabel,
   normalizeAdditionalBankDocuments,
 } from '@/lib/additionalBankDocuments';
@@ -52,6 +56,13 @@ export interface DashboardWarning {
   message: string;
 }
 
+export interface DashboardStatusItem {
+  key: string;
+  label: string;
+  stateLabel: string;
+  tone: 'success' | 'pending' | 'warning' | 'muted';
+}
+
 export interface DashboardEnergyCertificateSummary {
   status: 'pending' | 'skipped' | 'completed';
   label: string;
@@ -82,6 +93,7 @@ export interface DashboardProjectSummary {
   additionalDocuments: DashboardAssetItem[];
   photoGroups: DashboardAssetGroup[];
   downloadGroups: DashboardAssetGroup[];
+  statusItems: DashboardStatusItem[];
   warnings: DashboardWarning[];
   counts: {
     documentsPresent: number;
@@ -450,6 +462,113 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
   }));
 }
 
+function buildStatusItem(
+  key: string,
+  label: string,
+  stateLabel: string,
+  tone: DashboardStatusItem['tone'],
+): DashboardStatusItem {
+  return { key, label, stateLabel, tone };
+}
+
+function normalizeSummaryStatusItem(value: unknown): DashboardStatusItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  const key = typeof item.key === 'string' && item.key.trim() ? item.key.trim() : null;
+  const label = typeof item.label === 'string' && item.label.trim() ? item.label.trim() : null;
+  const stateLabel = typeof item.stateLabel === 'string' && item.stateLabel.trim() ? item.stateLabel.trim() : null;
+  const tone = item.tone;
+
+  if (!key || !label || !stateLabel) return null;
+  if (tone !== 'success' && tone !== 'pending' && tone !== 'warning' && tone !== 'muted') return null;
+
+  return { key, label, stateLabel, tone };
+}
+
+function statusFromPresence(
+  key: string,
+  label: string,
+  present: boolean,
+  needsManualReview = false,
+  pendingLabel = 'pendiente',
+): DashboardStatusItem {
+  if (needsManualReview) return buildStatusItem(key, label, 'revisar', 'warning');
+  if (present) return buildStatusItem(key, label, '✓', 'success');
+  return buildStatusItem(key, label, pendingLabel, 'pending');
+}
+
+function formatFileCount(count: number) {
+  return `${count} archivo${count === 1 ? '' : 's'}`;
+}
+
+export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
+  if (!project?.formData && Array.isArray(project?.summary?.statusItems)) {
+    return project.summary.statusItems
+      .map(normalizeSummaryStatusItem)
+      .filter(Boolean) as DashboardStatusItem[];
+  }
+
+  const formData = project?.formData || {};
+  const dniFront = formData?.dni?.front || {};
+  const dniBack = formData?.dni?.back || {};
+  const dniComplete = isIdentityDocumentComplete({ front: dniFront, back: dniBack });
+  const dniPendingLabel = getIdentityDocumentPendingLabel(dniFront, dniBack) || 'pendiente';
+  const dniNeedsManualReview = Boolean(
+    dniFront?.extraction?.needsManualReview
+    || dniBack?.extraction?.needsManualReview,
+  );
+
+  const ibiPages = getIbiPages(formData);
+  const electricityPages = getElectricityPages(formData);
+  const signedDocuments = getDashboardSignedPdfItems(project);
+  const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
+
+  const items: DashboardStatusItem[] = [
+    statusFromPresence('dni', 'DNI / NIE', dniComplete, dniNeedsManualReview, dniPendingLabel),
+    statusFromPresence(
+      'ibi',
+      'IBI / Escritura',
+      ibiPages.length > 0,
+      Boolean(formData?.ibi?.extraction?.needsManualReview),
+    ),
+  ];
+
+  if (project?.productType !== 'aerothermal') {
+    items.push(statusFromPresence(
+      'electricity',
+      'Factura de luz',
+      electricityPages.length > 0,
+      electricityPages.some((page: any) => Boolean(page?.extraction?.needsManualReview)),
+    ));
+  }
+
+  if (signedDocuments.length > 0) {
+    const allSigned = signedDocuments.every((item) => item.present);
+    const deferred = !allSigned && signedDocuments.some((item) => item.status === 'deferred');
+    items.push(
+      allSigned
+        ? buildStatusItem('representation', 'Representación', '✓', 'success')
+        : deferred
+          ? buildStatusItem('representation', 'Representación', 'aplazada', 'muted')
+          : buildStatusItem('representation', 'Representación', 'pendiente', 'pending'),
+    );
+  }
+
+  if (additionalDocuments.length > 0) {
+    const manualReview = additionalDocuments.some((item) => item.needsManualReview);
+    items.push(
+      buildStatusItem(
+        'additional-documents',
+        'Documento adicional',
+        manualReview ? `${formatFileCount(additionalDocuments.length)} · revisar` : formatFileCount(additionalDocuments.length),
+        manualReview ? 'warning' : 'success',
+      ),
+    );
+  }
+
+  return items;
+}
+
 export function getDashboardPhotoGroups(project: any): DashboardAssetGroup[] {
   const assetFiles = project?.assetFiles || {};
 
@@ -603,6 +722,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
   const photoGroups = getDashboardPhotoGroups(project);
   const downloadGroups = getDashboardDownloadGroups(project);
+  const statusItems = getDashboardStatusItems(project);
   const snapshot = getSnapshot(project);
   const counts = buildCounts(project, documents, electricityPages, signedDocuments, finalSignatures);
   const warnings = computeDashboardWarnings(project);
@@ -636,6 +756,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     additionalDocuments,
     photoGroups,
     downloadGroups,
+    statusItems,
     warnings,
     counts,
   };

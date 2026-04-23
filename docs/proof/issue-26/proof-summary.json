@@ -1,0 +1,12 @@
+{
+  "projectCode": "ELT20260434",
+  "zipFilename": "ELT20260434_Cliente_nuevo.zip",
+  "artifacts": {
+    "queueListBeforeUpload": "docs/proof/issue-26/queue-list-before-upload.png",
+    "statusColumnBeforeUpload": "docs/proof/issue-26/status-column-before-upload.png",
+    "queueRowWithZip": "docs/proof/issue-26/queue-row-with-zip.png",
+    "queueListAfterUpload": "docs/proof/issue-26/queue-list-after-upload.png",
+    "statusColumnAfterUpload": "docs/proof/issue-26/status-column-after-upload.png",
+    "zipVideo": "docs/proof/issue-26/zip-download-proof.webm"
+  }
+}
