@@ -44,6 +44,20 @@ describe('isChunkLoadError', () => {
         message: 'Load failed',
       })
     ).toBe(true);
+
+    expect(
+      isChunkLoadError({
+        name: 'SyntaxError',
+        message: "Unexpected token '<'",
+      })
+    ).toBe(true);
+
+    expect(
+      isChunkLoadError({
+        name: 'SyntaxError',
+        message: "expected expression, got '<'",
+      })
+    ).toBe(true);
   });
 
   it('does not classify generic runtime crashes as chunk load errors', () => {
@@ -86,5 +100,17 @@ describe('chunk reload attempt tracking', () => {
     expect(
       shouldAutoReloadChunkError(error, storage, 'https://documentos.eltex.es/')
     ).toBe(false);
+  });
+
+  it('auto-reloads html parse errors caused by stale lazy chunks', () => {
+    const storage = createStorage();
+    const error = {
+      name: 'SyntaxError',
+      message: "Unexpected token '<'",
+    };
+
+    expect(
+      shouldAutoReloadChunkError(error, storage, 'https://documentos.eltex.es/dashboard')
+    ).toBe(true);
   });
 });
