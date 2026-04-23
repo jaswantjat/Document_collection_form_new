@@ -168,4 +168,37 @@ test.describe('Dashboard status regressions', () => {
     await expect(submittedRow.locator('td').nth(9)).toContainText('Enviado');
     await expect(submittedRow.locator('td').nth(9)).toContainText('Completo');
   });
+
+  test('detail modal can download IBI from stored assets after submission strips previews', async ({ page, request }) => {
+    const submitted = await createDashboardProject(request, `dash-ibi-${Date.now()}`);
+
+    await uploadAssets(request, submitted.code, ['dniFront', 'dniBack', 'ibi_0', 'electricity_0']);
+    const submitRes = await request.post(
+      `${API_BASE}/api/project/${submitted.code}/submit?token=${encodeURIComponent(submitted.accessToken)}`,
+      {
+        data: {
+          formData: buildSubmittedFormData(),
+          source: 'customer',
+          attemptId: `${submitted.code}-attempt-ibi-download`,
+        },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+      },
+    );
+    expect(submitRes.status()).toBe(200);
+
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(submitted.code);
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await page.getByTestId('ver-expediente-btn').click();
+
+    const modal = page.getByTestId('project-detail-modal');
+    await expect(modal).toBeVisible();
+
+    const ibiDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar IBI / Escritura').click();
+    expect((await ibiDownload).suggestedFilename()).toBe(`${submitted.code}_ibi_escritura.jpg`);
+  });
 });

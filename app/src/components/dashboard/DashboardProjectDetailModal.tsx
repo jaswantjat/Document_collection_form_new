@@ -278,7 +278,7 @@ export function ProjectDetailModal({
                 <DeliveryStatusSection deliveryStatus={project.deliveryStatus} />
                 <CompanyDisplay representation={project.formData?.representation} />
                 <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
-                <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
+                <IBIDisplay project={project} />
                 <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
                 <SignedDocumentsSection
                   project={project}

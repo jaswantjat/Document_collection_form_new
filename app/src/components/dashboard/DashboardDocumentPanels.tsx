@@ -22,13 +22,13 @@ import {
   buildEnergyCertificatePdfFactory,
   downloadBlob,
   extensionFromMimeType,
+  getDocumentAssetsFromProject,
   getIbiPages,
   viewPDFInNewTab,
 } from '@/lib/dashboardHelpers';
 import type {
   DNIData,
   ElectricityBillData,
-  IBIData,
   RepresentationData,
   UploadedPhoto,
 } from '@/types';
@@ -203,30 +203,24 @@ export function DNIDisplay({
 }
 
 export function IBIDisplay({
-  ibi,
-  projectCode,
+  project,
 }: {
-  ibi: IBIData | null | undefined;
-  projectCode: string;
+  project: DashboardProjectRecord | null | undefined;
 }) {
+  const ibi = project?.formData?.ibi;
+  const projectCode = project?.code ?? '';
   const pages = getIbiPages(ibi) as UploadedPhoto[];
-  if (pages.length === 0) {
+  const assets = getDocumentAssetsFromProject(project || {}, 'ibi');
+
+  if (pages.length === 0 && assets.length === 0) {
     return null;
   }
 
   const data = ibi?.extraction?.extractedData;
-  const assets = pages
-    .filter((page) => Boolean(page?.preview))
-    .map((page, index) => ({
-      key: `ibi-${index}`,
-      label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
-      dataUrl: page.preview,
-      mimeType: extensionFromMimeType(undefined, page.preview).startsWith('p')
-        ? 'image/png'
-        : 'image/jpeg',
-    }));
   const primaryAsset = assets[0] || null;
-  const ibiImages = assets.map((asset) => asset.dataUrl);
+  const ibiImages = assets
+    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
