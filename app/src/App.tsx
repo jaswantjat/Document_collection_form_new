@@ -12,14 +12,13 @@ import { ErrorSection } from '@/sections/ErrorSection';
 import { LoadingSection } from '@/sections/LoadingSection';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { hasEnergyCertificateDecision } from '@/lib/energyCertificateFlow';
-import {
-  getInitialCustomerSection,
-  getLikelyNextCustomerSection,
-  hasExistingRepresentationFlow,
-} from '@/lib/customerSectionRouting';
 import { getLocationInfo } from '@/lib/provinceMapping';
 import { mergeProjectWithDeviceBackup } from '@/lib/projectBackupMerge';
 import { prefetchCustomerSection } from '@/lib/sectionPrefetch';
+import {
+  getInitialCustomerSection,
+  hasRepresentationDone,
+} from '@/lib/customerSectionRouting';
 // SuccessSection is imported statically (not lazy) — it's tiny and must render
 // instantly after submit completes, avoiding a Suspense/LoadingSection flash.
 import { SuccessSection } from '@/sections/SuccessSection';
@@ -89,12 +88,10 @@ function DashboardApp() {
   );
 }
 
-function getInitialSection(
-  project: ProjectData | null,
-  urlCode: string | null
-): Section | 'phone' {
-  if (!project || !urlCode) return urlCode ? 'property-docs' : 'phone';
-  return getInitialCustomerSection(project, readSavedSection(urlCode));
+function hasExistingRepresentationFlow(formData: FormData | null): boolean {
+  if (!formData) return false;
+  const location = formData.location ?? formData.representation?.location ?? null;
+  return hasRepresentationDone(formData, location);
 }
 
 function getLikelyNextSection(
@@ -102,7 +99,41 @@ function getLikelyNextSection(
   formData: FormData,
   followUpDocumentFlow: boolean
 ): Section | null {
-  return getLikelyNextCustomerSection(currentSection, formData, followUpDocumentFlow);
+  const location = formData.location ?? formData.representation?.location ?? null;
+  const holderTypeConfirmed = Boolean(formData.representation?.holderTypeConfirmed);
+  switch (currentSection) {
+    case 'property-docs':
+      if (followUpDocumentFlow) {
+        return hasEnergyCertificateDecision(formData.energyCertificate)
+          ? 'review'
+          : 'energy-certificate';
+      }
+      if (!location) return 'province-selection';
+      if (!holderTypeConfirmed) return 'province-selection';
+      return location === 'other'
+        ? (
+          hasEnergyCertificateDecision(formData.energyCertificate)
+            ? 'review'
+            : 'energy-certificate'
+        )
+        : 'representation';
+    case 'province-selection':
+      return location === 'other'
+        ? (
+          hasEnergyCertificateDecision(formData.energyCertificate)
+            ? 'review'
+            : 'energy-certificate'
+        )
+        : 'representation';
+    case 'representation':
+      return hasEnergyCertificateDecision(formData.energyCertificate)
+        ? 'review'
+        : 'energy-certificate';
+    case 'energy-certificate':
+      return 'review';
+    default:
+      return null;
+  }
 }
 
 // ── Section persistence: restore current section on page reload ───────────────
@@ -273,7 +304,13 @@ function FormApp() {
     nextUrlCode: string | null
   ) => {
     if (!nextProject) return;
-    setCurrentSection(getInitialSection(nextProject, nextUrlCode));
+    setCurrentSection(
+      getInitialCustomerSection(
+        nextProject,
+        nextUrlCode,
+        nextUrlCode ? readSavedSection(nextUrlCode) : null
+      )
+    );
   });
 
   // Determine initial section when project loads
@@ -412,7 +449,13 @@ function FormApp() {
 
     setProject(normalizedProject);
     navigate(buildProjectUrl(foundProject.code), { replace: true });
-    goTo(getInitialSection(normalizedProject, foundProject.code));
+    goTo(
+      getInitialCustomerSection(
+        normalizedProject,
+        foundProject.code,
+        readSavedSection(foundProject.code)
+      )
+    );
   };
 
   const renderSection = () => {
@@ -431,6 +474,7 @@ function FormApp() {
       case 'property-docs':
         return (
           <PropertyDocsSection
+            productType={activeProject.productType}
             dni={formData.dni}
             ibi={formData.ibi}
             electricityBill={formData.electricityBill}
@@ -532,7 +576,6 @@ function FormApp() {
         return (
           <ReviewSection
             project={activeProject}
-            productType={activeProject.productType}
             formData={formData}
             source={source}
             canSubmit={canSubmit()}

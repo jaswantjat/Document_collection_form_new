@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { getInitialCustomerSection } from './customerSectionRouting';
+import { getInitialCustomerSection } from '@/lib/customerSectionRouting';
 import type { ProjectData } from '@/types';
 
 function makeProject(overrides: Partial<ProjectData> = {}): ProjectData {
-  const project: ProjectData = {
-    code: 'ELT20250005',
-    customerName: 'Test Customer',
+  return {
+    code: 'ELTTEST001',
+    customerName: 'Test User',
     phone: '+34600000000',
     email: 'test@example.com',
     productType: 'solar',
@@ -14,30 +14,30 @@ function makeProject(overrides: Partial<ProjectData> = {}): ProjectData {
     assessorId: 'ASR001',
     formData: {
       dni: {
-        front: { photo: { id: 'dni-front', preview: 'front', timestamp: 1, sizeBytes: 1 }, extraction: null },
-        back: { photo: { id: 'dni-back', preview: 'back', timestamp: 1, sizeBytes: 1 }, extraction: null },
+        front: { photo: null, extraction: null },
+        back: { photo: null, extraction: null },
         originalPdfs: [],
         issue: null,
       },
       ibi: {
-        photo: { id: 'ibi', preview: 'ibi', timestamp: 1, sizeBytes: 1 },
+        photo: null,
         pages: [],
         originalPdfs: [],
         extraction: null,
         issue: null,
       },
       electricityBill: {
-        pages: [{ photo: { id: 'bill', preview: 'bill', timestamp: 1, sizeBytes: 1 }, extraction: null }],
+        pages: [],
         originalPdfs: [],
         issue: null,
       },
       contract: { originalPdfs: [], extraction: null, issue: null },
       additionalBankDocuments: [],
-      location: 'other',
+      location: undefined,
       representation: {
-        location: 'other',
+        location: null,
         isCompany: false,
-        holderTypeConfirmed: true,
+        holderTypeConfirmed: false,
         companyName: '',
         companyNIF: '',
         companyAddress: '',
@@ -53,21 +53,26 @@ function makeProject(overrides: Partial<ProjectData> = {}): ProjectData {
         ivaCertificateEsSignature: null,
         renderedDocuments: {},
       },
+      signatures: { customerSignature: null, repSignature: null },
       energyCertificate: {
-        status: 'in-progress',
-        currentStepIndex: 1,
+        status: 'not-started',
         housing: {
           cadastralReference: '',
-          habitableAreaM2: '95',
-          floorCount: '2',
-          averageFloorHeight: '2.7-3.2m',
-          bedroomCount: '3',
-          doorsByOrientation: { north: '1', east: '0', south: '1', west: '0' },
-          windowsByOrientation: { north: '2', east: '1', south: '2', west: '1' },
-          windowFrameMaterial: 'pvc',
-          doorMaterial: 'Madera',
-          windowGlassType: 'doble',
-          hasShutters: false,
+          habitableAreaM2: '',
+          floorCount: '0',
+          averageFloorHeight: null,
+          bedroomCount: '0',
+          doorsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
+          windowsByOrientation: {
+            north: '0',
+            east: '0',
+            south: '0',
+            west: '0',
+          },
+          windowFrameMaterial: null,
+          doorMaterial: '',
+          windowGlassType: null,
+          hasShutters: null,
           shutterWindowCount: '0',
         },
         thermal: {
@@ -91,37 +96,72 @@ function makeProject(overrides: Partial<ProjectData> = {}): ProjectData {
         completedAt: null,
         skippedAt: null,
       },
-      signatures: { customerSignature: null, repSignature: null },
+      browserLanguage: 'es-ES',
     },
     lastActivity: null,
-    createdAt: '2026-04-23T10:00:00Z',
-  };
-
-  return {
-    ...project,
+    createdAt: '2026-04-23T10:00:00.000Z',
     ...overrides,
-    formData: overrides.formData ?? project.formData,
   };
 }
 
 describe('customerSectionRouting', () => {
-  it('returns review instead of restoring the saved energy certificate section', () => {
-    expect(getInitialCustomerSection(makeProject(), 'energy-certificate')).toBe('review');
-  });
-
-  it('keeps early sections restorable before the review hub exists', () => {
+  it('lands on review after reload when a location already exists', () => {
     const project = makeProject({
       formData: {
         ...makeProject().formData!,
-        location: undefined,
+        location: 'other',
         representation: {
           ...makeProject().formData!.representation,
-          location: null,
-          holderTypeConfirmed: false,
+          location: 'other',
+          holderTypeConfirmed: true,
         },
       },
     });
 
-    expect(getInitialCustomerSection(project, 'property-docs')).toBe('property-docs');
+    expect(
+      getInitialCustomerSection(project, project.code, 'energy-certificate')
+    ).toBe('review');
+  });
+
+  it('keeps fresh opens in representation when there is no reload state yet', () => {
+    const project = makeProject({
+      formData: {
+        ...makeProject().formData!,
+        location: 'cataluna',
+        representation: {
+          ...makeProject().formData!.representation,
+          location: 'cataluna',
+          holderTypeConfirmed: true,
+        },
+      },
+    });
+
+    expect(getInitialCustomerSection(project, project.code, null)).toBe('representation');
+  });
+
+  it('does not route to review before the customer has selected a location', () => {
+    const project = makeProject({
+      formData: {
+        ...makeProject().formData!,
+        dni: {
+          front: { photo: { preview: 'front' } as never, extraction: null },
+          back: { photo: { preview: 'back' } as never, extraction: null },
+          originalPdfs: [],
+          issue: null,
+        },
+        ibi: {
+          photo: { preview: 'ibi' } as never,
+          pages: [],
+          originalPdfs: [],
+          extraction: null,
+          issue: null,
+        },
+      },
+      productType: 'aerothermal',
+    });
+
+    expect(getInitialCustomerSection(project, project.code, 'property-docs')).toBe(
+      'property-docs'
+    );
   });
 });

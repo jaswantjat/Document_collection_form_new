@@ -60,12 +60,22 @@ describe('Energy Certificate Validation - New Rules', () => {
       expect(errors).not.toHaveProperty('housingDoorMaterial');
     });
 
-    it('accepts 0 for count-style housing fields', () => {
+    it('accepts zero values for count-style housing fields', () => {
       const data = createBaseData();
       data.housing.floorCount = '0';
       data.housing.bedroomCount = '0';
-      data.housing.doorsByOrientation = { north: '0', east: '0', south: '0', west: '0' };
-      data.housing.windowsByOrientation = { north: '0', east: '0', south: '0', west: '0' };
+      data.housing.doorsByOrientation = {
+        north: '0',
+        east: '0',
+        south: '0',
+        west: '0',
+      };
+      data.housing.windowsByOrientation = {
+        north: '0',
+        east: '0',
+        south: '0',
+        west: '0',
+      };
       data.housing.hasShutters = true;
       data.housing.shutterWindowCount = '0';
 

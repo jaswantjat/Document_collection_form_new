@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Loader2, AlertTriangle, RotateCcw, ArrowRight, ArrowLeft, Camera, FileText, Zap, Send } from 'lucide-react';
-import type { FormData, ProjectData, LocationRegion, ProductType, RenderedDocumentAsset } from '@/types';
+import type { FormData, ProjectData, LocationRegion, RenderedDocumentAsset } from '@/types';
 import { submitForm, preUploadAssets } from '@/services/api';
 import { clearSubmissionAttempt, getOrCreateSubmissionAttempt } from '@/lib/submissionAttempt';
 import { getIdentityDocumentDoneLabel, isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { stampRenderedDocumentMetadata } from '@/lib/signedDocumentOverlays';
 import { createRenderedEnergyCertificateAsset } from '@/lib/energyCertificateDocument';
 import { getCustomerEnergyFlowStatus } from '@/lib/energyCertificateFlow';
-import { hasRequiredPropertyDocs, isElectricityBillRequired } from '@/lib/propertyDocsRequirements';
+import {
+  hasRequiredPropertyDocs,
+  isElectricityRequired,
+} from '@/lib/propertyDocsProgress';
 
 interface Props {
   project: ProjectData;
-  productType: ProductType;
   formData: FormData;
   source: 'customer' | 'assessor';
   projectToken?: string;
@@ -51,7 +53,6 @@ type PreUploadStatus = 'uploading' | 'retrying' | 'ready' | 'error';
 
 export function ReviewSection({
   project,
-  productType,
   formData,
   source,
   projectToken,
@@ -83,12 +84,12 @@ export function ReviewSection({
   const dniDone = isIdentityDocumentComplete(dni);
   const ibiBool = !!ibi.photo || (ibi.pages?.length ?? 0) > 0;
   const electricityBool = ebUploaded > 0;
+  const electricityRequired = isElectricityRequired(project.productType);
   const dniIssue = dni.issue ?? null;
   const ibiIssue = ibi.issue ?? null;
   const electricityIssue = electricityBill.issue ?? null;
 
   const energyStatus = getCustomerEnergyFlowStatus(formData.energyCertificate);
-  const showElectricityStatus = isElectricityBillRequired(productType);
 
   const dniDoneLabel = getIdentityDocumentDoneLabel(dni);
   const getIssueHint = (issue: { message: string } | null, fallback: string) => issue?.message || fallback;
@@ -120,24 +121,34 @@ export function ReviewSection({
       actionLabel: 'Subir',
       resolved: ibiBool,
     },
-    ...(showElectricityStatus ? [{
-      id: 'electricity',
-      description: 'Última factura de la luz',
-      hint: electricityBool
-        ? getIssueHint(
-            electricityIssue,
-            `${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''} subida${ebUploaded !== 1 ? 's' : ''}`
-          )
-        : 'Foto o PDF — si tiene varias páginas, súbelas todas',
-      label: electricityBool
-        ? `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`
-        : 'Factura de luz',
-      icon: Zap,
-      status: (electricityBool ? (electricityIssue ? 'attention' : 'done') : 'pending') as ChecklistStatus,
-      section: 'property-docs',
-      actionLabel: 'Subir',
-      resolved: electricityBool,
-    }] : []),
+    ...(
+      electricityRequired || electricityBool
+        ? [{
+            id: 'electricity',
+            description: electricityRequired
+              ? 'Última factura de la luz'
+              : 'Factura de la luz opcional',
+            hint: electricityBool
+              ? getIssueHint(
+                  electricityIssue,
+                  `${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''} subida${ebUploaded !== 1 ? 's' : ''}`
+                )
+              : 'Foto o PDF — si tiene varias páginas, súbelas todas',
+            label: electricityBool
+              ? `Factura de luz — ${ebUploaded} imagen${ebUploaded !== 1 ? 'es' : ''}`
+              : 'Factura de luz',
+            icon: Zap,
+            status: (
+              electricityBool
+                ? electricityIssue ? 'attention' : 'done'
+                : 'pending'
+            ) as ChecklistStatus,
+            section: 'property-docs',
+            actionLabel: 'Subir',
+            resolved: electricityBool,
+          }]
+        : []
+    ),
   ];
 
   const repItem: ChecklistItem | null = needsRepresentation ? {
@@ -194,7 +205,12 @@ export function ReviewSection({
   const attentionItems = allChecklistItems.filter((item) => item.status === 'attention');
   const doneItems = allChecklistItems.filter((item) => item.status === 'done');
 
-  const docsAllDone = hasRequiredPropertyDocs(formData, productType);
+  const docsAllDone = hasRequiredPropertyDocs({
+    productType: project.productType,
+    dniDone,
+    ibiDone: ibiBool,
+    electricityDone: electricityBool,
+  });
   const resolvedCount = allChecklistItems.filter((item) => item.resolved).length;
   const totalCount = allChecklistItems.length;
   const progressPct = Math.round((resolvedCount / totalCount) * 100);

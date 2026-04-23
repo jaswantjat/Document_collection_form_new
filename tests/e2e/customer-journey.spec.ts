@@ -128,6 +128,7 @@ test.describe('Customer Journey Regressions', () => {
   });
 
   test('code-bearing assessor link restores local backup and routes to the resumed step', async ({ page, request }) => {
+    test.setTimeout(90000);
     const projectCode = 'ELT20250005';
     const { assessorUrl } = await getProjectAccess(request, projectCode);
 

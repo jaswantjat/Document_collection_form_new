@@ -1,95 +1,111 @@
 import { hasEnergyCertificateDecision } from '@/lib/energyCertificateFlow';
-import { hasRequiredPropertyDocs } from '@/lib/propertyDocsRequirements';
+import { isIdentityDocumentComplete } from '@/lib/identityDocument';
+import { hasRequiredPropertyDocs } from '@/lib/propertyDocsProgress';
 import type { FormData, ProjectData, Section } from '@/types';
 
-function getEffectiveLocation(formData: FormData | null): string | null {
-  return formData?.location ?? formData?.representation?.location ?? null;
-}
-
-function hasHolderTypeConfirmed(formData: FormData | null): boolean {
+export function hasHolderTypeConfirmed(formData: FormData | null): boolean {
   return !!formData?.representation?.holderTypeConfirmed;
 }
 
-export function hasRepresentationDone(formData: FormData | null, location: string | null): boolean {
+export function hasRepresentationDone(
+  formData: FormData | null,
+  location: string | null
+): boolean {
   if (!formData || !location) return false;
   if (location === 'other') return true;
 
-  const rep = formData.representation;
+  const representation = formData.representation;
+  if (!representation) return false;
+
   if (location === 'cataluna') {
-    return !!(rep.ivaCertificateSignature && rep.generalitatSignature && rep.representacioSignature);
+    return Boolean(
+      representation.ivaCertificateSignature
+      && representation.generalitatSignature
+      && representation.representacioSignature
+    );
   }
+
   if (location === 'madrid' || location === 'valencia') {
-    return !!(rep.ivaCertificateEsSignature && rep.poderRepresentacioSignature);
+    return Boolean(
+      representation.ivaCertificateEsSignature
+      && representation.poderRepresentacioSignature
+    );
   }
+
   return false;
 }
 
-export function hasExistingRepresentationFlow(formData: FormData | null): boolean {
-  return hasRepresentationDone(formData, getEffectiveLocation(formData));
+function shouldRouteReloadToReview(
+  savedSection: Section | null,
+  location: string | null
+): boolean {
+  return Boolean(savedSection && location);
 }
 
-function canReturnToReviewFromSavedSection(formData: FormData | null): boolean {
-  const location = getEffectiveLocation(formData);
-  return location === 'other' || hasRepresentationDone(formData, location);
+function hasPropertyDocsDone(project: ProjectData): boolean {
+  const formData = project.formData;
+  if (!formData) return false;
+
+  return hasRequiredPropertyDocs({
+    productType: project.productType,
+    dniDone: isIdentityDocumentComplete(formData.dni),
+    ibiDone: Boolean(formData.ibi?.photo || formData.ibi?.pages?.length),
+    electricityDone: Boolean(formData.electricityBill?.pages?.length),
+  });
 }
 
 export function getInitialCustomerSection(
-  project: ProjectData,
+  project: ProjectData | null,
+  urlCode: string | null,
   savedSection: Section | null
-): Section {
-  const fd = project.formData;
-  const location = getEffectiveLocation(fd);
-  const holderTypeConfirmed = hasHolderTypeConfirmed(fd);
-  const followUpDocumentFlow = hasExistingRepresentationFlow(fd);
-  const hasEnergyDecision = hasEnergyCertificateDecision(fd?.energyCertificate);
+): Section | 'phone' {
+  if (!project || !urlCode) return urlCode ? 'property-docs' : 'phone';
 
-  if (savedSection) {
-    if (savedSection === 'representation' && hasRepresentationDone(fd, location)) {
-      return 'review';
+  const formData = project.formData;
+  const location = formData?.location ?? formData?.representation?.location ?? null;
+  const followUpDocumentFlow = hasRepresentationDone(formData, location);
+  const hasEnergyDecision = hasEnergyCertificateDecision(
+    formData?.energyCertificate
+  );
+
+  let nextSection: Section | 'phone';
+
+  if (shouldRouteReloadToReview(savedSection, location)) {
+    nextSection = 'review';
+  } else if (savedSection) {
+    if (savedSection === 'representation' && followUpDocumentFlow) {
+      nextSection = hasEnergyDecision ? 'review' : 'energy-certificate';
+    } else if (
+      !followUpDocumentFlow
+      && (savedSection !== 'representation' || !!location && location !== 'other')
+    ) {
+      nextSection = savedSection;
+    } else if (followUpDocumentFlow) {
+      nextSection = 'review';
+    } else if (location === 'other') {
+      nextSection = hasEnergyDecision ? 'review' : 'energy-certificate';
+    } else if (location && !hasHolderTypeConfirmed(formData)) {
+      nextSection = 'province-selection';
+    } else if (location) {
+      nextSection = 'representation';
+    } else if (hasPropertyDocsDone(project)) {
+      nextSection = 'province-selection';
+    } else {
+      nextSection = 'property-docs';
     }
-    if (savedSection === 'review') return 'review';
-    if (savedSection === 'energy-certificate' && canReturnToReviewFromSavedSection(fd)) {
-      return 'review';
-    }
-    if (!followUpDocumentFlow) {
-      if (savedSection !== 'representation' || (!!location && location !== 'other')) {
-        return savedSection;
-      }
-    }
+  } else if (followUpDocumentFlow) {
+    nextSection = 'review';
+  } else if (location === 'other') {
+    nextSection = hasEnergyDecision ? 'review' : 'energy-certificate';
+  } else if (location && !hasHolderTypeConfirmed(formData)) {
+    nextSection = 'province-selection';
+  } else if (location) {
+    nextSection = 'representation';
+  } else if (hasPropertyDocsDone(project)) {
+    nextSection = 'province-selection';
+  } else {
+    nextSection = 'property-docs';
   }
 
-  if (followUpDocumentFlow) return 'review';
-  if (hasRepresentationDone(fd, location)) return hasEnergyDecision ? 'review' : 'energy-certificate';
-  if (location === 'other') return hasEnergyDecision ? 'review' : 'energy-certificate';
-  if (location && !holderTypeConfirmed) return 'province-selection';
-  if (location) return 'representation';
-  if (hasRequiredPropertyDocs(fd, project.productType)) return 'province-selection';
-  return 'property-docs';
-}
-
-export function getLikelyNextCustomerSection(
-  currentSection: Section | 'phone',
-  formData: FormData,
-  followUpDocumentFlow: boolean
-): Section | null {
-  const location = getEffectiveLocation(formData);
-
-  switch (currentSection) {
-    case 'phone':
-      return null;
-    case 'property-docs':
-      return followUpDocumentFlow ? 'review' : 'province-selection';
-    case 'province-selection':
-      return location === 'other'
-        ? (hasEnergyCertificateDecision(formData.energyCertificate) ? 'review' : 'energy-certificate')
-        : 'representation';
-    case 'representation':
-      return hasEnergyCertificateDecision(formData.energyCertificate)
-        ? 'review'
-        : 'energy-certificate';
-    case 'energy-certificate':
-      return 'review';
-    default:
-      return null;
-  }
+  return nextSection;
 }

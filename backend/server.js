@@ -30,7 +30,9 @@ const {
   ensureDefaultTestProjects,
   ensureResettableTestProject,
   getDefaultProjects,
+  resetTestProjectFixture,
 } = require('./lib/testProjects');
+const { pruneTransientQaProjects } = require('./lib/devProjectCleanup');
 const {
   getAdditionalBankDocumentPrompt,
   getAdditionalBankDocumentWrongDocumentMessage,
@@ -44,6 +46,10 @@ const {
   serializeDashboardProjectAction,
   validateDashboardCreateInput,
 } = require('./lib/dashboardProjectManagement');
+const {
+  createQueuedJsonSaver,
+  writeJsonAtomically,
+} = require('./lib/queuedJsonFile');
 const { isApprovedAssessor } = require('./lib/approvedAssessors');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 
@@ -166,6 +172,24 @@ app.get('/health', (_req, res) => {
   });
 });
 
+async function persistDbOrSendError(res) {
+  try {
+    await saveDB();
+    return true;
+  } catch {
+    res.status(500).json({
+      success: false,
+      error: 'DB_SAVE_FAILED',
+      message: 'No se pudo guardar el proyecto.',
+    });
+    return false;
+  }
+}
+
+function queueDbSave() {
+  void saveDB().catch(() => {});
+}
+
 function resolveResettableTestProject(code) {
   const project = ensureResettableTestProject(database, code, {
     isProduction,
@@ -178,11 +202,14 @@ function resolveResettableTestProject(code) {
 }
 
 // Test-only: reset EC state for a test project (dev only)
-app.post('/api/test/reset-ec/:code', (req, res) => {
+app.post('/api/test/reset-ec/:code', async (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
   const code = req.params.code;
   if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = resolveResettableTestProject(code);
+  const project = resetTestProjectFixture(database, code, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+  });
   if (!project) return res.status(404).json({ error: 'Project not found' });
   project.formData.energyCertificate = {
     status: 'not-started',
@@ -203,16 +230,19 @@ app.post('/api/test/reset-ec/:code', (req, res) => {
     },
     customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
   };
-  saveDB();
+  if (!await persistDbOrSendError(res)) return;
   res.json({ success: true });
 });
 
 // Test-only: reset EC with partial housing data (simulates in-progress state for FLOW-03)
-app.post('/api/test/reset-ec-partial/:code', (req, res) => {
+app.post('/api/test/reset-ec-partial/:code', async (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
   const code = req.params.code;
   if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = resolveResettableTestProject(code);
+  const project = resetTestProjectFixture(database, code, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+  });
   if (!project) return res.status(404).json({ error: 'Project not found' });
   project.formData.energyCertificate = {
     status: 'not-started',
@@ -237,28 +267,34 @@ app.post('/api/test/reset-ec-partial/:code', (req, res) => {
     },
     customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
   };
-  saveDB();
+  if (!await persistDbOrSendError(res)) return;
   res.json({ success: true });
 });
 
 // Test-only: restore full base flow state (property docs done, EC not-started) for FLOW-04 step 2
-app.post('/api/test/restore-base-flow/:code', (req, res) => {
+app.post('/api/test/restore-base-flow/:code', async (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
   const code = req.params.code;
   if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = resolveResettableTestProject(code);
+  const project = resetTestProjectFixture(database, code, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+    formData: buildBaseFlowFormData(),
+  });
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  project.formData = buildBaseFlowFormData();
-  saveDB();
+  if (!await persistDbOrSendError(res)) return;
   res.json({ success: true });
 });
 
 // Test-only: clear property docs so the form starts at property-docs step (for FLOW-04)
-app.post('/api/test/reset-property-docs/:code', (req, res) => {
+app.post('/api/test/reset-property-docs/:code', async (req, res) => {
   if (isProduction) return res.status(403).json({ error: 'Not available in production' });
   const code = req.params.code;
   if (!RESETTABLE_TEST_CODES.includes(code)) return res.status(403).json({ error: 'Only test projects can be reset' });
-  const project = resolveResettableTestProject(code);
+  const project = resetTestProjectFixture(database, code, {
+    isProduction,
+    seedSampleData: process.env.SEED_SAMPLE_DATA,
+  });
   if (!project) return res.status(404).json({ error: 'Project not found' });
   project.formData.dni = { front: { photo: null, extraction: null }, back: { photo: null, extraction: null }, originalPdfs: [] };
   project.formData.ibi = { photo: null, pages: [], originalPdfs: [], extraction: null };
@@ -288,7 +324,7 @@ app.post('/api/test/reset-property-docs/:code', (req, res) => {
     },
     customerSignature: null, renderedDocument: null, completedAt: null, skippedAt: null
   };
-  saveDB();
+  if (!await persistDbOrSendError(res)) return;
   res.json({ success: true });
 });
 
@@ -301,8 +337,16 @@ function loadDB() {
         isProduction,
         seedSampleData: process.env.SEED_SAMPLE_DATA,
       });
-      if (changed) {
+      const removedCodes = isProduction
+        ? []
+        : pruneTransientQaProjects(parsed, {
+            protectedCodes: RESETTABLE_TEST_CODES,
+          });
+      if (changed || removedCodes.length > 0) {
         fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf8');
+      }
+      if (removedCodes.length > 0) {
+        console.log(`[dev-db] Pruned ${removedCodes.length} stale QA Bot project(s)`);
       }
       return parsed;
     }
@@ -317,26 +361,11 @@ function loadDB() {
   };
 }
 
-let _saveDBWriting = false;
-let _saveDBDirty = false;
-function saveDB() {
-  _saveDBDirty = true;
-  if (_saveDBWriting) return;
-  function doWrite() {
-    if (!_saveDBDirty) return;
-    _saveDBDirty = false;
-    _saveDBWriting = true;
-    const snapshot = JSON.stringify(database, null, 2);
-    fs.writeFile(DB_FILE, snapshot, 'utf8', (err) => {
-      _saveDBWriting = false;
-      if (err) console.error('Error saving DB:', err.message);
-      if (_saveDBDirty) doWrite();
-    });
-  }
-  setImmediate(doWrite);
-}
-
 const database = loadDB();
+const saveDB = createQueuedJsonSaver({
+  writeSnapshot: () => writeJsonAtomically(DB_FILE, database),
+  onError: (error) => console.error('Error saving DB:', error.message),
+});
 
 // ── IDOR: Validate project access ───────────────────────────────────────────
 function buildCustomerProjectUrl(code, _accessToken) {
@@ -652,6 +681,49 @@ function isEcDataComplete(ec) {
   return true;
 }
 
+function getIdentityDocumentKind(extraction) {
+  const kind = extraction?.identityDocumentKind;
+  return kind === 'dni-card' || kind === 'nie-card' || kind === 'nie-certificate'
+    ? kind
+    : null;
+}
+
+function isCombinedIdentityImage(extraction) {
+  return typeof extraction?.notes === 'string' && extraction.notes.toLowerCase().includes('combined');
+}
+
+function isDashboardIdentityComplete(formData) {
+  const front = formData?.dni?.front || {};
+  const back = formData?.dni?.back || {};
+  if (!front?.photo) return false;
+
+  const kind = getIdentityDocumentKind(front?.extraction);
+  if (!kind) return Boolean(back?.photo);
+  if (kind === 'dni-card' && !isCombinedIdentityImage(front?.extraction)) {
+    return Boolean(back?.photo);
+  }
+  return true;
+}
+
+function getDashboardIdentityPendingLabel(formData) {
+  const front = formData?.dni?.front || {};
+  const back = formData?.dni?.back || {};
+
+  if (!front?.photo && back?.photo) return 'falta la frontal';
+  if (front?.photo && !back?.photo) {
+    const kind = getIdentityDocumentKind(front?.extraction);
+    if (!kind || (kind === 'dni-card' && !isCombinedIdentityImage(front?.extraction))) {
+      return 'falta la trasera';
+    }
+  }
+
+  return 'pendiente';
+}
+
+function buildDashboardStatusItem(key, label, stateLabel, tone) {
+  return { key, label, stateLabel, tone };
+}
+
 function buildDashboardSummary(project) {
   const formData = project?.formData || null;
   const snapshot = getProjectSnapshot(formData);
@@ -752,6 +824,52 @@ function buildDashboardSummary(project) {
   const allDocuments = [...documents, ...electricityDocs];
   const warnings = computeDashboardWarnings(formData);
   const energyCertificatePresent = energyCertificateStatus === 'completed';
+  const statusItems = [
+    (() => {
+      const needsManualReview = Boolean(
+        formData?.dni?.front?.extraction?.needsManualReview
+        || formData?.dni?.back?.extraction?.needsManualReview,
+      );
+      if (needsManualReview) return buildDashboardStatusItem('dni', 'DNI / NIE', 'revisar', 'warning');
+      if (isDashboardIdentityComplete(formData)) return buildDashboardStatusItem('dni', 'DNI / NIE', '✓', 'success');
+      return buildDashboardStatusItem('dni', 'DNI / NIE', getDashboardIdentityPendingLabel(formData), 'pending');
+    })(),
+    (() => {
+      const ibiPresent = getIbiPages(formData).length > 0;
+      const needsManualReview = Boolean(formData?.ibi?.extraction?.needsManualReview);
+      if (needsManualReview) return buildDashboardStatusItem('ibi', 'IBI / Escritura', 'revisar', 'warning');
+      return buildDashboardStatusItem('ibi', 'IBI / Escritura', ibiPresent ? '✓' : 'pendiente', ibiPresent ? 'success' : 'pending');
+    })(),
+    ...(
+      project?.productType === 'aerothermal'
+        ? []
+        : [(() => {
+            const electricityPresent = electricityPages.length > 0;
+            const needsManualReview = electricityPages.some((page) => Boolean(page?.extraction?.needsManualReview));
+            if (needsManualReview) return buildDashboardStatusItem('electricity', 'Factura de luz', 'revisar', 'warning');
+            return buildDashboardStatusItem('electricity', 'Factura de luz', electricityPresent ? '✓' : 'pendiente', electricityPresent ? 'success' : 'pending');
+          })()]
+    ),
+    ...(
+      signedDocuments.length === 0
+        ? []
+        : [signedDocuments.every((item) => item.present)
+            ? buildDashboardStatusItem('representation', 'Representación', '✓', 'success')
+            : signedDocuments.some((item) => item.status === 'deferred')
+              ? buildDashboardStatusItem('representation', 'Representación', 'aplazada', 'muted')
+              : buildDashboardStatusItem('representation', 'Representación', 'pendiente', 'pending')]
+    ),
+    ...(
+      additionalDocuments.length === 0
+        ? []
+        : [buildDashboardStatusItem(
+            'additional-documents',
+            'Documento adicional',
+            `${additionalDocuments.length} archivo${additionalDocuments.length === 1 ? '' : 's'}${additionalDocuments.some((item) => item.needsManualReview) ? ' · revisar' : ''}`,
+            additionalDocuments.some((item) => item.needsManualReview) ? 'warning' : 'success',
+          )]
+    ),
+  ];
 
   return {
     lastUpdated:
@@ -788,6 +906,7 @@ function buildDashboardSummary(project) {
     finalSignatures: [],
     photoGroups: [],
     downloadGroups: [],
+    statusItems,
     warnings,
     counts: {
       documentsPresent: allDocuments.filter((d) => d.present).length,
@@ -910,7 +1029,7 @@ app.post('/api/project/create', (req, res) => {
   };
 
   database.projects[code] = project;
-  saveDB();
+  queueDbSave();
 
   res.json({ success: true, project: serializeProject(project, { includeAccessToken: true }), existing: false });
 });
@@ -1097,7 +1216,7 @@ app.post('/api/project/:code/save', requireProject, (req, res) => {
   const pdfStatus = checkCataloniaPDFs(formData);
   project.cataloniaPDFs = pdfStatus;
 
-  saveDB();
+  queueDbSave();
   res.json({ success: true, message: 'Progreso guardado.', cataloniaPDFs: pdfStatus });
 });
 
@@ -1160,7 +1279,7 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
     project.cataloniaPDFs = pdfStatus;
     completeSubmissionAttempt(project, normalizedAttemptId, submission);
 
-    saveDB();
+    queueDbSave();
 
     const testDelayMs = getTestSubmitDelayMs(req);
     if (testDelayMs > 0) {
@@ -1180,11 +1299,11 @@ app.post('/api/project/:code/submit', requireProject, async (req, res) => {
 
     if (!project.docflowNewOrderSent) {
       project.docflowNewOrderSent = true;
-      saveDB();
+      queueDbSave();
       const ok = await fireDocFlowNewOrder(project, docsUploaded);
       if (!ok) {
         project.docflowNewOrderSent = false;
-        saveDB();
+        queueDbSave();
       }
     } else {
       fireDocFlowDocUpdate(project.code, docsUploaded);
@@ -1229,7 +1348,7 @@ app.post('/api/project/:code/upload-assets', requireProject, (req, res, next) =>
 
   project.assetFiles = assetFiles;
   project.lastActivity = new Date().toISOString();
-  saveDB();
+  queueDbSave();
   deleteAssetFiles(DATA_DIR, [...removedPaths, ...replacedPaths]);
 
   res.json({ success: true, savedKeys: Object.keys(assetFiles) });
@@ -1352,7 +1471,7 @@ app.post('/api/dashboard/project', requireDashboardAuth, (req, res) => {
   );
 
   database.projects[project.code] = project;
-  saveDB();
+  queueDbSave();
 
   return res.json({
     success: true,
@@ -1398,7 +1517,7 @@ app.delete('/api/dashboard/project/:code', requireDashboardAuth, async (req, res
   }
 
   delete database.projects[code];
-  saveDB();
+  if (!await persistDbOrSendError(res)) return;
 
   console.log(`[delete] Project ${code} deleted by admin`);
   res.json({ success: true });
@@ -1512,7 +1631,7 @@ app.put('/api/project/:code/admin-formdata', requireDashboardAuth, (req, res) =>
   const pdfStatus = checkCataloniaPDFs(project.formData);
   project.cataloniaPDFs = pdfStatus;
 
-  saveDB();
+  queueDbSave();
   res.json({ success: true, formData: project.formData });
 });
 
