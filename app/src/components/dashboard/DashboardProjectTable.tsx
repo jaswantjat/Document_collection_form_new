@@ -28,10 +28,11 @@ import type {
 import { type DashboardProgressState } from '@/lib/dashboardProgress';
 import {
   buildProjectUrl,
-  getDocumentAssetsFromProject,
-  getElectricityAssetsFromProject,
   locationLabel,
   formatDate,
+  getTableDniAssetsFromProject,
+  getTableDocumentAssetsFromProject,
+  getTableElectricityAssetsFromProject,
 } from '@/lib/dashboardHelpers';
 import { downloadProjectZip } from '@/lib/dashboardExport';
 import {
@@ -86,7 +87,7 @@ function DocumentTableCell({
       <DeferredAssetButtons
         projectCode={projectCode}
         loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => getDocumentAssetsFromProject(project, item.key)}
+        resolveAssets={(project) => getTableDocumentAssetsFromProject(project, item.key)}
         onOpenDetail={onOpenDetail}
       />
     </div>
@@ -148,14 +149,10 @@ function DNITableCell({
       <DeferredAssetButtons
         projectCode={projectCode}
         loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => [
-          ...(hasFront && frontItem
-            ? getDocumentAssetsFromProject(project, frontItem.key)
-            : []),
-          ...(hasBack && backItem
-            ? getDocumentAssetsFromProject(project, backItem.key)
-            : []),
-        ]}
+        resolveAssets={(project) => getTableDniAssetsFromProject(project, {
+          includeFront: hasFront && Boolean(frontItem),
+          includeBack: hasBack && Boolean(backItem),
+        })}
         onOpenDetail={onOpenDetail}
       />
     </div>
@@ -379,7 +376,7 @@ function ElectricityTableCell({
       <DeferredAssetButtons
         projectCode={projectCode}
         loadProjectDetail={loadProjectDetail}
-        resolveAssets={getElectricityAssetsFromProject}
+        resolveAssets={getTableElectricityAssetsFromProject}
         onOpenDetail={onOpenDetail}
       />
     </div>

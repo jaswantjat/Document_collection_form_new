@@ -239,6 +239,32 @@ export function assetFromPreview(key: string, label: string, preview: string | n
   };
 }
 
+function getStoredAssetsByPrefix(
+  assetFiles: Record<string, unknown> | null | undefined,
+  prefix: string,
+  labelBuilder: (index: number, total: number) => string,
+) {
+  return Object.keys(assetFiles ?? {})
+    .filter((key) => key.startsWith(prefix))
+    .sort()
+    .map((key, index, keys) => ({
+      key,
+      label: labelBuilder(index, keys.length),
+      dataUrl: assetFiles?.[key] as string,
+      mimeType: mimeTypeFromAssetPath(assetFiles?.[key] as string),
+    }));
+}
+
+function dedupeAssets(assets: DashboardAssetItem[]) {
+  const seen = new Set<string>();
+  return assets.filter((asset) => {
+    const dedupeKey = `${asset.dataUrl}::${asset.label}`;
+    if (seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
+    return true;
+  });
+}
+
 export function getDocumentAssetsFromProject(project: { formData?: unknown; assetFiles?: Record<string, unknown>; code?: string }, key: string): DashboardAssetItem[] {
   const fd = project?.formData as Record<string, unknown> | null | undefined;
   if (key === 'ibi') {
@@ -276,6 +302,34 @@ export function getDocumentAssetsFromProject(project: { formData?: unknown; asse
   return [];
 }
 
+export function getOriginalDocumentAssetsFromProject(
+  project: { assetFiles?: Record<string, unknown> },
+  kind: 'dni' | 'ibi' | 'electricity',
+) {
+  const configs = {
+    dni: { prefix: 'dniOriginal_', label: 'DNI original PDF' },
+    ibi: { prefix: 'ibiOriginal_', label: 'IBI original PDF' },
+    electricity: { prefix: 'electricityOriginal_', label: 'Factura luz original PDF' },
+  } as const;
+  const config = configs[kind];
+  return getStoredAssetsByPrefix(project?.assetFiles, config.prefix, (index, total) => (
+    total === 1 ? config.label : `${config.label} ${index + 1}`
+  ));
+}
+
+export function getTableDocumentAssetsFromProject(
+  project: { formData?: unknown; assetFiles?: Record<string, unknown>; code?: string },
+  key: string,
+) {
+  const directAssets = getDocumentAssetsFromProject(project, key);
+  if (directAssets.length > 0) return directAssets;
+  if (key === 'ibi') return getOriginalDocumentAssetsFromProject(project, 'ibi');
+  if (key === 'dniFront' || key === 'dniBack') {
+    return getOriginalDocumentAssetsFromProject(project, 'dni');
+  }
+  return [];
+}
+
 export function getElectricityAssetsFromProject(project: { formData?: unknown; assetFiles?: Record<string, unknown> }): DashboardAssetItem[] {
   const summary = getDashboardProjectSummary(project);
   const fromSummary = summary.electricityPages
@@ -296,4 +350,23 @@ export function getElectricityAssetsFromProject(project: { formData?: unknown; a
     dataUrl: assetFiles[k] as string,
     mimeType: mimeTypeFromAssetPath(assetFiles[k] as string),
   }));
+}
+
+export function getTableElectricityAssetsFromProject(project: { formData?: unknown; assetFiles?: Record<string, unknown> }) {
+  const directAssets = getElectricityAssetsFromProject(project);
+  return directAssets.length > 0
+    ? directAssets
+    : getOriginalDocumentAssetsFromProject(project, 'electricity');
+}
+
+export function getTableDniAssetsFromProject(
+  project: { formData?: unknown; assetFiles?: Record<string, unknown>; code?: string },
+  options: { includeFront?: boolean; includeBack?: boolean } = {},
+) {
+  const directAssets = [
+    ...(options.includeFront ? getDocumentAssetsFromProject(project, 'dniFront') : []),
+    ...(options.includeBack ? getDocumentAssetsFromProject(project, 'dniBack') : []),
+  ];
+  if (directAssets.length > 0) return dedupeAssets(directAssets);
+  return getOriginalDocumentAssetsFromProject(project, 'dni');
 }

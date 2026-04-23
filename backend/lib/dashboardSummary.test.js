@@ -7,7 +7,7 @@ function makeStrippedPhoto(id) {
   return { id, timestamp: 1, sizeBytes: 1000 };
 }
 
-test('buildDashboardSummary counts stripped submitted documents as present without preview data', () => {
+test('buildDashboardSummary does not mark stripped submitted documents as present without a downloadable file', () => {
   const summary = buildDashboardSummary({
     code: 'ELT20260069',
     customerName: 'SERGIO CAPARROS RUIZ',
@@ -55,13 +55,13 @@ test('buildDashboardSummary counts stripped submitted documents as present witho
     },
   });
 
-  assert.equal(summary.documents.find((item) => item.key === 'dniFront')?.present, true);
-  assert.equal(summary.documents.find((item) => item.key === 'dniBack')?.present, true);
-  assert.equal(summary.documents.find((item) => item.key === 'ibi')?.present, true);
+  assert.equal(summary.documents.find((item) => item.key === 'dniFront')?.present, false);
+  assert.equal(summary.documents.find((item) => item.key === 'dniBack')?.present, false);
+  assert.equal(summary.documents.find((item) => item.key === 'ibi')?.present, false);
   assert.equal(summary.electricityPages[0]?.present, true);
   assert.equal(summary.signedDocuments.every((item) => item.present), true);
   assert.deepEqual(summary.counts, {
-    documentsPresent: 4,
+    documentsPresent: 1,
     documentsTotal: 4,
     manualReview: 0,
     signedFormsPresent: 3,
@@ -72,8 +72,52 @@ test('buildDashboardSummary counts stripped submitted documents as present witho
     energyCertificateTotal: 1,
     finalSignaturesPresent: 0,
     finalSignaturesTotal: 0,
-    documentsRemaining: 0,
+    documentsRemaining: 3,
   });
+});
+
+test('buildDashboardSummary keeps stripped submitted documents present when original PDFs survive', () => {
+  const summary = buildDashboardSummary({
+    code: 'ELT20260079',
+    customerName: 'Cliente PDF',
+    formData: {
+      dni: {
+        front: {
+          photo: makeStrippedPhoto('dni-front'),
+          extraction: { extractedData: { fullName: 'CLIENTE PDF' } },
+        },
+        back: {
+          photo: makeStrippedPhoto('dni-back'),
+          extraction: { extractedData: { address: 'CALLE FALSA 123' } },
+        },
+        originalPdfs: [],
+      },
+      ibi: {
+        photo: null,
+        pages: [makeStrippedPhoto('ibi-1')],
+        originalPdfs: [],
+        extraction: { extractedData: { titular: 'CLIENTE PDF' } },
+      },
+      electricityBill: {
+        pages: [{ photo: makeStrippedPhoto('bill-1'), extraction: null }],
+        originalPdfs: [],
+      },
+      representation: {},
+      signatures: {},
+      energyCertificate: { status: 'not-started' },
+      contract: { extraction: null, originalPdfs: [] },
+    },
+    assetFiles: {
+      dniOriginal_0: '/uploads/assets/ELT20260079/dniOriginal_0.pdf',
+      ibiOriginal_0: '/uploads/assets/ELT20260079/ibiOriginal_0.pdf',
+      electricityOriginal_0: '/uploads/assets/ELT20260079/electricityOriginal_0.pdf',
+    },
+  });
+
+  assert.equal(summary.documents.find((item) => item.key === 'dniFront')?.present, true);
+  assert.equal(summary.documents.find((item) => item.key === 'dniBack')?.present, true);
+  assert.equal(summary.documents.find((item) => item.key === 'ibi')?.present, true);
+  assert.equal(summary.electricityPages[0]?.present, true);
 });
 
 test('buildDashboardSummary keeps signed documents present when only rendered document metadata survives submit', () => {

@@ -20,8 +20,14 @@ function getIbiPages(formData) {
   return formData?.ibi?.photo ? [formData.ibi.photo] : [];
 }
 
-function hasPhotoLikeValue(photo) {
-  return Boolean(photo);
+function hasDownloadablePhoto(photo) {
+  if (!photo) return false;
+  if (typeof photo === 'string') return photo.startsWith('data:');
+  return Boolean(photo.preview);
+}
+
+function hasStoredAssetWithPrefix(assetFiles, prefix) {
+  return Object.keys(assetFiles).some((key) => key.startsWith(prefix));
 }
 
 function hasRenderedDocumentAsset(representation, key) {
@@ -280,13 +286,18 @@ function buildDashboardSummary(project) {
   const electricityAssetKeys = Object.keys(assetFiles)
     .filter((key) => key.startsWith('electricity_'))
     .sort();
+  const hasElectricityOriginal = hasStoredAssetWithPrefix(assetFiles, 'electricityOriginal_');
   const electricityDocs =
     electricityPages.length > 0
       ? electricityPages.map((page, index) => ({
           key: `electricity_${index}`,
           label: `Factura luz — pág. ${index + 1}`,
           shortLabel: `Luz ${index + 1}`,
-          present: Boolean(page?.photo || page?.extraction || assetFiles[`electricity_${index}`]),
+          present: Boolean(
+            hasDownloadablePhoto(page?.photo)
+            || assetFiles[`electricity_${index}`]
+            || (hasElectricityOriginal && (page?.photo || page?.extraction))
+          ),
           dataUrl: null,
           mimeType: null,
           needsManualReview: !!page?.extraction?.needsManualReview,
@@ -303,6 +314,17 @@ function buildDashboardSummary(project) {
             needsManualReview: false,
             extractedData: null,
           }))
+        : hasElectricityOriginal
+          ? [{
+              key: 'electricity_0',
+              label: 'Factura de luz',
+              shortLabel: 'Luz',
+              present: true,
+              dataUrl: null,
+              mimeType: null,
+              needsManualReview: false,
+              extractedData: null,
+            }]
         : [{
             key: 'electricity_0',
             label: 'Factura de luz',
@@ -317,6 +339,8 @@ function buildDashboardSummary(project) {
   const ibiAssetKeys = Object.keys(assetFiles)
     .filter((key) => key.startsWith('ibi_'))
     .sort();
+  const hasIbiOriginal = hasStoredAssetWithPrefix(assetFiles, 'ibiOriginal_');
+  const hasDniOriginal = hasStoredAssetWithPrefix(assetFiles, 'dniOriginal_');
 
   const documents = [
     {
@@ -324,9 +348,9 @@ function buildDashboardSummary(project) {
       label: 'DNI frontal',
       shortLabel: 'DNI frontal',
       present: Boolean(
-        hasPhotoLikeValue(formData?.dni?.front?.photo)
-        || formData?.dni?.front?.extraction
+        hasDownloadablePhoto(formData?.dni?.front?.photo)
         || assetFiles.dniFront
+        || (hasDniOriginal && (formData?.dni?.front?.photo || formData?.dni?.front?.extraction))
       ),
       dataUrl: null,
       mimeType: null,
@@ -338,9 +362,9 @@ function buildDashboardSummary(project) {
       label: 'DNI trasera',
       shortLabel: 'DNI trasera',
       present: Boolean(
-        hasPhotoLikeValue(formData?.dni?.back?.photo)
-        || formData?.dni?.back?.extraction
+        hasDownloadablePhoto(formData?.dni?.back?.photo)
         || assetFiles.dniBack
+        || (hasDniOriginal && (formData?.dni?.back?.photo || formData?.dni?.back?.extraction))
       ),
       dataUrl: null,
       mimeType: null,
@@ -351,7 +375,9 @@ function buildDashboardSummary(project) {
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: getIbiPages(formData).length > 0 || ibiAssetKeys.length > 0,
+      present: getIbiPages(formData).some((page) => hasDownloadablePhoto(page))
+        || ibiAssetKeys.length > 0
+        || hasIbiOriginal,
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.ibi?.extraction?.needsManualReview,
