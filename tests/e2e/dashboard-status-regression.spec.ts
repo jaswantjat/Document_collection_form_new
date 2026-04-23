@@ -169,7 +169,7 @@ test.describe('Dashboard status regressions', () => {
     await expect(submittedRow.locator('td').nth(9)).toContainText('Completo');
   });
 
-  test('detail modal can download IBI from stored assets after submission strips previews', async ({ page, request }) => {
+  test('detail modal can download primary docs from stored assets after submission strips previews', async ({ page, request }) => {
     const submitted = await createDashboardProject(request, `dash-ibi-${Date.now()}`);
 
     await uploadAssets(request, submitted.code, ['dniFront', 'dniBack', 'ibi_0', 'electricity_0']);
@@ -197,8 +197,20 @@ test.describe('Dashboard status regressions', () => {
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
 
+    const dniFrontDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar DNI frontal').first().click();
+    expect((await dniFrontDownload).suggestedFilename()).toBe(`${submitted.code}_dni_frontal.jpg`);
+
+    const dniBackDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar DNI trasera').first().click();
+    expect((await dniBackDownload).suggestedFilename()).toBe(`${submitted.code}_dni_trasera.jpg`);
+
     const ibiDownload = page.waitForEvent('download');
-    await modal.getByTitle('Descargar IBI / Escritura').click();
+    await modal.getByTitle('Descargar IBI / Escritura').first().click();
     expect((await ibiDownload).suggestedFilename()).toBe(`${submitted.code}_ibi_escritura.jpg`);
+
+    const electricityDownload = page.waitForEvent('download');
+    await modal.getByTitle('Descargar Factura luz — pág. 1').first().click();
+    expect((await electricityDownload).suggestedFilename()).toBe(`${submitted.code}_factura_luz_pag._1.jpg`);
   });
 });

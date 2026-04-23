@@ -21,14 +21,12 @@ import type {
 import {
   buildEnergyCertificatePdfFactory,
   downloadBlob,
-  extensionFromMimeType,
   getDocumentAssetsFromProject,
+  getElectricityAssetsFromProject,
   getIbiPages,
   viewPDFInNewTab,
 } from '@/lib/dashboardHelpers';
 import type {
-  DNIData,
-  ElectricityBillData,
   RepresentationData,
   UploadedPhoto,
 } from '@/types';
@@ -108,50 +106,25 @@ export function CompanyDisplay({
   );
 }
 
-function buildPreviewAsset(
-  key: string,
-  label: string,
-  preview: string | null | undefined
-): DashboardAssetItem | null {
-  if (!preview) {
-    return null;
-  }
-
-  const extension = extensionFromMimeType(undefined, preview);
-  return {
-    key,
-    label,
-    dataUrl: preview,
-    mimeType: extension.startsWith('p') ? 'image/png' : 'image/jpeg',
-  };
-}
-
 export function DNIDisplay({
-  dni,
-  projectCode,
+  project,
 }: {
-  dni: DNIData | null | undefined;
-  projectCode: string;
+  project: DashboardProjectRecord | null | undefined;
 }) {
-  if (!dni?.front?.photo && !dni?.back?.photo) {
+  const dni = project?.formData?.dni;
+  const projectCode = project?.code ?? '';
+  const frontAsset = getDocumentAssetsFromProject(project || {}, 'dniFront')[0] || null;
+  const backAsset = getDocumentAssetsFromProject(project || {}, 'dniBack')[0] || null;
+
+  if (!dni || (!frontAsset && !backAsset)) {
     return null;
   }
 
   const frontData = dni.front?.extraction?.extractedData;
   const backData = dni.back?.extraction?.extractedData;
-  const frontAsset = buildPreviewAsset(
-    'dni-front',
-    'DNI frontal',
-    dni.front?.photo?.preview
-  );
-  const backAsset = buildPreviewAsset(
-    'dni-back',
-    'DNI trasera',
-    dni.back?.photo?.preview
-  );
-  const dniImages = [dni.front?.photo?.preview, dni.back?.photo?.preview].filter(
-    (preview): preview is string => Boolean(preview)
-  );
+  const dniImages = [frontAsset, backAsset]
+    .filter((asset): asset is DashboardAssetItem => Boolean(asset?.dataUrl?.startsWith('data:image/')))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
@@ -288,29 +261,30 @@ export function IBIDisplay({
 }
 
 export function ElectricityDisplay({
-  bill,
-  projectCode,
+  project,
 }: {
-  bill: ElectricityBillData | null | undefined;
-  projectCode: string;
+  project: DashboardProjectRecord | null | undefined;
 }) {
+  const bill = project?.formData?.electricityBill;
+  const projectCode = project?.code ?? '';
   const pages = bill?.pages ?? [];
   const normalizedPages = pages.length === 0 ? [bill?.front, bill?.back].filter(Boolean) : pages;
   const uploadedPages = normalizedPages.filter((page) => Boolean(page?.photo));
+  const assets = getElectricityAssetsFromProject(project || {});
 
-  if (uploadedPages.length === 0) {
+  if (assets.length === 0) {
     return null;
   }
 
-  const electricityImages = uploadedPages.flatMap((page) =>
-    page?.photo?.preview ? [page.photo.preview] : []
-  );
+  const electricityImages = assets
+    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
       <SectionHeading
         icon={Zap}
-        label={`Factura de electricidad — ${uploadedPages.length} imagen${uploadedPages.length !== 1 ? 'es' : ''}`}
+        label={`Factura de electricidad — ${assets.length} imagen${assets.length !== 1 ? 'es' : ''}`}
         actions={
           electricityImages.length > 0 ? (
             <AutocropperButton
@@ -322,12 +296,8 @@ export function ElectricityDisplay({
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        {uploadedPages.map((page, index) => {
-          const asset = buildPreviewAsset(
-            `electricity-${index}`,
-            `Factura luz — pág. ${index + 1}`,
-            page?.photo?.preview
-          );
+        {assets.map((asset, index) => {
+          const page = uploadedPages[index];
           const data = page?.extraction?.extractedData;
 
           return (
