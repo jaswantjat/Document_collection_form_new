@@ -468,6 +468,38 @@ test.describe('Dashboard QA', () => {
     await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
   });
 
+  test('inline assessor reassignment saves immediately and preserves unrelated signed renders', async ({ page, request }) => {
+    const code = await createDashboardProject(request, makeDashboardFormData());
+    const token = await loginDashboard(request);
+    const newAssessor = APPROVED_ASSESSORS[6];
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    const row = getProjectRow(page, code);
+    await expect(row).toBeVisible({ timeout: 15000 });
+
+    const rowAssessorOptions = await row.getByTestId('dashboard-assessor-select').locator('option').allTextContents();
+    expect(rowAssessorOptions).toEqual(APPROVED_ASSESSORS);
+    await row.getByTestId('dashboard-assessor-select').selectOption(newAssessor);
+    await expect(row.getByTestId('dashboard-assessor-save-status')).toContainText('Guardado', { timeout: 30000 });
+    await expect(row.getByTestId('dashboard-assessor-select')).toHaveValue(newAssessor);
+
+    const detailRes = await request.get(`${API_BASE}/api/dashboard/project/${code}`, {
+      headers: { 'x-dashboard-token': token },
+      timeout: 15000,
+    });
+    const detailBody = await detailRes.json();
+    expect(detailBody.project.assessor).toBe(newAssessor);
+    expect(detailBody.project.formData.energyCertificate.renderedDocument).toBeNull();
+    expect(detailBody.project.formData.representation.renderedDocuments.catalunaIva.templateVersion)
+      .toBe(SIGNED_DOCUMENT_TEMPLATE_VERSION);
+
+    await page.getByTestId('dashboard-assessor-filter').selectOption(newAssessor);
+    await expect(row).toBeVisible();
+    await page.getByTestId('dashboard-assessor-filter').selectOption(APPROVED_ASSESSOR);
+    await expect(row).toBeHidden();
+  });
+
   test('refresh pulls in new projects and keeps the newest activity first', async ({ page, request }) => {
     const customerName = `Refresh Sort ${Date.now()}`;
     const createProject = async () => {
@@ -587,6 +619,40 @@ test.describe('Dashboard QA', () => {
       '5_fotos_inmueble/espacio_de_instalacion_1.jpg',
       '5_fotos_inmueble/radiadores_1.jpg',
     ]));
+  });
+
+  test('status-column downloads direct files and document mini ZIPs without using the full ZIP button', async ({ page, request }) => {
+    const directCode = await createDashboardProject(request, makeDashboardFormData());
+    const multiFileData = makeDashboardFormData();
+    multiFileData.ibi.pages = [makePhoto('ibi-1'), makePhoto('ibi-2')];
+    const zipCode = await createDashboardProject(request, multiFileData);
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(directCode);
+    const directRow = getProjectRow(page, directCode);
+    await expect(directRow).toBeVisible({ timeout: 15000 });
+    const directDownload = page.waitForEvent('download');
+    await directRow.getByTestId('status-download-ibi').click();
+    expect((await directDownload).suggestedFilename()).toBe(`${directCode}_ibi_escritura.jpg`);
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(zipCode);
+    const zipRow = getProjectRow(page, zipCode);
+    await expect(zipRow).toBeVisible({ timeout: 15000 });
+    const miniZipDownload = page.waitForEvent('download');
+    await zipRow.getByTestId('status-download-ibi').click();
+    const miniZip = await miniZipDownload;
+    expect(miniZip.suggestedFilename()).toBe(`${zipCode}_ibi_escritura.zip`);
+
+    const miniZipPath = await miniZip.path();
+    expect(miniZipPath).toBeTruthy();
+    const entries = await parseZipEntries(readFileSync(miniZipPath!));
+    expect(entries).toEqual(expect.arrayContaining([
+      '1_documentos/ibi_escritura.jpg',
+      '1_documentos/ibi_escritura_2.jpg',
+    ]));
+
+    await expect(zipRow.getByRole('button', { name: 'ZIP' })).toBeVisible();
   });
 
   test('detail modal uses cached project detail after the first slow load', async ({ page, request }) => {

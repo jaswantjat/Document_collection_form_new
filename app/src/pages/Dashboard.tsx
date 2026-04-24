@@ -34,6 +34,7 @@ import {
   deleteProject,
   fetchDashboard,
   fetchDashboardProject,
+  updateDashboardProjectAssessor,
   type DashboardProjectActionResult,
 } from '@/services/api';
 import {
@@ -55,7 +56,7 @@ import {
   viewPDFInNewTab, downloadCSV,
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
 } from '@/lib/dashboardHelpers';
-import { downloadProjectZip } from '@/lib/dashboardExport';
+import { downloadDashboardStatusGroup, downloadProjectZip } from '@/lib/dashboardExport';
 import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
 import { ProjectDetailUploadWorkspace } from '@/pages/dashboard/ProjectDetailUploadWorkspace';
 
@@ -467,16 +468,111 @@ function AutocropperButton({
   );
 }
 
+function StatusDownloadButton({
+  item,
+  project,
+  loadProjectDetail,
+}: {
+  item: Pick<DashboardStatusItem, 'key' | 'label' | 'downloadCount'>;
+  project: any;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const canDownload = (item.downloadCount ?? 0) > 0;
+  const Icon = (item.downloadCount ?? 0) > 1 ? Archive : Download;
+
+  if (!canDownload) return null;
+
+  return (
+    <button
+      type="button"
+      data-testid={`status-download-${item.key}`}
+      title={`Descargar ${item.label}`}
+      disabled={downloading}
+      onClick={async () => {
+        setDownloading(true);
+        try {
+          await downloadDashboardStatusGroup(project, item.key, { loadProjectDetail });
+        } catch (err) {
+          console.error('Status document download failed:', err);
+          alert('No se pudo descargar este documento.');
+        } finally {
+          setDownloading(false);
+        }
+      }}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/70 bg-white/85 text-gray-700 shadow-sm hover:bg-white disabled:opacity-50"
+    >
+      {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+function EnergyCertificateStatusBadge({
+  energyCertificate,
+  project,
+  loadProjectDetail,
+}: {
+  energyCertificate: DashboardEnergyCertificateSummary;
+  project: any;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const completed = energyCertificate.status === 'completed';
+
+  return (
+    <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+      completed
+        ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+        : energyCertificate.status === 'skipped'
+          ? 'text-gray-600 bg-gray-50 border-gray-200'
+          : 'text-amber-700 bg-amber-50 border-amber-200'
+    }`}>
+      {completed ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+      {completed
+        ? 'Certificado energético'
+        : energyCertificate.status === 'skipped'
+          ? 'Certificado energético omitido'
+          : 'Certificado energético pendiente'}
+      {completed && (
+        <button
+          type="button"
+          data-testid="status-download-energy-certificate"
+          title="Descargar Certificado energético"
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadDashboardStatusGroup(project, 'energy-certificate', { loadProjectDetail });
+            } catch (err) {
+              console.error('Energy certificate status download failed:', err);
+              alert('No se pudo descargar el certificado energético.');
+            } finally {
+              setDownloading(false);
+            }
+          }}
+          className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-emerald-700 disabled:opacity-50"
+        >
+          {downloading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function StatusCell({
   items,
   submissionCount,
   energyCertificate,
   warnings,
+  project,
+  loadProjectDetail,
 }: {
   items: DashboardStatusItem[];
   submissionCount: number;
   energyCertificate?: DashboardEnergyCertificateSummary;
   warnings: import('@/lib/dashboardProject').DashboardWarning[];
+  project: any;
+  loadProjectDetail: (projectCode: string) => Promise<any>;
 }) {
   const toneClasses: Record<DashboardStatusItem['tone'], string> = {
     success: 'border-emerald-200 bg-emerald-50/80 text-emerald-800',
@@ -494,7 +590,10 @@ function StatusCell({
             className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-xs ${toneClasses[item.tone]}`}
           >
             <span className="font-medium text-gray-800">{item.label}</span>
-            <span className="font-semibold whitespace-nowrap">{item.stateLabel}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-semibold whitespace-nowrap">{item.stateLabel}</span>
+              <StatusDownloadButton item={item} project={project} loadProjectDetail={loadProjectDetail} />
+            </span>
           </li>
         ))}
       </ul>
@@ -504,20 +603,11 @@ function StatusCell({
         </div>
       )}
       {energyCertificate && (
-        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
-          energyCertificate.status === 'completed'
-            ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-            : energyCertificate.status === 'skipped'
-              ? 'text-gray-600 bg-gray-50 border-gray-200'
-              : 'text-amber-700 bg-amber-50 border-amber-200'
-        }`}>
-          {energyCertificate.status === 'completed' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-          {energyCertificate.status === 'completed'
-            ? 'Certificado energético'
-            : energyCertificate.status === 'skipped'
-              ? 'Certificado energético omitido'
-              : 'Certificado energético pendiente'}
-        </div>
+        <EnergyCertificateStatusBadge
+          energyCertificate={energyCertificate}
+          project={project}
+          loadProjectDetail={loadProjectDetail}
+        />
       )}
       {warnings.length > 0 && (
         <ul className="space-y-1">
@@ -702,19 +792,81 @@ function ProjectDetailModal({
   );
 }
 
+function AssessorCell({
+  project,
+  token,
+  onSaved,
+}: {
+  project: any;
+  token: string;
+  onSaved: (project: any) => void;
+}) {
+  const [value, setValue] = useState(project.assessor || '');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    setValue(project.assessor || '');
+  }, [project.assessor]);
+
+  const saveAssessor = async (nextAssessor: string) => {
+    const previous = value;
+    setValue(nextAssessor);
+    setStatus('saving');
+    try {
+      const response = await updateDashboardProjectAssessor(project.code, nextAssessor, token);
+      if (!response.success) throw new Error(response.message || 'No se pudo guardar el asesor.');
+      onSaved(response.project ?? { code: project.code, assessor: nextAssessor, assessorId: nextAssessor });
+      setStatus('saved');
+    } catch (err) {
+      console.error('Assessor reassignment failed:', err);
+      setValue(previous);
+      setStatus('error');
+    }
+  };
+
+  return (
+    <div className="space-y-1 min-w-[170px]">
+      <select
+        data-testid="dashboard-assessor-select"
+        value={value}
+        disabled={status === 'saving'}
+        onChange={(event) => { void saveAssessor(event.target.value); }}
+        className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-900 shadow-sm focus:border-eltex-blue focus:outline-none"
+      >
+        {approvedAssessors.map((assessor) => (
+          <option key={assessor} value={assessor}>
+            {assessor}
+          </option>
+        ))}
+      </select>
+      <p data-testid="dashboard-assessor-save-status" className="text-[11px] text-gray-500">
+        {status === 'saving'
+          ? 'Guardando...'
+          : status === 'saved'
+            ? 'Guardado'
+            : status === 'error'
+              ? 'No se pudo guardar'
+              : 'Asesor asignado'}
+      </p>
+    </div>
+  );
+}
+
 function ProjectTableRow({
   project,
   summary,
   token,
   loadProjectDetail,
   onRefresh,
+  onAssessorUpdated,
   onDelete,
 }: {
   project: any;
   summary: DashboardProjectSummary;
   token: string;
   loadProjectDetail: (projectCode: string) => Promise<any>;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
+  onAssessorUpdated: (project: any) => void;
   onDelete: (code: string) => void;
 }) {
   const [downloading, setDownloading] = useState(false);
@@ -803,10 +955,7 @@ function ProjectTableRow({
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-gray-900">{project.assessor || '—'}</p>
-          <p className="text-xs text-gray-500">Asesor asignado</p>
-        </div>
+        <AssessorCell project={project} token={token} onSaved={onAssessorUpdated} />
       </td>
 
       <td className="px-4 py-3 align-top border-b border-gray-100">
@@ -815,6 +964,8 @@ function ProjectTableRow({
           submissionCount={project.submissionCount}
           energyCertificate={summary.energyCertificate}
           warnings={summary.warnings}
+          project={project}
+          loadProjectDetail={loadProjectDetail}
         />
       </td>
 
@@ -1577,6 +1728,13 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     setProjects((prev) => prev.filter((p) => p.code !== code));
   }, []);
 
+  const handleAssessorUpdated = useCallback((project: any) => {
+    detailCacheRef.current.delete(project.code);
+    setProjects((prev) => prev.map((item) => (
+      item.code === project.code ? { ...item, ...project } : item
+    )));
+  }, []);
+
   const handleProjectActionResult = useCallback(async (result: DashboardProjectActionResult) => {
     detailCacheRef.current.delete(result.project.code);
     setActionResult(result);
@@ -1761,6 +1919,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                           token={token}
                           loadProjectDetail={loadProjectDetail}
                           onRefresh={load}
+                          onAssessorUpdated={handleAssessorUpdated}
                           onDelete={handleDeleteProject}
                         />
                       ))}

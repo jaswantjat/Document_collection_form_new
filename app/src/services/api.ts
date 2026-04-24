@@ -373,6 +373,19 @@ export async function resendDashboardProjectLink(
   return readJsonResponse(res);
 }
 
+export async function updateDashboardProjectAssessor(
+  code: string,
+  assessor: string,
+  token: string,
+): Promise<{ success: boolean; project?: ProjectData; message?: string; error?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}/assessor`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'x-dashboard-token': token },
+    body: JSON.stringify({ assessor }),
+  });
+  return readJsonResponse(res);
+}
+
 export async function saveProgress(
   code: string,
   formData: AppFormData,
