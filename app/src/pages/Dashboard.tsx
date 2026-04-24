@@ -26,7 +26,6 @@ import {
   Users,
   Trash2,
   X,
-  Upload,
   Zap,
   Scissors,
 } from 'lucide-react';
@@ -35,9 +34,6 @@ import {
   deleteProject,
   fetchDashboard,
   fetchDashboardProject,
-  extractDocument,
-  extractDocumentBatch,
-  adminUpdateFormData,
   type DashboardProjectActionResult,
 } from '@/services/api';
 import {
@@ -50,20 +46,18 @@ import {
   getDashboardProjectSummary,
 } from '@/lib/dashboardProject';
 import { approvedAssessors } from '@/lib/approvedAssessors';
-import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
 import {
   formatDate, locationLabel, languageLabel,
   extensionFromMimeType,
   downloadBlob, buildProjectUrl,
   downloadDataUrlAsset, openDataUrlInNewTab,
-  type PreparedAdminPage,
-  getIbiPages, prepareAdminUploadPages,
+  getIbiPages,
   viewPDFInNewTab, downloadCSV,
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
 } from '@/lib/dashboardHelpers';
-import { buildDashboardAdditionalBankDocumentPatch } from '@/lib/dashboardAdditionalBankDocuments';
 import { downloadProjectZip } from '@/lib/dashboardExport';
 import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
+import { ProjectDetailUploadWorkspace } from '@/pages/dashboard/ProjectDetailUploadWorkspace';
 
 function ProductBadge({ type }: { type: string }) {
   const isSolar = type?.toLowerCase() === 'solar';
@@ -539,354 +533,6 @@ function StatusCell({
   );
 }
 
-type AdminDocType =
-  | 'dni-front'
-  | 'dni-back'
-  | 'ibi'
-  | 'electricity-bill'
-  | 'additional-bank-document';
-
-const ADMIN_DOC_TABS: { key: AdminDocType; label: string }[] = [
-  { key: 'dni-front', label: 'DNI frontal' },
-  { key: 'dni-back', label: 'DNI trasera' },
-  { key: 'ibi', label: 'IBI / Escritura' },
-  { key: 'electricity-bill', label: 'Factura luz' },
-  { key: 'additional-bank-document', label: 'Documento adicional' },
-];
-
-function AdminUploadModal({
-  projectCode,
-  token,
-  loadProjectDetail,
-  onClose,
-  onRefresh,
-}: {
-  projectCode: string;
-  token: string;
-  loadProjectDetail: (projectCode: string) => Promise<any>;
-  onClose: () => void;
-  onRefresh: () => Promise<void> | void;
-}) {
-  const [activeTab, setActiveTab] = useState<AdminDocType>('dni-front');
-  const [status, setStatus] = useState<'idle' | 'extracting' | 'uploading' | 'done' | 'error'>('idle');
-  const [statusMsg, setStatusMsg] = useState('');
-  const [project, setProject] = useState<any | null>(null);
-  const [detailLoading, setDetailLoading] = useState(true);
-  const [detailError, setDetailError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const isBusy = status === 'extracting' || status === 'uploading';
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      setDetailLoading(true);
-      setDetailError('');
-      try {
-        const detail = await loadProjectDetail(projectCode);
-        if (!cancelled) {
-          setProject(detail);
-        }
-      } catch (err) {
-        console.error('Dashboard detail load failed:', err);
-        if (!cancelled) {
-          setDetailError('No se pudo cargar el expediente.');
-        }
-      } finally {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadProjectDetail, projectCode]);
-
-  const handleFiles = async (files: File[]) => {
-    if (!project) {
-      setStatus('error');
-      setStatusMsg('No se pudo cargar el expediente.');
-      return;
-    }
-
-    try {
-      if (activeTab === 'additional-bank-document') {
-        setStatus('uploading');
-        setStatusMsg(files.length > 1 ? 'Guardando documentos adicionales...' : 'Guardando documento adicional...');
-
-        const formDataPatch = await buildDashboardAdditionalBankDocumentPatch(
-          project.formData?.additionalBankDocuments,
-          files,
-        );
-
-        const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
-        if (!saveRes.success) {
-          setStatus('error');
-          setStatusMsg(saveRes.message || 'Error al guardar.');
-          return;
-        }
-
-        setProject((prev: any) => prev ? {
-          ...prev,
-          formData: saveRes.formData ?? {
-            ...(prev.formData ?? {}),
-            ...formDataPatch,
-          },
-        } : prev);
-        await onRefresh();
-        setStatus('done');
-        setStatusMsg(files.length > 1
-          ? 'Documentos adicionales guardados correctamente.'
-          : 'Documento adicional guardado correctamente.');
-        return;
-      }
-
-      const hasPdf = files.some((file) => file.type === 'application/pdf');
-      setStatus('extracting');
-      setStatusMsg(hasPdf
-        ? 'Convirtiendo PDF en imágenes...'
-        : files.length > 1
-          ? 'Preparando imágenes...'
-          : 'Preparando imagen...');
-
-      const { pages: preparedPages, originalPdfs } = await prepareAdminUploadPages(files);
-      setStatusMsg('Extrayendo datos con IA...');
-
-      const docTypeMap: Record<AdminDocType, Parameters<typeof extractDocument>[1]> = {
-        'dni-front': 'dniFront',
-        'dni-back': 'dniBack',
-        'ibi': 'ibi',
-        'electricity-bill': 'electricity',
-        'additional-bank-document': 'other',
-      };
-
-      const res = activeTab === 'electricity-bill'
-        ? await extractDocumentBatch(preparedPages.map((page) => page.aiDataUrl), 'electricity')
-        : await extractDocument(
-          preparedPages.length === 1
-            ? preparedPages[0].aiDataUrl
-            : preparedPages.map((page) => page.aiDataUrl),
-          docTypeMap[activeTab]
-        );
-
-      if (!res.success || !res.extraction) {
-        setStatus('error');
-        setStatusMsg(res.message || 'No se pudo extraer el documento.');
-        return;
-      }
-
-      const extraction = {
-        ...res.extraction,
-        needsManualReview: res.needsManualReview ?? res.extraction.needsManualReview ?? false,
-        confirmedByUser: true,
-      };
-
-      const buildPhoto = (page: PreparedAdminPage, index = 0) => ({
-        id: `admin-${activeTab}-${Date.now()}-${index}`,
-        preview: page.preview,
-        timestamp: Date.now(),
-        sizeBytes: page.sizeBytes,
-      });
-
-      let formDataPatch: any;
-      if (activeTab === 'dni-front') {
-        formDataPatch = {
-          dni: {
-            front: { photo: buildPhoto(preparedPages[0]), extraction },
-            ...(originalPdfs.length > 0
-              ? { originalPdfs: mergeStoredDocumentFiles(project.formData?.dni?.originalPdfs, originalPdfs) }
-              : {}),
-          },
-        };
-      } else if (activeTab === 'dni-back') {
-        formDataPatch = {
-          dni: {
-            back: { photo: buildPhoto(preparedPages[0]), extraction },
-            ...(originalPdfs.length > 0
-              ? { originalPdfs: mergeStoredDocumentFiles(project.formData?.dni?.originalPdfs, originalPdfs) }
-              : {}),
-          },
-        };
-      } else if (activeTab === 'ibi') {
-        const storedPages = preparedPages.map((page, index) => buildPhoto(page, index));
-        formDataPatch = { ibi: { photo: storedPages[0], pages: storedPages, originalPdfs, extraction } };
-      } else {
-        const existingPages = project.formData?.electricityBill?.pages ?? [];
-        formDataPatch = {
-          electricityBill: {
-            pages: [
-              ...existingPages,
-              ...preparedPages.map((page, index) => ({
-                photo: buildPhoto(page, index),
-                extraction,
-              })),
-            ],
-            originalPdfs: mergeStoredDocumentFiles(project.formData?.electricityBill?.originalPdfs, originalPdfs),
-          },
-        };
-      }
-
-      setStatus('uploading');
-      setStatusMsg('Guardando en el expediente...');
-
-      const saveRes = await adminUpdateFormData(project.code, formDataPatch, token);
-      if (!saveRes.success) {
-        setStatus('error');
-        setStatusMsg(saveRes.message || 'Error al guardar.');
-        return;
-      }
-
-      setProject((prev: any) => prev ? {
-        ...prev,
-        formData: saveRes.formData ?? {
-          ...(prev.formData ?? {}),
-          ...formDataPatch,
-        },
-      } : prev);
-      await onRefresh();
-      setStatus('done');
-      setStatusMsg('Documento guardado correctamente.');
-    } catch (err) {
-      console.error('Admin upload failed:', err);
-      setStatus('error');
-      setStatusMsg('Error inesperado. Inténtalo de nuevo.');
-    }
-  };
-
-  const reset = () => {
-    setStatus('idle');
-    setStatusMsg('');
-    if (fileRef.current) fileRef.current.value = '';
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[260] bg-black/60 flex items-center justify-center p-4"
-      data-testid="admin-upload-modal"
-      onClick={() => {
-        if (!isBusy) onClose();
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Subir documento — {projectCode}</h2>
-          <button
-            type="button"
-            data-testid="admin-upload-close-btn"
-            onClick={() => {
-              if (!isBusy) onClose();
-            }}
-            disabled={isBusy}
-            className="text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {detailLoading && (
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-              <span className="text-sm text-blue-800">Cargando expediente...</span>
-            </div>
-          )}
-
-          {!detailLoading && detailError && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
-                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-                <span className="text-sm text-red-800">{detailError}</span>
-              </div>
-              <button type="button" onClick={onClose} className="btn-secondary w-full text-sm">
-                Cerrar
-              </button>
-            </div>
-          )}
-
-          {!detailLoading && !detailError && (
-            <>
-          <div className="flex gap-1.5 flex-wrap">
-            {ADMIN_DOC_TABS.map(tab => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => { setActiveTab(tab.key); reset(); }}
-                disabled={isBusy}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  activeTab === tab.key
-                    ? 'bg-eltex-blue text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {status === 'idle' && (
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-8 cursor-pointer hover:border-eltex-blue hover:bg-blue-50 transition-colors">
-              <Upload className="w-6 h-6 text-gray-400" />
-              <span className="text-sm text-gray-500">Haz clic para seleccionar imagen o PDF</span>
-              <input
-                ref={fileRef}
-                data-testid="admin-upload-file-input"
-                type="file"
-                accept="image/jpeg,image/png,application/pdf"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  e.target.value = '';
-                  if (files.length) handleFiles(files);
-                }}
-              />
-            </label>
-          )}
-
-          {(status === 'extracting' || status === 'uploading') && (
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <Loader2 className="w-5 h-5 text-eltex-blue animate-spin shrink-0" />
-              <span className="text-sm text-blue-800">{statusMsg}</span>
-            </div>
-          )}
-
-          {status === 'done' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span className="text-sm text-emerald-800">{statusMsg}</span>
-              </div>
-              <button type="button" onClick={reset} className="btn-secondary w-full text-sm">
-                Subir otro
-              </button>
-            </div>
-          )}
-
-          {status === 'error' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
-                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-                <span className="text-sm text-red-800">{statusMsg}</span>
-              </div>
-              <button type="button" onClick={reset} className="btn-secondary w-full text-sm">
-                Reintentar
-              </button>
-            </div>
-          )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ProjectDetailModal({
   projectCode,
   token,
@@ -903,7 +549,6 @@ function ProjectDetailModal({
   const [project, setProject] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -963,17 +608,6 @@ function ProjectDetailModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {project && (
-              <button
-                type="button"
-                data-testid="detail-upload-btn"
-                onClick={() => setShowUpload(true)}
-                className="h-9 rounded-lg px-3 inline-flex items-center gap-2 border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors"
-              >
-                <Upload className="w-4 h-4" />
-                <span className="text-sm font-semibold">Subir docs</span>
-              </button>
-            )}
             {project && (
               <button
                 type="button"
@@ -1044,6 +678,11 @@ function ProjectDetailModal({
               </div>
 
               <CompanyDisplay representation={project.formData?.representation} />
+              <ProjectDetailUploadWorkspace
+                project={project}
+                token={token}
+                onRefresh={refreshProject}
+              />
               <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
               <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
               <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
@@ -1059,16 +698,6 @@ function ProjectDetailModal({
         </div>
       </div>
     </div>
-    {showUpload && createPortal(
-      <AdminUploadModal
-        projectCode={projectCode}
-        token={token}
-        loadProjectDetail={loadProjectDetail}
-        onClose={() => setShowUpload(false)}
-        onRefresh={refreshProject}
-      />,
-      document.body
-    )}
     </>
   );
 }
