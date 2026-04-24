@@ -30,6 +30,6 @@ describe('RepresentationSection', () => {
     expect(html).toContain(
       'Podrás volver a este enlace para firmar cuando te venga bien.'
     );
-    expect(html).toContain('rounded-2xl border border-slate-200 bg-slate-50');
+    expect(html).toContain('rounded-2xl border border-slate-200 bg-white');
   });
 });
