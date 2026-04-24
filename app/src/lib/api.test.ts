@@ -19,6 +19,7 @@ import {
   submitForm,
   extractDocument,
   deleteProject,
+  updateDashboardProjectAssessor,
 } from '@/services/api';
 
 // ── fetch mock helpers ───────────────────────────────────────────────────────
@@ -276,6 +277,35 @@ describe('resendDashboardProjectLink', () => {
     const result = await resendDashboardProjectLink('ELT404', 'dash-token');
     expect(result.success).toBe(false);
     expect(result.error).toBe('PROJECT_NOT_FOUND');
+  });
+});
+
+describe('updateDashboardProjectAssessor', () => {
+  it('patches the inline assessor endpoint with the dashboard token', async () => {
+    mockFetch({ success: true, project: { code: 'ELT001', assessor: 'Laura Martín Manzano' } });
+
+    const result = await updateDashboardProjectAssessor('ELT001', 'Laura Martín Manzano', 'dash-token');
+
+    expect(result.success).toBe(true);
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/dashboard/project/ELT001/assessor');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dashboard-token': 'dash-token',
+      },
+      body: JSON.stringify({ assessor: 'Laura Martín Manzano' }),
+    });
+  });
+
+  it('returns backend validation errors for disallowed assessor reassignment', async () => {
+    mockFetch({ success: false, message: 'Selecciona un asesor de la lista aprobada.' }, 400);
+
+    const result = await updateDashboardProjectAssessor('ELT001', 'QA Bot', 'dash-token');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('asesor');
   });
 });
 

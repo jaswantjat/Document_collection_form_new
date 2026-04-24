@@ -155,7 +155,7 @@ app.use(cors({
         cb(new Error(`CORS: origin ${origin} not allowed`));
       }
     : '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-dashboard-token', 'x-project-token'],
 }));
 app.use(express.json({ limit: '25mb' }));
@@ -720,8 +720,13 @@ function getDashboardIdentityPendingLabel(formData) {
   return 'pendiente';
 }
 
-function buildDashboardStatusItem(key, label, stateLabel, tone) {
-  return { key, label, stateLabel, tone };
+function buildDashboardStatusItem(key, label, stateLabel, tone, downloadCount = 0) {
+  return { key, label, stateLabel, tone, downloadCount };
+}
+
+function countOriginalPdfs(formData, section) {
+  const files = formData?.[section]?.originalPdfs;
+  return Array.isArray(files) ? files.length : 0;
 }
 
 function buildDashboardSummary(project) {
@@ -824,21 +829,27 @@ function buildDashboardSummary(project) {
   const allDocuments = [...documents, ...electricityDocs];
   const warnings = computeDashboardWarnings(formData);
   const energyCertificatePresent = energyCertificateStatus === 'completed';
+  const dniDownloadCount = [
+    formData?.dni?.front?.photo || project.assetFiles?.dniFront,
+    formData?.dni?.back?.photo || project.assetFiles?.dniBack,
+  ].filter(Boolean).length + countOriginalPdfs(formData, 'dni');
+  const ibiDownloadCount = getIbiPages(formData).length + countOriginalPdfs(formData, 'ibi');
+  const electricityDownloadCount = electricityPages.length + countOriginalPdfs(formData, 'electricityBill');
   const statusItems = [
     (() => {
       const needsManualReview = Boolean(
         formData?.dni?.front?.extraction?.needsManualReview
         || formData?.dni?.back?.extraction?.needsManualReview,
       );
-      if (needsManualReview) return buildDashboardStatusItem('dni', 'DNI / NIE', 'revisar', 'warning');
-      if (isDashboardIdentityComplete(formData)) return buildDashboardStatusItem('dni', 'DNI / NIE', '✓', 'success');
-      return buildDashboardStatusItem('dni', 'DNI / NIE', getDashboardIdentityPendingLabel(formData), 'pending');
+      if (needsManualReview) return buildDashboardStatusItem('dni', 'DNI / NIE', 'revisar', 'warning', dniDownloadCount);
+      if (isDashboardIdentityComplete(formData)) return buildDashboardStatusItem('dni', 'DNI / NIE', '✓', 'success', dniDownloadCount);
+      return buildDashboardStatusItem('dni', 'DNI / NIE', getDashboardIdentityPendingLabel(formData), 'pending', dniDownloadCount);
     })(),
     (() => {
       const ibiPresent = getIbiPages(formData).length > 0;
       const needsManualReview = Boolean(formData?.ibi?.extraction?.needsManualReview);
-      if (needsManualReview) return buildDashboardStatusItem('ibi', 'IBI / Escritura', 'revisar', 'warning');
-      return buildDashboardStatusItem('ibi', 'IBI / Escritura', ibiPresent ? '✓' : 'pendiente', ibiPresent ? 'success' : 'pending');
+      if (needsManualReview) return buildDashboardStatusItem('ibi', 'IBI / Escritura', 'revisar', 'warning', ibiDownloadCount);
+      return buildDashboardStatusItem('ibi', 'IBI / Escritura', ibiPresent ? '✓' : 'pendiente', ibiPresent ? 'success' : 'pending', ibiDownloadCount);
     })(),
     ...(
       project?.productType === 'aerothermal'
@@ -846,15 +857,15 @@ function buildDashboardSummary(project) {
         : [(() => {
             const electricityPresent = electricityPages.length > 0;
             const needsManualReview = electricityPages.some((page) => Boolean(page?.extraction?.needsManualReview));
-            if (needsManualReview) return buildDashboardStatusItem('electricity', 'Factura de luz', 'revisar', 'warning');
-            return buildDashboardStatusItem('electricity', 'Factura de luz', electricityPresent ? '✓' : 'pendiente', electricityPresent ? 'success' : 'pending');
+            if (needsManualReview) return buildDashboardStatusItem('electricity', 'Factura de luz', 'revisar', 'warning', electricityDownloadCount);
+            return buildDashboardStatusItem('electricity', 'Factura de luz', electricityPresent ? '✓' : 'pendiente', electricityPresent ? 'success' : 'pending', electricityDownloadCount);
           })()]
     ),
     ...(
       signedDocuments.length === 0
         ? []
         : [signedDocuments.every((item) => item.present)
-            ? buildDashboardStatusItem('representation', 'Representación', '✓', 'success')
+            ? buildDashboardStatusItem('representation', 'Representación', '✓', 'success', signedDocuments.filter((item) => item.present).length)
             : signedDocuments.some((item) => item.status === 'deferred')
               ? buildDashboardStatusItem('representation', 'Representación', 'aplazada', 'muted')
               : buildDashboardStatusItem('representation', 'Representación', 'pendiente', 'pending')]
@@ -867,6 +878,7 @@ function buildDashboardSummary(project) {
             'Documento adicional',
             `${additionalDocuments.length} archivo${additionalDocuments.length === 1 ? '' : 's'}${additionalDocuments.some((item) => item.needsManualReview) ? ' · revisar' : ''}`,
             additionalDocuments.some((item) => item.needsManualReview) ? 'warning' : 'success',
+            additionalDocuments.length,
           )]
     ),
   ];
@@ -1498,6 +1510,28 @@ app.post('/api/dashboard/project/:code/resend', requireDashboardAuth, (req, res)
     success: true,
     ...serializeDashboardProjectAction(project, serializeProject),
   });
+});
+
+app.patch('/api/dashboard/project/:code/assessor', requireDashboardAuth, (req, res) => {
+  const project = database.projects[req.params.code];
+  if (!project) {
+    return res.status(404).json({ success: false, error: 'PROJECT_NOT_FOUND', message: 'Proyecto no encontrado.' });
+  }
+
+  const assessor = typeof req.body?.assessor === 'string' ? req.body.assessor.trim() : '';
+  if (!isApprovedAssessor(assessor)) {
+    return res.status(400).json({ success: false, message: 'Selecciona un asesor de la lista aprobada.' });
+  }
+
+  project.assessor = assessor;
+  project.assessorId = assessor;
+  project.lastActivity = new Date().toISOString();
+  if (project.formData?.energyCertificate?.renderedDocument) {
+    project.formData.energyCertificate.renderedDocument = null;
+  }
+
+  queueDbSave();
+  return res.json({ success: true, project: serializeDashboardProject(project) });
 });
 
 // ── Delete a project (admin only) ─────────────────────────────────────────────

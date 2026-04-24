@@ -61,6 +61,7 @@ export interface DashboardStatusItem {
   label: string;
   stateLabel: string;
   tone: 'success' | 'pending' | 'warning' | 'muted';
+  downloadCount?: number;
 }
 
 export interface DashboardEnergyCertificateSummary {
@@ -467,8 +468,11 @@ function buildStatusItem(
   label: string,
   stateLabel: string,
   tone: DashboardStatusItem['tone'],
+  downloadCount = 0,
 ): DashboardStatusItem {
-  return { key, label, stateLabel, tone };
+  const item: DashboardStatusItem = { key, label, stateLabel, tone };
+  if (downloadCount > 0) item.downloadCount = downloadCount;
+  return item;
 }
 
 function normalizeSummaryStatusItem(value: unknown): DashboardStatusItem | null {
@@ -478,11 +482,14 @@ function normalizeSummaryStatusItem(value: unknown): DashboardStatusItem | null 
   const label = typeof item.label === 'string' && item.label.trim() ? item.label.trim() : null;
   const stateLabel = typeof item.stateLabel === 'string' && item.stateLabel.trim() ? item.stateLabel.trim() : null;
   const tone = item.tone;
+  const downloadCount = typeof item.downloadCount === 'number' ? Math.max(0, item.downloadCount) : 0;
 
   if (!key || !label || !stateLabel) return null;
   if (tone !== 'success' && tone !== 'pending' && tone !== 'warning' && tone !== 'muted') return null;
 
-  return { key, label, stateLabel, tone };
+  const statusItem: DashboardStatusItem = { key, label, stateLabel, tone };
+  if (downloadCount > 0) statusItem.downloadCount = downloadCount;
+  return statusItem;
 }
 
 function statusFromPresence(
@@ -491,14 +498,20 @@ function statusFromPresence(
   present: boolean,
   needsManualReview = false,
   pendingLabel = 'pendiente',
+  downloadCount = 0,
 ): DashboardStatusItem {
-  if (needsManualReview) return buildStatusItem(key, label, 'revisar', 'warning');
-  if (present) return buildStatusItem(key, label, '✓', 'success');
-  return buildStatusItem(key, label, pendingLabel, 'pending');
+  if (needsManualReview) return buildStatusItem(key, label, 'revisar', 'warning', downloadCount);
+  if (present) return buildStatusItem(key, label, '✓', 'success', downloadCount);
+  return buildStatusItem(key, label, pendingLabel, 'pending', downloadCount);
 }
 
 function formatFileCount(count: number) {
   return `${count} archivo${count === 1 ? '' : 's'}`;
+}
+
+function countStoredPdfs(formData: any, section: 'dni' | 'ibi' | 'electricityBill') {
+  const files = formData?.[section]?.originalPdfs;
+  return Array.isArray(files) ? files.length : 0;
 }
 
 export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
@@ -522,14 +535,22 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
   const electricityPages = getElectricityPages(formData);
   const signedDocuments = getDashboardSignedPdfItems(project);
   const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
+  const dniDownloadCount = [
+    dniFront?.photo,
+    dniBack?.photo,
+  ].filter(Boolean).length + countStoredPdfs(formData, 'dni');
+  const ibiDownloadCount = ibiPages.length + countStoredPdfs(formData, 'ibi');
+  const electricityDownloadCount = electricityPages.length + countStoredPdfs(formData, 'electricityBill');
 
   const items: DashboardStatusItem[] = [
-    statusFromPresence('dni', 'DNI / NIE', dniComplete, dniNeedsManualReview, dniPendingLabel),
+    statusFromPresence('dni', 'DNI / NIE', dniComplete, dniNeedsManualReview, dniPendingLabel, dniDownloadCount),
     statusFromPresence(
       'ibi',
       'IBI / Escritura',
       ibiPages.length > 0,
       Boolean(formData?.ibi?.extraction?.needsManualReview),
+      'pendiente',
+      ibiDownloadCount,
     ),
   ];
 
@@ -539,6 +560,8 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
       'Factura de luz',
       electricityPages.length > 0,
       electricityPages.some((page: any) => Boolean(page?.extraction?.needsManualReview)),
+      'pendiente',
+      electricityDownloadCount,
     ));
   }
 
@@ -547,7 +570,7 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
     const deferred = !allSigned && signedDocuments.some((item) => item.status === 'deferred');
     items.push(
       allSigned
-        ? buildStatusItem('representation', 'Representación', '✓', 'success')
+        ? buildStatusItem('representation', 'Representación', '✓', 'success', signedDocuments.filter((item) => item.present).length)
         : deferred
           ? buildStatusItem('representation', 'Representación', 'aplazada', 'muted')
           : buildStatusItem('representation', 'Representación', 'pendiente', 'pending'),
@@ -562,6 +585,7 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
         'Documento adicional',
         manualReview ? `${formatFileCount(additionalDocuments.length)} · revisar` : formatFileCount(additionalDocuments.length),
         manualReview ? 'warning' : 'success',
+        additionalDocuments.length,
       ),
     );
   }
