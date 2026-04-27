@@ -63,9 +63,17 @@ const ASSET_UPLOAD_TIMEOUT_STEP_MS = 40_000;
 const ASSET_UPLOAD_MAX_TIMEOUT_MS = 120_000;
 const ASSET_UPLOAD_MAX_ATTEMPTS = 3;
 const ASSET_UPLOAD_RETRY_DELAYS_MS = [0, 1_500, 4_000];
+const EXTRACTION_MAX_ATTEMPTS = 3;
+const EXTRACTION_RETRY_DELAYS_MS = [0, 1_000, 3_000];
 
 type UploadApiResponse = { success: boolean; savedKeys?: string[]; message?: string; error?: string };
 type UploadApiError = Error & { retryable?: boolean };
+type ExtractionApiResponse = {
+  success?: boolean;
+  reason?: string;
+  message?: string;
+  error?: string;
+};
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return null;
@@ -285,6 +293,19 @@ function isRetryableUploadError(error: unknown): boolean {
   );
 }
 
+function isRetryableExtractionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === 'AbortError'
+    || error.name === 'TimeoutError'
+    || /abort|fetch|network|timed? out|load failed|signal timed out|econnreset|econnrefused/i.test(error.message)
+  );
+}
+
+function shouldRetryExtractionResponse(body: ExtractionApiResponse): boolean {
+  return body.success === false && body.reason === 'temporary-error';
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -427,6 +448,41 @@ export async function fetchProject(
   return { ...body, status: res.status };
 }
 
+async function performExtractionRequest<T extends ExtractionApiResponse>(
+  endpoint: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < EXTRACTION_MAX_ATTEMPTS; attempt += 1) {
+    if (EXTRACTION_RETRY_DELAYS_MS[attempt] > 0) {
+      await sleep(EXTRACTION_RETRY_DELAYS_MS[attempt]);
+    }
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(90000),
+      });
+      const parsed = await readJsonResponse<T>(res);
+      if (shouldRetryExtractionResponse(parsed) && attempt < EXTRACTION_MAX_ATTEMPTS - 1) {
+        lastError = parsed;
+        continue;
+      }
+      return parsed;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableExtractionError(error) || attempt === EXTRACTION_MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+    }
+  }
+
+  return lastError as T;
+}
+
 export async function lookupByPhone(
   phone: string
 ): Promise<{ success: boolean; project?: ProjectData; error?: string; message?: string }> {
@@ -563,13 +619,7 @@ export async function extractDocument(
   const body = Array.isArray(imageBase64)
     ? { imagesBase64: imageBase64, documentType }
     : { imageBase64, documentType };
-  const res = await fetch(`${API_BASE}/extract`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(90000),
-  });
-  return readJsonResponse(res);
+  return performExtractionRequest<ExtractDocumentResponse>(`${API_BASE}/extract`, body);
 }
 
 export async function extractDocumentBatch(
@@ -584,13 +634,7 @@ export async function extractDocumentBatch(
   reason?: string;
   message?: string;
 }> {
-  const res = await fetch(`${API_BASE}/extract-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imagesBase64, documentType }),
-    signal: AbortSignal.timeout(90000),
-  });
-  return readJsonResponse(res);
+  return performExtractionRequest(`${API_BASE}/extract-batch`, { imagesBase64, documentType });
 }
 
 export async function extractDniBatch(

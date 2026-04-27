@@ -9,6 +9,7 @@ import type {
   UploadedPhoto,
 } from '@/types';
 import { createDocumentIssue } from '@/lib/documentIssues';
+import { getExtractionFailureIssueCode } from '@/lib/documentIssues';
 import {
   createUploadedPhoto,
   expandUploadFiles,
@@ -120,12 +121,7 @@ export function IBIDocCard({
         : await extractDocument(firstPage.base64, slotKey as 'ibi');
 
       if (!response.success || !response.extraction) {
-        const errorCode = response.reason === 'unreadable'
-          || response.reason === 'wrong-document'
-          || response.reason === 'wrong-side'
-          || response.reason === 'temporary-error'
-          ? response.reason
-          : (response.isUnreadable ? 'unreadable' : response.isWrongDocument ? 'wrong-document' : 'temporary-error');
+        const errorCode = getExtractionFailureIssueCode(response);
         storedPages = preparedPages.map((page) => createUploadedPhoto(
           page.file,
           page.preview,

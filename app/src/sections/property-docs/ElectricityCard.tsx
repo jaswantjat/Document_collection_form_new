@@ -6,7 +6,7 @@ import type {
   StoredDocumentFile,
   UploadedPhoto,
 } from '@/types';
-import { createDocumentIssue } from '@/lib/documentIssues';
+import { createDocumentIssue, getExtractionFailureIssueCode } from '@/lib/documentIssues';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
 import {
   createStoredDocumentFile,
@@ -134,13 +134,14 @@ export function ElectricityCard({
     try {
       const response = await extractDocumentBatch(validFiles.map((file) => file.base64), 'electricity');
       if (!response.success || !response.extraction) {
+        const errorCode = getExtractionFailureIssueCode(response);
         const fallbackPhotos = validFiles.map(({ file, preview, width, height }) =>
           createUploadedPhoto(file, preview, width, height)
         );
         onAddPages(fallbackPhotos, null, uploadedOriginalPdfs);
         onIssueChange(createDocumentIssue(
-          'temporary-error',
-          'Hemos guardado la factura, pero la lectura automática no pudo completarse. Puedes continuar y revisarla más tarde.'
+          errorCode,
+          response.message || 'Hemos guardado la factura, pero la lectura automática no pudo completarse. Puedes continuar y revisarla más tarde.'
         ));
         setPendingItems((prev) => prev.filter((item) => !validFiles.find((file) => file.id === item.id)));
         return;

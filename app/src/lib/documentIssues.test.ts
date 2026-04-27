@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createDocumentIssue, getDocumentIssueMessage } from './documentIssues';
+import {
+  createDocumentIssue,
+  getDocumentIssueMessage,
+  getExtractionFailureIssueCode,
+} from './documentIssues';
 
 describe('documentIssues', () => {
   it('hides raw temporary extraction errors behind customer-safe copy', () => {
@@ -23,5 +27,13 @@ describe('documentIssues', () => {
   it('keeps explicit corrective messaging for wrong documents', () => {
     const message = 'Este archivo no corresponde al IBI.';
     expect(getDocumentIssueMessage('wrong-document', message)).toBe(message);
+  });
+
+  it('maps extraction responses to the right issue codes', () => {
+    expect(getExtractionFailureIssueCode({ reason: 'wrong-document' })).toBe('wrong-document');
+    expect(getExtractionFailureIssueCode({ isUnreadable: true })).toBe('unreadable');
+    expect(getExtractionFailureIssueCode({ isWrongSide: true })).toBe('wrong-side');
+    expect(getExtractionFailureIssueCode({ reason: 'temporary-error' })).toBe('temporary-error');
+    expect(getExtractionFailureIssueCode({})).toBe('temporary-error');
   });
 });

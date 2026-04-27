@@ -1,5 +1,18 @@
 import type { DocumentIssue, DocumentIssueCode } from '@/types';
 
+interface ExtractionFailureLike {
+  reason?: string;
+  isUnreadable?: boolean;
+  isWrongDocument?: boolean;
+  isWrongSide?: boolean;
+}
+
+type ExtractionFailureIssueCode =
+  | 'temporary-error'
+  | 'unreadable'
+  | 'wrong-document'
+  | 'wrong-side';
+
 const DEFAULT_ISSUE_MESSAGES: Record<DocumentIssueCode, string> = {
   'manual-review': 'Hemos guardado el documento, pero conviene revisarlo antes de tramitarlo.',
   'temporary-error': 'Hemos guardado el documento, pero la lectura automática no pudo completarse. Puedes continuar y revisarlo más tarde.',
@@ -39,6 +52,24 @@ export function createDocumentIssue(code: DocumentIssueCode, message: string): D
     message: getDocumentIssueMessage(code, message),
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function getExtractionFailureIssueCode(
+  failure: ExtractionFailureLike | null | undefined
+): ExtractionFailureIssueCode {
+  if (!failure) return 'temporary-error';
+  if (
+    failure.reason === 'unreadable'
+    || failure.reason === 'wrong-document'
+    || failure.reason === 'wrong-side'
+    || failure.reason === 'temporary-error'
+  ) {
+    return failure.reason;
+  }
+  if (failure.isUnreadable) return 'unreadable';
+  if (failure.isWrongDocument) return 'wrong-document';
+  if (failure.isWrongSide) return 'wrong-side';
+  return 'temporary-error';
 }
 
 export function isRecoverableDocumentIssue(code: DocumentIssueCode): boolean {
