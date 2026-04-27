@@ -7,7 +7,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const {
   attachViteDevProxyUpgrade,
   createViteDevProxyMiddleware,
