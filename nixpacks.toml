@@ -3,7 +3,6 @@ providers = ["node"]
 [variables]
 NODE_ENV = "production"
 NIXPACKS_NODE_VERSION = "20.19.0"
-NPM_CONFIG_PRODUCTION = ""
 
 [phases.install]
 cmds = [
