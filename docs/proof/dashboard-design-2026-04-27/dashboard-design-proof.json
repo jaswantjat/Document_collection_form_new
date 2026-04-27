@@ -42,5 +42,17 @@
         "height": 56
       }
     }
-  ]
+  ],
+  "staging": {
+    "capturedAt": "2026-04-27T09:54:08.936Z",
+    "baseUrl": "https://document-collection-form-staging-staging.up.railway.app",
+    "deploymentCommit": "10dd0656c25723bd992c8ca3d3ce79f53912d65c",
+    "screenshot": "/Users/masterjaswant/Documents/new form/docs/proof/dashboard-design-2026-04-27/management-card-staging.png",
+    "cardBox": {
+      "x": 16,
+      "y": 235,
+      "width": 1408,
+      "height": 295
+    }
+  }
 }
