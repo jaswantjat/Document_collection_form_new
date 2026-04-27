@@ -18,7 +18,7 @@ import type {
   ProductType,
 } from '@/types';
 import { getIdentityDocumentPendingLabel, isIdentityDocumentComplete, isDNIBackRequired } from '@/lib/identityDocument';
-import { createDocumentIssue } from '@/lib/documentIssues';
+import { createDocumentIssue, getExtractionFailureIssueCode } from '@/lib/documentIssues';
 import { validatePhoto, createStoredDocumentFile, createUploadedPhoto, preparePhotoAssets, expandUploadFiles, splitDocumentImageIfNeeded } from '@/lib/photoValidation';
 import { extractDocument, extractDocumentBatch, extractDniBatch } from '@/services/api';
 
@@ -368,12 +368,7 @@ function DocCard({ title, hint, data, slotKey, processing, onDocumentChange, onI
         : await extractDocument(firstPage.base64, slotKey as 'ibi');
 
       if (!res.success || !res.extraction) {
-        const errorCode = res.reason === 'unreadable'
-          || res.reason === 'wrong-document'
-          || res.reason === 'wrong-side'
-          || res.reason === 'temporary-error'
-          ? res.reason
-          : (res.isUnreadable ? 'unreadable' : res.isWrongDocument ? 'wrong-document' : 'temporary-error');
+        const errorCode = getExtractionFailureIssueCode(res);
         storedPages = preparedPages.map((page) => createUploadedPhoto(
           page.file,
           page.preview,
@@ -1163,13 +1158,14 @@ function ElectricityCard({ pages, originalPdfs, issue, onAddPages, onRemovePage,
       const res = await extractDocumentBatch(validFiles.map(f => f.base64), 'electricity');
 
       if (!res.success || !res.extraction) {
+        const errorCode = getExtractionFailureIssueCode(res);
         const fallbackPhotos = validFiles.map(({ file, preview, width, height }) =>
           createUploadedPhoto(file, preview, width, height)
         );
         onAddPages(fallbackPhotos, null, uploadedOriginalPdfs);
         onIssueChange(createDocumentIssue(
-          'temporary-error',
-          'Hemos guardado la factura, pero la lectura automática no pudo completarse. Puedes continuar y revisarla más tarde.'
+          errorCode,
+          res.message || 'Hemos guardado la factura, pero la lectura automática no pudo completarse. Puedes continuar y revisarla más tarde.'
         ));
         setPendingItems(prev => prev.filter((item) => !validFiles.find((file) => file.id === item.id)));
         return;

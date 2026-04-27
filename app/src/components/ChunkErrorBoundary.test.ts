@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearChunkReloadAttempt,
+  clearRuntimeErrorRecoveryAttempt,
+  getRuntimeErrorRecoveryAction,
   isChunkLoadError,
   markChunkReloadAttempt,
+  markRuntimeErrorRecoveryAttempt,
   shouldAutoReloadChunkError,
 } from './ChunkErrorBoundary';
 
@@ -67,6 +70,43 @@ describe('isChunkLoadError', () => {
         message: "Cannot read properties of undefined (reading 'foo')",
       })
     ).toBe(false);
+  });
+});
+
+describe('runtime project recovery tracking', () => {
+  it('reloads once, then clears project-local state, then stops auto-recovering', () => {
+    const storage = createStorage();
+    const error = {
+      name: 'TypeError',
+      message: "Cannot read properties of undefined (reading 'map')",
+    };
+    const url = 'https://documentos.eltex.es/?code=ELT20260083';
+
+    expect(getRuntimeErrorRecoveryAction(error, storage, url, 1000)).toBe('reload');
+
+    markRuntimeErrorRecoveryAttempt(storage, url, 'reload', 1000);
+    expect(getRuntimeErrorRecoveryAction(error, storage, url, 2000)).toBe('clear-project-state');
+
+    markRuntimeErrorRecoveryAttempt(storage, url, 'cleared', 2000);
+    expect(getRuntimeErrorRecoveryAction(error, storage, url, 3000)).toBe('none');
+
+    clearRuntimeErrorRecoveryAttempt(storage, url);
+    expect(getRuntimeErrorRecoveryAction(error, storage, url, 4000)).toBe('reload');
+  });
+
+  it('does not run project-local recovery for chunk errors or pages without a project code', () => {
+    const storage = createStorage();
+    const chunkError = {
+      name: 'TypeError',
+      message: 'Failed to fetch dynamically imported module',
+    };
+    const runtimeError = {
+      name: 'TypeError',
+      message: "Cannot read properties of undefined (reading 'map')",
+    };
+
+    expect(getRuntimeErrorRecoveryAction(chunkError, storage, 'https://documentos.eltex.es/?code=ELT1')).toBe('none');
+    expect(getRuntimeErrorRecoveryAction(runtimeError, storage, 'https://documentos.eltex.es/')).toBe('none');
   });
 });
 

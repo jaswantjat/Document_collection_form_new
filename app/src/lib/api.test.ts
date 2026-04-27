@@ -18,6 +18,7 @@ import {
   saveProgress,
   submitForm,
   extractDocument,
+  extractDocumentBatch,
   deleteProject,
   updateDashboardProjectAssessor,
 } from '@/services/api';
@@ -617,6 +618,56 @@ describe('extractDocument', () => {
   it('propagates network error (AI API down)', async () => {
     mockFetchNetworkError('ECONNREFUSED');
     await expect(extractDocument('data:image/jpeg;base64,abc', 'ibi')).rejects.toThrow('ECONNREFUSED');
+  });
+
+  it('retries transient temporary-error responses before succeeding', async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      json: vi.fn()
+        .mockResolvedValueOnce({ success: false, reason: 'temporary-error', message: 'Temporarily unavailable' })
+        .mockResolvedValueOnce({ success: true, extraction: { extractedData: { titular: 'Ana' } } }),
+      blob: vi.fn(),
+      text: vi.fn(),
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await extractDocumentBatch(['data:image/jpeg;base64,a'], 'electricity');
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry wrong-document responses', async () => {
+    mockFetch({ success: false, reason: 'wrong-document', isWrongDocument: true });
+
+    const result = await extractDocumentBatch(['data:image/jpeg;base64,a'], 'electricity');
+
+    expect(result.reason).toBe('wrong-document');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries transient network failures before succeeding', async () => {
+    const successResponse = {
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ success: true, extraction: { extractedData: { titular: 'Ana' } } }),
+      blob: vi.fn(),
+      text: vi.fn(),
+    };
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValueOnce(successResponse);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await extractDocumentBatch(['data:image/jpeg;base64,a'], 'electricity');
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

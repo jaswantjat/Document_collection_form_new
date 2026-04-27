@@ -10,6 +10,8 @@ import { withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocumen
 import { getPropertyPhotoGroups, type PropertyPhotoFormData } from '@/lib/propertyPhotoGroups';
 
 const API_BASE = '/api';
+const EXTRACTION_MAX_ATTEMPTS = 3;
+const EXTRACTION_RETRY_DELAYS_MS = [0, 1_000, 3_000];
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
@@ -47,6 +49,13 @@ interface ApiResponseShape {
   message?: string;
   error?: string;
 }
+
+type ExtractionApiResponse = {
+  success?: boolean;
+  reason?: string;
+  message?: string;
+  error?: string;
+};
 
 interface UploadAssetDescriptor {
   fieldName: string;
@@ -226,6 +235,23 @@ async function readJsonOrThrow<T extends ApiResponseShape>(res: Response, fallba
   return body;
 }
 
+function isRetryableExtractionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === 'AbortError'
+    || error.name === 'TimeoutError'
+    || /abort|fetch|network|timed? out|load failed|signal timed out|econnreset|econnrefused/i.test(error.message)
+  );
+}
+
+function shouldRetryExtractionResponse(body: ExtractionApiResponse): boolean {
+  return body.success === false && body.reason === 'temporary-error';
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function preUploadAssets(
   code: string,
   formData: AppFormData,
@@ -279,6 +305,41 @@ export async function fetchProject(
   });
   const body = await readJsonResponse<{ success: boolean; project?: ProjectData; error?: string; message?: string }>(res);
   return { ...body, status: res.status };
+}
+
+async function performExtractionRequest<T extends ExtractionApiResponse>(
+  endpoint: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < EXTRACTION_MAX_ATTEMPTS; attempt += 1) {
+    if (EXTRACTION_RETRY_DELAYS_MS[attempt] > 0) {
+      await sleep(EXTRACTION_RETRY_DELAYS_MS[attempt]);
+    }
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(90000),
+      });
+      const parsed = await readJsonResponse<T>(res);
+      if (shouldRetryExtractionResponse(parsed) && attempt < EXTRACTION_MAX_ATTEMPTS - 1) {
+        lastError = parsed;
+        continue;
+      }
+      return parsed;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableExtractionError(error) || attempt === EXTRACTION_MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+    }
+  }
+
+  return lastError as T;
 }
 
 export async function lookupByPhone(
@@ -424,13 +485,7 @@ export async function extractDocument(
   const body = Array.isArray(imageBase64)
     ? { imagesBase64: imageBase64, documentType }
     : { imageBase64, documentType };
-  const res = await fetch(`${API_BASE}/extract`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(90000),
-  });
-  return readJsonResponse(res);
+  return performExtractionRequest<ExtractDocumentResponse>(`${API_BASE}/extract`, body);
 }
 
 export async function extractDocumentBatch(
@@ -445,13 +500,7 @@ export async function extractDocumentBatch(
   reason?: string;
   message?: string;
 }> {
-  const res = await fetch(`${API_BASE}/extract-batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imagesBase64, documentType }),
-    signal: AbortSignal.timeout(90000),
-  });
-  return readJsonResponse(res);
+  return performExtractionRequest(`${API_BASE}/extract-batch`, { imagesBase64, documentType });
 }
 
 export async function extractDniBatch(

@@ -1,4 +1,4 @@
-import { normalizeFormData } from '@/hooks/useFormState';
+import { normalizeFormData } from '@/lib/formDataNormalization';
 import type { FormData, ProjectData } from '@/types';
 
 function hasPreview(photo: { preview?: string } | null | undefined): boolean {
