@@ -351,6 +351,11 @@ test.describe('Bug Regressions', () => {
     await expect(page.getByText('DNI / NIE')).toBeVisible();
     await expect(page.getByText('IBI o escritura')).toBeVisible();
     await expect(page.getByText('Factura de luz')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /IBI o escritura/ }).click();
+    await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible();
+    await expect(page.getByText('Factura de luz')).toHaveCount(0);
+    await expect(page.getByTestId('electricity-input')).toHaveCount(0);
   });
 
   test('REG-06: pure aerothermal review flow does not treat electricity as pending', async ({ page, request }) => {
@@ -366,8 +371,8 @@ test.describe('Bug Regressions', () => {
             issue: null,
           },
           ibi: {
-            photo: makePhoto('ibi-aero'),
-            pages: [],
+            photo: null,
+            pages: [makePhoto('ibi-aero-page')],
             originalPdfs: [],
             extraction: null,
             issue: null,

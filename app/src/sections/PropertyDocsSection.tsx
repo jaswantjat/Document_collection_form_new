@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, RotateCcw, Loader2, Camera, Plus, X, Zap, CreditCard, FileText, ChevronDown } from 'lucide-react';
 import { pdfToImageFiles } from '@/lib/pdfToImages';
-import { getPropertyDocsProgress } from '@/lib/propertyDocsProgress';
+import { getPropertyDocsProgress, isElectricityRequired } from '@/lib/propertyDocsProgress';
 import { AdditionalBankDocumentsCard } from '@/sections/property-docs/AdditionalBankDocumentsCard';
 import type {
   AdditionalBankDocumentEntry,
@@ -292,6 +292,10 @@ function computeValidationWarnings(
   }
 
   return warnings;
+}
+
+function isIbiDocumentComplete(ibi: IBIData): boolean {
+  return Boolean(ibi.photo || (ibi.pages?.length ?? 0) > 0);
 }
 
 // ── IBI DocCard ────────────────────────────────────────────────────────────────
@@ -1465,7 +1469,7 @@ export function PropertyDocsSection({
   // Frictionless resume: detect which docs were already done on first mount
   const [resumeSnapshot] = useState(() => ({
     dni: isIdentityDocumentComplete(dni),
-    ibi: !!ibi.photo,
+    ibi: isIbiDocumentComplete(ibi),
     electricity: electricityBill.pages.length > 0,
   }));
   const isResuming = resumeSnapshot.dni || resumeSnapshot.ibi || resumeSnapshot.electricity;
@@ -1501,18 +1505,23 @@ export function PropertyDocsSection({
 
   const isAnyBusy = hasBlockingDocumentProcessing || dniIsBusy || electricityIsBusy || additionalDocumentsBusy;
 
+  const electricityNeeded = isElectricityRequired(productType);
+  const elecDone = electricityBill.pages.length > 0;
+  const showElectricitySection = electricityNeeded || elecDone;
+
   // Validation warnings (only shown when at least one doc exists)
-  const hasAnyDoc = !!(dni.front.photo || ibi.photo || electricityBill.pages.length > 0);
-  const validationWarnings = hasAnyDoc ? computeValidationWarnings(dni, electricityBill) : [];
+  const hasAnyDoc = Boolean(dni.front.photo || isIbiDocumentComplete(ibi) || elecDone);
+  const validationWarnings = hasAnyDoc && showElectricitySection
+    ? computeValidationWarnings(dni, electricityBill)
+    : [];
 
   // Whether each card should show compact
   const dniDone = isIdentityDocumentComplete(dni);
-  const ibiDone = !!ibi.photo;
-  const elecDone = electricityBill.pages.length > 0;
+  const ibiDone = isIbiDocumentComplete(ibi);
 
   const showDniCompact = isResuming && dniDone && !expanded.dni;
   const showIbiCompact = isResuming && ibiDone && !expanded.ibi;
-  const showElecCompact = isResuming && elecDone && !expanded.electricity;
+  const showElecCompact = showElectricitySection && isResuming && elecDone && !expanded.electricity;
 
   // Summary subtitle for compact rows
   const dniSubtitle = dni.front.extraction?.extractedData?.fullName ?? undefined;
@@ -1595,26 +1604,28 @@ export function PropertyDocsSection({
         </div>
 
         {/* Electricity card or compact row */}
-        <div ref={electricityRef}>
-          {showElecCompact ? (
-            <CompactRow
-              icon={<Zap className="w-3.5 h-3.5" />}
-              title="Factura de luz"
-              subtitle={elecSubtitle}
-              onExpand={() => expand('electricity')}
-            />
-          ) : (
-            <ElectricityCard
-              pages={electricityBill.pages}
-              originalPdfs={electricityBill.originalPdfs}
-              issue={electricityBill.issue ?? null}
-              onAddPages={onAddElectricityPages}
-              onRemovePage={onRemoveElectricityPage}
-              onIssueChange={onElectricityIssueChange}
-              onBusyChange={setElectricityIsBusy}
-            />
-          )}
-        </div>
+        {showElectricitySection && (
+          <div ref={electricityRef}>
+            {showElecCompact ? (
+              <CompactRow
+                icon={<Zap className="w-3.5 h-3.5" />}
+                title="Factura de luz"
+                subtitle={elecSubtitle}
+                onExpand={() => expand('electricity')}
+              />
+            ) : (
+              <ElectricityCard
+                pages={electricityBill.pages}
+                originalPdfs={electricityBill.originalPdfs}
+                issue={electricityBill.issue ?? null}
+                onAddPages={onAddElectricityPages}
+                onRemovePage={onRemoveElectricityPage}
+                onIssueChange={onElectricityIssueChange}
+                onBusyChange={setElectricityIsBusy}
+              />
+            )}
+          </div>
+        )}
 
         {/* Cross-document validation warnings */}
         {validationWarnings.map((warning, i) => (
