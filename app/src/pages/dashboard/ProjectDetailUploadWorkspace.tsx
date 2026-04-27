@@ -22,27 +22,27 @@ interface UploadTarget {
 const UPLOAD_TARGETS: UploadTarget[] = [
   {
     key: 'dni-front',
-    label: 'DNI frontal',
+    label: 'Subir DNI frontal',
     helper: 'Foto o PDF de la cara frontal',
   },
   {
     key: 'dni-back',
-    label: 'DNI trasera',
+    label: 'Subir DNI trasera',
     helper: 'Foto o PDF de la cara trasera',
   },
   {
     key: 'ibi',
-    label: 'IBI / Escritura',
+    label: 'Subir IBI / Escritura',
     helper: 'Una o varias paginas del documento',
   },
   {
     key: 'electricity-bill',
-    label: 'Factura de luz',
+    label: 'Subir factura de luz',
     helper: 'Una o varias paginas de la factura',
   },
   {
     key: 'additional-bank-document',
-    label: 'Documento adicional',
+    label: 'Subir documento adicional',
     helper: 'Se guarda sin clasificacion IA',
   },
 ];
@@ -369,20 +369,20 @@ function UploadZone({
       }}
       onDragLeave={() => setDragTarget(null)}
       onDrop={(event) => handleDrop(target.key, event)}
-      className={`min-h-[132px] rounded-lg border-2 border-dashed bg-white p-3 transition-colors ${
+      title={target.helper}
+      className={`rounded-lg border bg-white px-3 py-2 transition-colors ${
         isDragging ? 'border-eltex-blue bg-blue-50' : 'border-gray-200 hover:border-eltex-blue hover:bg-blue-50'
       } ${isBusy && !isActive ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
     >
-      <span className="flex h-full flex-col gap-2">
+      <span className="flex min-h-10 flex-col gap-2">
         <span className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-eltex-blue-light">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-eltex-blue-light">
             {target.key === 'additional-bank-document'
               ? <FileText className="h-4 w-4 text-eltex-blue" />
               : <Upload className="h-4 w-4 text-eltex-blue" />}
           </span>
           <span className="text-sm font-semibold text-gray-900">{target.label}</span>
         </span>
-        <span className="text-xs leading-5 text-gray-500">{target.helper}</span>
         {showStatus && <UploadStatusMessage status={status} message={statusMsg} />}
       </span>
       <input
@@ -407,16 +407,15 @@ export function ProjectDetailUploadWorkspace(props: {
   const uploader = useProjectDetailUploader(props);
 
   return (
-    <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4" data-testid="detail-upload-workspace">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <section className="rounded-xl border border-gray-200 bg-gray-50 p-3" data-testid="detail-upload-workspace">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-gray-900">Subir documentos</p>
-          <p className="text-xs text-gray-500">Arrastra archivos o elige un documento desde el detalle del expediente.</p>
         </div>
         {uploader.isBusy && <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-eltex-blue" />}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
         {UPLOAD_TARGETS.map((target) => (
           <UploadZone
             key={target.key}

@@ -21,18 +21,60 @@ function makeStrippedPhoto(id: string) {
 function buildSubmittedFormData() {
   return {
     dni: {
-      front: { photo: makeStrippedPhoto('dni-front'), extraction: null },
-      back: { photo: makeStrippedPhoto('dni-back'), extraction: null },
+      front: {
+        photo: makeStrippedPhoto('dni-front'),
+        extraction: {
+          confirmedByUser: true,
+          needsManualReview: false,
+          extractedData: {
+            fullName: 'Maria Garcia Lopez',
+            dniNumber: '12345678Z',
+            dateOfBirth: '01/01/1985',
+            expiryDate: '01/01/2030',
+          },
+        },
+      },
+      back: {
+        photo: makeStrippedPhoto('dni-back'),
+        extraction: {
+          confirmedByUser: true,
+          needsManualReview: false,
+          extractedData: {
+            address: 'Calle Mayor 12',
+            municipality: 'Barcelona',
+            province: 'Barcelona',
+          },
+        },
+      },
       originalPdfs: [],
     },
     ibi: {
       photo: null,
       pages: [makeStrippedPhoto('ibi-1')],
       originalPdfs: [],
-      extraction: null,
+      extraction: {
+        confirmedByUser: true,
+        needsManualReview: false,
+        extractedData: {
+          referenciaCatastral: '1234567DF3813S0001AB',
+          titular: 'Maria Garcia Lopez',
+          municipio: 'Barcelona',
+        },
+      },
     },
     electricityBill: {
-      pages: [{ photo: makeStrippedPhoto('bill-1'), extraction: null }],
+      pages: [{
+        photo: makeStrippedPhoto('bill-1'),
+        extraction: {
+          confirmedByUser: true,
+          needsManualReview: false,
+          extractedData: {
+            titular: 'Maria Garcia Lopez',
+            cups: 'ES0021000000000000AB',
+            potenciaContratada: '4,6 kW',
+          },
+        },
+      }],
       originalPdfs: [],
     },
     representation: {},
@@ -229,6 +271,33 @@ test.describe('Dashboard status regressions', () => {
     const electricityDownload = page.waitForEvent('download');
     await modal.getByTitle('Descargar Factura luz — pág. 1').first().click();
     expect((await electricityDownload).suggestedFilename()).toBe(`${submitted.code}_factura_luz_pag._1.jpg`);
+  });
+
+  test('detail modal keeps uploads and extracted text visible without document previews', async ({ page, request }) => {
+    const submitted = await createDashboardProject(request, `dash-simple-detail-${Date.now()}`);
+
+    await uploadAssets(request, submitted.code, ['dniFront', 'dniBack', 'ibi_0', 'electricity_0']);
+    await submitStrippedProject(
+      request,
+      submitted.code,
+      submitted.accessToken,
+      `${submitted.code}-attempt-simple-detail`,
+    );
+
+    const token = await loginDashboard(request);
+    await openDashboard(page, token);
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(submitted.code);
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await page.getByTestId('ver-expediente-btn').click();
+
+    const modal = page.getByTestId('project-detail-modal');
+    await expect(modal.getByTestId('detail-upload-workspace')).toBeVisible();
+    await expect(modal.getByTestId('detail-upload-zone-dni-front')).toBeVisible();
+    await expect(modal.getByText('12345678Z').first()).toBeVisible();
+    await expect(modal.getByText('1234567DF3813S0001AB').first()).toBeVisible();
+    await expect(modal.getByText('ES0021000000000000AB').first()).toBeVisible();
+    await expect(modal.locator('img[alt^="DNI"], img[alt^="IBI"], img[alt^="Factura"]')).toHaveCount(0);
   });
 
   test('status quick downloads fall back to original PDFs when stripped previews are gone', async ({ page, request }) => {

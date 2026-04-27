@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -17,17 +17,14 @@ import {
   Loader2,
   LogOut,
   PenLine,
-  Phone,
   RefreshCw,
   Search,
   Sun,
   Thermometer,
-  User,
   Users,
   Trash2,
   X,
   Zap,
-  Scissors,
 } from 'lucide-react';
 import {
   dashboardLogout,
@@ -48,7 +45,7 @@ import {
 } from '@/lib/dashboardProject';
 import { approvedAssessors } from '@/lib/approvedAssessors';
 import {
-  formatDate, locationLabel, languageLabel,
+  formatDate, locationLabel,
   downloadBlob, buildProjectUrl,
   downloadDataUrlAsset, openDataUrlInNewTab,
   getDocumentAssetsFromProject,
@@ -370,105 +367,6 @@ function SignedPdfButtons({
   );
 }
 
-async function callAutocropper(documentType: string, images: string[]): Promise<{ success: boolean; cropped_images?: string[]; combined_pdf?: string }> {
-  const response = await fetch('/api/autocropper/process', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ documentType, images }),
-  });
-  if (!response.ok) {
-    throw new Error('Autocropper service error');
-  }
-  return response.json();
-}
-
-function AutocropperButton({
-  documentType,
-  images,
-  onPDFReady,
-  projectCode,
-}: {
-  documentType: 'dni' | 'ibi' | 'electricity';
-  images: string[];
-  onPDFReady?: (pdfDataUrl: string) => void;
-  projectCode: string;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ cropped_images: string[]; combined_pdf: string } | null>(null);
-
-  const handleAutocrop = async () => {
-    setLoading(true);
-    setResult(null);
-    try {
-      const response = await callAutocropper(documentType, images);
-      if (response.success && response.combined_pdf) {
-        setResult({ cropped_images: response.cropped_images || [], combined_pdf: response.combined_pdf });
-        onPDFReady?.(response.combined_pdf);
-      } else {
-        alert('No se pudo procesar el documento. Asegúrate de que el servicio autocropper está activo.');
-      }
-    } catch (err) {
-      console.error('Autocropper error:', err);
-      alert('Error al conectar con el servicio de recorte automático.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadPDF = () => {
-    if (result?.combined_pdf) {
-      const pdfData = result.combined_pdf.split(',')[1];
-      const blob = new Blob([Uint8Array.from(atob(pdfData), (c) => c.charCodeAt(0))], { type: 'application/pdf' });
-      downloadBlob(blob, `${projectCode}_${documentType}_recortado.pdf`);
-    }
-  };
-
-  const downloadCroppedImages = () => {
-    if (result?.cropped_images) {
-      result.cropped_images.forEach((imgDataUrl, index) => {
-        const imgData = imgDataUrl.split(',')[1];
-        const blob = new Blob([Uint8Array.from(atob(imgData), (c) => c.charCodeAt(0))], { type: 'image/jpeg' });
-        downloadBlob(blob, `${projectCode}_${documentType}_${index + 1}_recortado.jpg`);
-      });
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        disabled={loading}
-        onClick={handleAutocrop}
-        className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-eltex-blue-200 bg-white text-eltex-blue-700 hover:bg-eltex-blue-50 transition-colors disabled:opacity-50"
-        title="Recortar y generar PDF"
-      >
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Scissors className="w-3.5 h-3.5" />}
-        {!loading && <span className="text-xs font-medium">Recortar</span>}
-      </button>
-      {result?.combined_pdf && (
-        <>
-          <button
-            type="button"
-            onClick={downloadPDF}
-            className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
-            title="Descargar PDF recortado"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={downloadCroppedImages}
-            className="h-8 rounded-lg px-2.5 inline-flex items-center justify-center border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors"
-            title="Descargar imágenes recortadas"
-          >
-            <Archive className="w-3.5 h-3.5" />
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
 function StatusDownloadButton({
   item,
   project,
@@ -754,42 +652,55 @@ function ProjectDetailModal({
                 </div>
               )}
 
-              <div className="grid md:grid-cols-5 gap-3">
-                <InfoCard icon={Clock} label="Última actividad" value={formatDate(summary.lastUpdated)} />
-                <InfoCard icon={User} label="Asesor" value={project.assessor || '—'} />
-                <InfoCard icon={LayoutDashboard} label="Ubicación" value={locationLabel(summary.location)} />
-                <InfoCard icon={CheckCircle} label="Envíos" value={String(project.submissionCount || 0)} />
-                <InfoCard icon={Phone} label="Teléfono" value={project.phone || '—'} />
-              </div>
-
-              <div className="grid md:grid-cols-3 gap-3">
-                <InfoCard icon={User} label="Nombre" value={summary.firstName || '—'} />
-                <InfoCard icon={Users} label="Apellidos" value={summary.lastName || '—'} />
-                <InfoCard icon={Zap} label="Idioma del navegador" value={languageLabel(summary.customerLanguage)} />
-              </div>
-
-              <CompanyDisplay representation={project.formData?.representation} />
               <ProjectDetailUploadWorkspace
                 project={project}
                 token={token}
                 onRefresh={refreshProject}
               />
+              <ProjectFactsSummary project={project} summary={summary} />
+              <CompanyDisplay representation={project.formData?.representation} />
               <DNIDisplay project={project} />
               <IBIDisplay project={project} />
               <ElectricityDisplay project={project} />
-              <SignedDocumentsSection project={project} items={summary.signedDocuments} energyCertificate={summary.energyCertificate} />
+              <SignedDocumentsSection project={project} items={summary.signedDocuments} />
               <EnergyCertificatePanel project={project} energyCertificate={summary.energyCertificate} />
               <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
-              <DownloadGroupsSection groups={summary.downloadGroups} projectCode={project.code} />
-              {summary.photoGroups.map((group) => (
-                <PhotoGallery key={group.key} group={group} projectCode={project.code} />
-              ))}
+              <DownloadGroupsSection
+                groups={summary.downloadGroups.filter((group) => group.key !== 'documents')}
+                projectCode={project.code}
+              />
             </div>
           )}
         </div>
       </div>
     </div>
     </>
+  );
+}
+
+function ProjectFactsSummary({
+  project,
+  summary,
+}: {
+  project: any;
+  summary: DashboardProjectSummary;
+}) {
+  const facts = [
+    { label: 'Asesor', value: project.assessor || '—' },
+    { label: 'Teléfono', value: project.phone || '—' },
+    { label: 'Ubicación', value: locationLabel(summary.location) },
+    { label: 'Última actividad', value: formatDate(summary.lastUpdated) },
+  ];
+
+  return (
+    <section className="grid gap-2 rounded-xl border border-gray-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+      {facts.map((fact) => (
+        <div key={fact.label} className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{fact.label}</p>
+          <p className="truncate text-sm font-semibold text-gray-900">{fact.value}</p>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -1064,44 +975,73 @@ function ProjectTableRow({
   );
 }
 
-function ImagePreviewCard({
-  title,
-  asset,
+type ExtractedField = { label: string; value: unknown };
+
+function ExtractedFieldGrid({ fields }: { fields: ExtractedField[] }) {
+  const visibleFields = fields.filter((field) => field.value || field.value === 0);
+
+  if (visibleFields.length === 0) {
+    return <p className="text-sm text-gray-400">Sin datos extraídos todavía.</p>;
+  }
+
+  return (
+    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+      {visibleFields.map((field) => (
+        <div key={field.label} className="min-w-0">
+          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{field.label}</dt>
+          <dd className="break-words text-sm font-semibold text-gray-900">{String(field.value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function DocumentDataPanel({
+  icon: Icon,
+  label,
+  assets,
   projectCode,
-  children,
   warning,
+  fields,
 }: {
-  title: string;
-  asset: DashboardAssetItem | null;
+  icon: any;
+  label: string;
+  assets: DashboardAssetItem[];
   projectCode: string;
-  children?: ReactNode;
   warning?: boolean;
+  fields: ExtractedField[];
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-gray-500">{title}</p>
-        {asset && <AssetButtons asset={asset} projectCode={projectCode} />}
-      </div>
-      {asset ? (
-        <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-40" />
-      ) : (
-        <div className="w-full h-40 rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center">
-          <span className="text-sm text-gray-300">Sin archivo</span>
+    <section className="rounded-xl border border-gray-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-eltex-blue-light">
+            <Icon className="h-4 w-4 text-eltex-blue" />
+          </span>
+          <div>
+            <p className="text-sm font-bold text-gray-900">{label}</p>
+            <p className="text-xs text-gray-500">{assets.length ? `${assets.length} archivo${assets.length !== 1 ? 's' : ''}` : 'Sin archivo'}</p>
+          </div>
         </div>
-      )}
-      {children && (
-        <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-          {children}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {warning && (
-            <span className="text-orange-600 text-xs flex items-center gap-1 pt-1">
-              <AlertTriangle className="w-3 h-3" />
-              Revisar manualmente
+            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">
+              <AlertTriangle className="h-3 w-3" />
+              Revisar
             </span>
           )}
+          {assets.map((asset) => (
+            <div key={asset.key} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1">
+              <span className="max-w-36 truncate text-xs font-medium text-gray-600">{asset.label}</span>
+              <AssetButtons asset={asset} projectCode={projectCode} compact />
+            </div>
+          ))}
         </div>
-      )}
-    </div>
+      </div>
+      <div className="px-4 py-3">
+        <ExtractedFieldGrid fields={fields} />
+      </div>
+    </section>
   );
 }
 
@@ -1115,50 +1055,28 @@ export function DNIDisplay({ project }: { project: any }) {
 
   const frontData = dni.front?.extraction?.extractedData;
   const backData = dni.back?.extraction?.extractedData;
-  const dniImages = [frontAsset, backAsset]
-    .filter((asset): asset is DashboardAssetItem => Boolean(asset?.dataUrl?.startsWith('data:image/')))
-    .map((asset) => asset.dataUrl);
+  const assets = [frontAsset, backAsset].filter(Boolean) as DashboardAssetItem[];
+  const fields = [
+    { label: 'Nombre', value: frontData?.fullName },
+    { label: 'DNI / NIE', value: frontData?.dniNumber },
+    { label: 'Nacimiento', value: frontData?.dateOfBirth },
+    { label: 'Válido hasta', value: frontData?.expiryDate },
+    { label: 'Sexo', value: frontData?.sex },
+    { label: 'Domicilio', value: backData?.address },
+    { label: 'Municipio', value: backData?.municipality },
+    { label: 'Provincia', value: backData?.province },
+    { label: 'Lugar de nacimiento', value: backData?.placeOfBirth },
+  ];
 
   return (
-    <div className="space-y-3">
-      <SectionHeading
-        icon={CreditCard}
-        label="DNI / NIE"
-        actions={dniImages.length > 0 ? (
-          <AutocropperButton
-            documentType="dni"
-            images={dniImages}
-            projectCode={projectCode}
-          />
-        ) : undefined}
-      />
-      <div className="grid lg:grid-cols-2 gap-4">
-        <ImagePreviewCard
-          title="Cara frontal"
-          asset={frontAsset}
-          projectCode={projectCode}
-          warning={dni.front?.extraction?.needsManualReview}
-        >
-          <FieldRow label="Nombre" value={frontData?.fullName} />
-          <FieldRow label="DNI / NIE" value={frontData?.dniNumber} />
-          <FieldRow label="Nacimiento" value={frontData?.dateOfBirth} />
-          <FieldRow label="Válido hasta" value={frontData?.expiryDate} />
-          <FieldRow label="Sexo" value={frontData?.sex} />
-        </ImagePreviewCard>
-
-        <ImagePreviewCard
-          title="Cara trasera"
-          asset={backAsset}
-          projectCode={projectCode}
-          warning={dni.back?.extraction?.needsManualReview}
-        >
-          <FieldRow label="Domicilio" value={backData?.address} />
-          <FieldRow label="Municipio" value={backData?.municipality} />
-          <FieldRow label="Provincia" value={backData?.province} />
-          <FieldRow label="Lugar de nacimiento" value={backData?.placeOfBirth} />
-        </ImagePreviewCard>
-      </div>
-    </div>
+    <DocumentDataPanel
+      icon={CreditCard}
+      label="DNI / NIE"
+      assets={assets}
+      projectCode={projectCode}
+      fields={fields}
+      warning={Boolean(dni.front?.extraction?.needsManualReview || dni.back?.extraction?.needsManualReview)}
+    />
   );
 }
 
@@ -1171,67 +1089,27 @@ export function IBIDisplay({ project }: { project: any }) {
   if (pages.length === 0 && assets.length === 0) return null;
 
   const data = ibi?.extraction?.extractedData;
-  const primaryAsset = assets[0] || null;
-  const ibiImages = assets
-    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
-    .map((asset) => asset.dataUrl);
+  const fields = [
+    { label: 'Referencia Catastral', value: data?.referenciaCatastral },
+    { label: 'Titular', value: data?.titular },
+    { label: 'NIF titular', value: data?.titularNif },
+    { label: 'Dirección', value: data?.direccion },
+    { label: 'Código postal', value: data?.codigoPostal },
+    { label: 'Municipio', value: data?.municipio },
+    { label: 'Provincia', value: data?.provincia },
+    { label: 'Ejercicio', value: data?.ejercicio },
+    { label: 'Importe', value: data?.importe },
+  ];
 
   return (
-    <div className="space-y-3">
-      <SectionHeading
-        icon={FileText}
-        label="IBI / Escritura"
-        actions={ibiImages.length > 0 ? (
-          <AutocropperButton
-            documentType="ibi"
-            images={ibiImages}
-            projectCode={projectCode}
-          />
-        ) : undefined}
-      />
-      <div className="grid lg:grid-cols-[220px_1fr] gap-4">
-        <div className="space-y-2">
-          {assets.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {assets.map((asset, index) => (
-                <div key={asset.key} className="flex items-center gap-2">
-                  {assets.length > 1 && (
-                    <span className="text-[11px] font-semibold text-gray-500 min-w-12">
-                      {`Pág. ${index + 1}`}
-                    </span>
-                  )}
-                  <AssetButtons asset={asset} projectCode={projectCode} />
-                </div>
-              ))}
-            </div>
-          )}
-          {primaryAsset ? (
-            <DocImage src={primaryAsset.dataUrl} alt={primaryAsset.label} className="w-full h-56" />
-          ) : (
-            <div className="w-full h-56 rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center">
-              <span className="text-sm text-gray-300">Sin archivo</span>
-            </div>
-          )}
-        </div>
-        <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-          <FieldRow label="Referencia Catastral" value={data?.referenciaCatastral} />
-          <FieldRow label="Titular" value={data?.titular} />
-          <FieldRow label="NIF titular" value={data?.titularNif} />
-          <FieldRow label="Dirección" value={data?.direccion} />
-          <FieldRow label="Código postal" value={data?.codigoPostal} />
-          <FieldRow label="Municipio" value={data?.municipio} />
-          <FieldRow label="Provincia" value={data?.provincia} />
-          <FieldRow label="Ejercicio" value={data?.ejercicio} />
-          <FieldRow label="Importe" value={data?.importe} />
-          {ibi?.extraction?.needsManualReview && (
-            <span className="text-orange-600 text-xs flex items-center gap-1 pt-1">
-              <AlertTriangle className="w-3 h-3" />
-              Revisar manualmente
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
+    <DocumentDataPanel
+      icon={FileText}
+      label="IBI / Escritura"
+      assets={assets}
+      projectCode={projectCode}
+      fields={fields}
+      warning={Boolean(ibi?.extraction?.needsManualReview)}
+    />
   );
 }
 
@@ -1265,61 +1143,34 @@ export function ElectricityDisplay({ project }: { project: any }) {
   const assets = getElectricityAssetsFromProject(project || {});
   if (assets.length === 0) return null;
 
-  const electricityImages = assets
-    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
-    .map((asset) => asset.dataUrl);
+  const data = uploadedPages[0]?.extraction?.extractedData;
+  const fields = [
+    { label: 'Titular', value: data?.titular },
+    { label: 'NIF titular', value: data?.nifTitular },
+    { label: 'CUPS', value: data?.cups },
+    { label: 'Potencia', value: data?.potenciaContratada },
+    { label: 'Tipo fase', value: data?.tipoFase },
+    { label: 'Tarifa', value: data?.tarifaAcceso },
+    { label: 'Comercializadora', value: data?.comercializadora },
+    { label: 'Distribuidora', value: data?.distribuidora },
+    { label: 'Dirección suministro', value: data?.direccionSuministro },
+    { label: 'Código postal', value: data?.codigoPostal },
+    { label: 'Municipio', value: data?.municipio },
+    { label: 'Provincia', value: data?.provincia },
+    { label: 'Fecha factura', value: data?.fechaFactura },
+    { label: 'Periodo facturación', value: data?.periodoFacturacion },
+    { label: 'Importe', value: data?.importe },
+  ];
 
   return (
-    <div className="space-y-3">
-      <SectionHeading
-        icon={Zap}
-        label={`Factura de electricidad — ${assets.length} imagen${assets.length !== 1 ? 'es' : ''}`}
-        actions={electricityImages.length > 0 ? (
-          <AutocropperButton
-            documentType="electricity"
-            images={electricityImages}
-            projectCode={projectCode}
-          />
-        ) : undefined}
-      />
-      <div className="grid lg:grid-cols-2 gap-4">
-        {assets.map((asset, i: number) => {
-          const page = uploadedPages[i];
-          const data = page?.extraction?.extractedData;
-          return (
-            <ImagePreviewCard
-              key={i}
-              title={`Imagen ${i + 1}`}
-              asset={asset}
-              projectCode={projectCode}
-              warning={page?.extraction?.needsManualReview}
-            >
-              <FieldRow label="Titular" value={data?.titular} />
-              <FieldRow label="NIF titular" value={data?.nifTitular} />
-              <FieldRow label="CUPS" value={data?.cups} />
-              {data?.cupsWarning && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <span className="text-xs text-amber-800">{data.cupsWarning}</span>
-                </div>
-              )}
-              <FieldRow label="Potencia (kW)" value={data?.potenciaContratada} />
-              <FieldRow label="Tipo fase" value={data?.tipoFase} />
-              <FieldRow label="Tarifa" value={data?.tarifaAcceso} />
-              <FieldRow label="Comercializadora" value={data?.comercializadora} />
-              <FieldRow label="Distribuidora" value={data?.distribuidora} />
-              <FieldRow label="Dirección suministro" value={data?.direccionSuministro} />
-              <FieldRow label="Código postal" value={data?.codigoPostal} />
-              <FieldRow label="Municipio" value={data?.municipio} />
-              <FieldRow label="Provincia" value={data?.provincia} />
-              <FieldRow label="Fecha factura" value={data?.fechaFactura} />
-              <FieldRow label="Periodo facturación" value={data?.periodoFacturacion} />
-              <FieldRow label="Importe" value={data?.importe} />
-            </ImagePreviewCard>
-          );
-        })}
-      </div>
-    </div>
+    <DocumentDataPanel
+      icon={Zap}
+      label="Factura de luz"
+      assets={assets}
+      projectCode={projectCode}
+      fields={fields}
+      warning={uploadedPages.some((page: any) => page?.extraction?.needsManualReview)}
+    />
   );
 }
 
@@ -1362,14 +1213,11 @@ export function FinalSignaturesPanel({
   return (
     <div className="space-y-3">
       <SectionHeading icon={PenLine} label="Firmas finales" />
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid gap-2 md:grid-cols-2">
         {signatures.map((asset) => (
-          <div key={asset.key} className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-gray-800">{asset.label}</p>
-              <AssetButtons asset={asset} projectCode={projectCode} />
-            </div>
-            <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-40 bg-white" />
+          <div key={asset.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <p className="min-w-0 truncate text-sm font-semibold text-gray-800">{asset.label}</p>
+            <AssetButtons asset={asset} projectCode={projectCode} compact />
           </div>
         ))}
       </div>
@@ -1380,29 +1228,18 @@ export function FinalSignaturesPanel({
 export function SignedDocumentsSection({
   project,
   items,
-  energyCertificate,
 }: {
   project: any;
   items: DashboardSignedPdfItem[];
-  energyCertificate?: DashboardEnergyCertificateSummary;
 }) {
-  const [ecViewing, setEcViewing] = useState(false);
-  const [ecDownloading, setEcDownloading] = useState(false);
-
-  const hasEc = energyCertificate?.status === 'completed';
-
-  if (!items.length && !hasEc) return null;
+  if (!items.length) return null;
 
   return (
     <div className="space-y-3">
       <SectionHeading icon={FileText} label="PDFs firmados" />
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid gap-2 md:grid-cols-2">
         {items.map((item) => {
           const status = item.status ?? (item.present ? 'complete' : 'pending');
-          const cardClass =
-            status === 'complete' ? 'border-emerald-200 bg-emerald-50/70'
-            : status === 'deferred' ? 'border-amber-200 bg-amber-50/60'
-            : 'border-gray-200 bg-gray-50';
           const badgeClass =
             status === 'complete' ? 'bg-emerald-100 text-emerald-700'
             : status === 'deferred' ? 'bg-amber-100 text-amber-700'
@@ -1415,91 +1252,24 @@ export function SignedDocumentsSection({
             status === 'complete' ? 'Listo'
             : status === 'deferred' ? 'Firma diferida'
             : 'Pendiente';
-          const subtitle =
-            status === 'complete' ? 'Generado desde la imagen firmada actual'
-            : status === 'deferred' ? 'El cliente eligió firmar más tarde'
-            : 'Aún no firmado';
 
           return (
-            <div key={item.key} className={`rounded-xl border p-4 space-y-3 ${cardClass}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-gray-900">{item.label}</p>
-                  <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
-                </div>
+            <div key={item.key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-gray-900">{item.label}</p>
                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${badgeClass}`}>
                   {badgeIcon}
                   {badgeLabel}
                 </span>
               </div>
               {item.present ? (
-                <SignedPdfButtons projectCode={project.code} item={item} loadProjectDetail={async () => project} />
+                <SignedPdfButtons projectCode={project.code} item={item} loadProjectDetail={async () => project} compact />
               ) : (
-                <p className="text-xs text-gray-400">
-                  {status === 'deferred'
-                    ? 'Disponible cuando el cliente complete la firma pendiente.'
-                    : 'Se habilitará cuando la firma correspondiente exista.'}
-                </p>
+                <span className="text-xs text-gray-400">Sin PDF</span>
               )}
             </div>
           );
         })}
-
-        {hasEc && (
-          <div className="rounded-xl border p-4 space-y-3 border-emerald-200 bg-emerald-50/70">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-gray-900">Certificado energético</p>
-                <p className="text-xs text-gray-500 mt-1">Generado al completar el cuestionario</p>
-              </div>
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                <CheckCircle className="w-3 h-3" />
-                Listo
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={ecViewing}
-                onClick={async () => {
-                  setEcViewing(true);
-                  try {
-                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
-                    await viewPDFInNewTab(pdfFactory);
-                  } catch {
-                    alert('No se pudo visualizar el certificado energético.');
-                  } finally {
-                    setEcViewing(false);
-                  }
-                }}
-                className="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <Eye className="w-3 h-3" />
-                {ecViewing ? 'Abriendo...' : 'Ver PDF'}
-              </button>
-              <button
-                type="button"
-                disabled={ecDownloading}
-                onClick={async () => {
-                  setEcDownloading(true);
-                  try {
-                    const pdfFactory = await buildEnergyCertificatePdfFactory(project);
-                    const blob = await pdfFactory();
-                    downloadBlob(blob, `${project.code}_certificado-energetico.pdf`);
-                  } catch {
-                    alert('No se pudo descargar el certificado energético.');
-                  } finally {
-                    setEcDownloading(false);
-                  }
-                }}
-                className="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <Download className="w-3 h-3" />
-                {ecDownloading ? 'Descargando...' : 'Descargar PDF'}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1517,31 +1287,21 @@ function EnergyCertificatePanel({
 
   if (!energyCertificate || energyCertificate.status === 'pending') return null;
 
-  const asset = energyCertificate.asset || null;
   const isCompleted = energyCertificate.status === 'completed';
 
   return (
     <div className="space-y-3">
       <SectionHeading icon={Sun} label="Certificado energético" />
-      <div className={`rounded-xl border p-4 space-y-3 ${
+      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
         isCompleted
           ? 'border-emerald-200 bg-emerald-50/70'
           : energyCertificate.status === 'skipped'
             ? 'border-gray-200 bg-gray-50'
             : 'border-amber-200 bg-amber-50/70'
       }`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-gray-900">Estado</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {isCompleted
-                ? 'Documento completado y disponible como PDF'
-                : energyCertificate.status === 'skipped'
-                  ? 'El cliente lo omitió'
-                  : 'Pendiente de completar'}
-            </p>
-          </div>
-          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">Estado</p>
+          <span className={`mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
             isCompleted
               ? 'bg-emerald-100 text-emerald-700'
               : energyCertificate.status === 'skipped'
@@ -1552,10 +1312,6 @@ function EnergyCertificatePanel({
             {energyCertificate.label}
           </span>
         </div>
-
-        {asset && (
-          <DocImage src={asset.dataUrl} alt={asset.label} className="w-full h-auto rounded-xl border border-gray-200 bg-white" />
-        )}
 
         {isCompleted && (
           <div className="flex items-center gap-2">
