@@ -39,16 +39,16 @@ export const initialFormData: FormData = {
     housing: {
       cadastralReference: '',
       habitableAreaM2: '',
-      floorCount: '',
+      floorCount: '0',
       averageFloorHeight: null,
-      bedroomCount: '',
-      doorsByOrientation: { north: '', east: '', south: '', west: '' },
-      windowsByOrientation: { north: '', east: '', south: '', west: '' },
+      bedroomCount: '0',
+      doorsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
+      windowsByOrientation: { north: '0', east: '0', south: '0', west: '0' },
       windowFrameMaterial: null,
       doorMaterial: '',
       windowGlassType: null,
       hasShutters: null,
-      shutterWindowCount: '',
+      shutterWindowCount: '0',
     },
     thermal: {
       thermalInstallationType: null,
@@ -283,6 +283,26 @@ function normalizeEnergyCertificate(value: unknown): EnergyCertificateData {
     thermal: { ...initialFormData.energyCertificate.thermal, ...thermal },
     additional: { ...initialFormData.energyCertificate.additional, ...additional },
   } as EnergyCertificateData;
+
+  const normalizeCountText = (field: unknown) =>
+    typeof field === 'string' && field.trim() !== '' ? field : '0';
+
+  raw.housing.floorCount = normalizeCountText(raw.housing.floorCount);
+  raw.housing.bedroomCount = normalizeCountText(raw.housing.bedroomCount);
+  raw.housing.shutterWindowCount = normalizeCountText(raw.housing.shutterWindowCount);
+  raw.housing.doorsByOrientation = {
+    north: normalizeCountText(raw.housing.doorsByOrientation.north),
+    east: normalizeCountText(raw.housing.doorsByOrientation.east),
+    south: normalizeCountText(raw.housing.doorsByOrientation.south),
+    west: normalizeCountText(raw.housing.doorsByOrientation.west),
+  };
+  raw.housing.windowsByOrientation = {
+    north: normalizeCountText(raw.housing.windowsByOrientation.north),
+    east: normalizeCountText(raw.housing.windowsByOrientation.east),
+    south: normalizeCountText(raw.housing.windowsByOrientation.south),
+    west: normalizeCountText(raw.housing.windowsByOrientation.west),
+  };
+
   return raw.status === 'completed' && !isEnergyCertificateReadyToComplete(raw)
     ? { ...raw, status: 'in-progress' }
     : raw;

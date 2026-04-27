@@ -25,6 +25,7 @@ export function useDashboardProjects({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | DashboardProgressState>('all');
+  const [assessorFilter, setAssessorFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const detailLoader = useMemo(() => createDashboardProjectDetailLoader<DashboardProjectRecord>({
@@ -77,6 +78,7 @@ export function useDashboardProjects({
   const filteredProjects = useMemo(() => projectsWithSummary
     .filter(({ project, summary, progressState }) => {
       if (filter !== 'all' && progressState !== filter) return false;
+      if (assessorFilter !== 'all' && project.assessor !== assessorFilter) return false;
 
       if (!search.trim()) return true;
 
@@ -95,7 +97,7 @@ export function useDashboardProjects({
       const leftDate = new Date(left.summary?.lastUpdated || 0).getTime();
       const rightDate = new Date(right.summary?.lastUpdated || 0).getTime();
       return rightDate - leftDate;
-    }), [filter, projectsWithSummary, search]);
+    }), [assessorFilter, filter, projectsWithSummary, search]);
 
   const totalSubmitted = projectsWithSummary.filter(({ progressState }) => progressState === 'submitted').length;
   const totalInProgress = projectsWithSummary.filter(({ progressState }) => progressState === 'in-progress').length;
@@ -110,7 +112,15 @@ export function useDashboardProjects({
     setProjects((prev) => prev.filter((project) => project.code !== projectCode));
   }, [detailLoader]);
 
+  const updateProject = useCallback((updatedProject: DashboardProjectRecord) => {
+    detailLoader.clearProjectDetail(updatedProject.code);
+    setProjects((prev) => prev.map((project) => (
+      project.code === updatedProject.code ? { ...project, ...updatedProject } : project
+    )));
+  }, [detailLoader]);
+
   return {
+    assessorFilter,
     clearProjectDetail,
     error,
     filter,
@@ -121,11 +131,13 @@ export function useDashboardProjects({
     refresh,
     removeProject,
     search,
+    setAssessorFilter,
     setFilter,
     setSearch,
     showInitialLoading: loading && projects.length === 0,
     totalInProgress,
     totalPending,
     totalSubmitted,
+    updateProject,
   };
 }

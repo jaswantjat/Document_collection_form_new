@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CreditCard, Zap } from 'lucide-react';
-import { getPropertyDocsProgress } from '@/lib/propertyDocsProgress';
+import {
+  getPropertyDocsProgress,
+  isElectricityRequired,
+} from '@/lib/propertyDocsProgress';
 import { isIdentityDocumentComplete } from '@/lib/identityDocument';
 import { AdditionalBankDocumentsCard } from '@/sections/property-docs/AdditionalBankDocumentsCard';
 import { DNICard } from '@/sections/property-docs/DNICard';
@@ -22,9 +25,11 @@ import type {
   AIExtraction,
   UploadedPhoto,
   StoredDocumentFile,
+  ProductType,
 } from '@/types';
 
 interface Props {
+  productType: ProductType;
   dni: DNIData;
   ibi: IBIData;
   electricityBill: ElectricityBillData;
@@ -71,12 +76,13 @@ interface Props {
 function useResumeSnapshot(dni: DNIData, ibi: IBIData, electricityBill: ElectricityBillData) {
   return useState(() => ({
     dni: isIdentityDocumentComplete(dni),
-    ibi: !!ibi.photo,
+    ibi: !!ibi.photo || ibi.pages.length > 0,
     electricity: electricityBill.pages.length > 0,
   }))[0];
 }
 
 export function PropertyDocsSection({
+  productType,
   dni,
   ibi,
   electricityBill,
@@ -127,8 +133,9 @@ export function PropertyDocsSection({
   const validationWarnings = hasAnyDoc ? computeValidationWarnings(dni, electricityBill) : [];
 
   const dniDone = isIdentityDocumentComplete(dni);
-  const ibiDone = !!ibi.photo;
+  const ibiDone = !!ibi.photo || ibi.pages.length > 0;
   const electricityDone = electricityBill.pages.length > 0;
+  const electricityRequired = isElectricityRequired(productType);
 
   const dniSubtitle = dni.front.extraction?.extractedData?.fullName ?? undefined;
   const ibiSubtitle =
@@ -141,6 +148,7 @@ export function PropertyDocsSection({
     ?? `${electricityBill.pages.length} imagen${electricityBill.pages.length !== 1 ? 'es' : ''}`;
 
   const { missingCount, slots } = getPropertyDocsProgress({
+    productType,
     dniDone,
     ibiDone,
     electricityDone,
@@ -236,26 +244,28 @@ export function PropertyDocsSection({
           )}
         </div>
 
-        <div ref={electricityRef}>
-          {showElectricityCompact ? (
-            <CompactRow
-              icon={<Zap className="w-3.5 h-3.5" />}
-              title="Factura de luz"
-              subtitle={electricitySubtitle}
-              onExpand={() => expand('electricity')}
-            />
-          ) : (
-            <ElectricityCard
-              pages={electricityBill.pages}
-              originalPdfs={electricityBill.originalPdfs}
-              issue={electricityBill.issue ?? null}
-              onAddPages={onAddElectricityPages}
-              onRemovePage={onRemoveElectricityPage}
-              onIssueChange={onElectricityIssueChange}
-              onBusyChange={setElectricityIsBusy}
-            />
-          )}
-        </div>
+        {(electricityRequired || electricityDone) && (
+          <div ref={electricityRef}>
+            {showElectricityCompact ? (
+              <CompactRow
+                icon={<Zap className="w-3.5 h-3.5" />}
+                title="Factura de luz"
+                subtitle={electricitySubtitle}
+                onExpand={() => expand('electricity')}
+              />
+            ) : (
+              <ElectricityCard
+                pages={electricityBill.pages}
+                originalPdfs={electricityBill.originalPdfs}
+                issue={electricityBill.issue ?? null}
+                onAddPages={onAddElectricityPages}
+                onRemovePage={onRemoveElectricityPage}
+                onIssueChange={onElectricityIssueChange}
+                onBusyChange={setElectricityIsBusy}
+              />
+            )}
+          </div>
+        )}
 
         {validationWarnings.map((warning) => (
           <div key={warning} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">

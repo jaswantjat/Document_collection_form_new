@@ -1,302 +1,180 @@
 import { createPortal } from 'react-dom';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Archive,
   Building2,
   CheckCircle,
   Clock,
   Download,
   Eye,
-  FileText,
+  Loader2,
   RefreshCw,
   Trash2,
-  Upload,
-  User,
 } from 'lucide-react';
 import {
   deleteProject,
+  updateDashboardProjectAssessor,
   type DashboardProjectRecord,
 } from '@/services/api';
+import { approvedAssessors } from '@/lib/approvedAssessors';
 import type {
-  DashboardAssetItem,
-  DashboardDocumentItem,
   DashboardEnergyCertificateSummary,
   DashboardProjectSummary,
-  DashboardSignedPdfItem,
   DashboardWarning,
 } from '@/lib/dashboardProject';
-import { type DashboardProgressState } from '@/lib/dashboardProgress';
+import type { DashboardStatusItem } from '@/lib/dashboardStatusItems';
 import {
   buildProjectUrl,
-  locationLabel,
   formatDate,
-  getTableDniAssetsFromProject,
-  getTableDocumentAssetsFromProject,
-  getTableElectricityAssetsFromProject,
+  locationLabel,
 } from '@/lib/dashboardHelpers';
-import { downloadProjectZip } from '@/lib/dashboardExport';
 import {
-  DeferredAssetButtons,
-  EcPdfTableButtons,
-  SignedPdfButtons,
-  type LoadProjectDetail,
-} from './DashboardDocumentActions';
+  downloadDashboardStatusGroup,
+  downloadProjectZip,
+} from '@/lib/dashboardExport';
+import { type LoadProjectDetail } from './DashboardDocumentActions';
 import { ProductBadge } from './DashboardShared';
 import { ProjectDetailModal } from './DashboardProjectDetailModal';
 
-function PendingBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-      <Clock className="h-3 w-3" />
-      Pendiente
-    </span>
-  );
-}
-
-function DocumentTableCell({
+function StatusDownloadButton({
   item,
-  projectCode,
+  project,
   loadProjectDetail,
-  onOpenDetail,
 }: {
-  item?: DashboardDocumentItem;
-  projectCode: string;
+  item: Pick<DashboardStatusItem, 'key' | 'label' | 'downloadCount'>;
+  project: DashboardProjectRecord;
   loadProjectDetail: LoadProjectDetail;
-  onOpenDetail: () => void;
 }) {
-  if (!item) {
-    return <span className="text-sm text-gray-300">—</span>;
-  }
+  const [downloading, setDownloading] = useState(false);
+  const canDownload = (item.downloadCount ?? 0) > 0;
+  const Icon = (item.downloadCount ?? 0) > 1 ? Archive : Download;
 
-  if (!item.present) {
-    return <PendingBadge />;
-  }
+  if (!canDownload) return null;
 
   return (
-    <div className="min-w-[120px] space-y-1.5">
-      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle className="h-3 w-3" />
-        Recibido
-      </div>
-      {item.needsManualReview ? (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="h-3 w-3" />
-          Revisar
-        </div>
-      ) : null}
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => getTableDocumentAssetsFromProject(project, item.key)}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
+    <button
+      type="button"
+      data-testid={`status-download-${item.key}`}
+      title={`Descargar ${item.label}`}
+      disabled={downloading}
+      onClick={async () => {
+        setDownloading(true);
+        try {
+          await downloadDashboardStatusGroup(project, item.key, { loadProjectDetail });
+        } catch (err) {
+          console.error('Status document download failed:', err);
+          alert('No se pudo descargar este documento.');
+        } finally {
+          setDownloading(false);
+        }
+      }}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/70 bg-white/85 text-gray-700 shadow-sm hover:bg-white disabled:opacity-50"
+    >
+      {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+    </button>
   );
 }
 
-function DNITableCell({
-  frontItem,
-  backItem,
-  projectCode,
-  loadProjectDetail,
-  onOpenDetail,
-}: {
-  frontItem?: DashboardDocumentItem;
-  backItem?: DashboardDocumentItem;
-  projectCode: string;
-  loadProjectDetail: LoadProjectDetail;
-  onOpenDetail: () => void;
-}) {
-  const hasFront = Boolean(frontItem?.present);
-  const hasBack = Boolean(backItem?.present);
-
-  if (!hasFront && !hasBack) {
-    return <PendingBadge />;
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="space-y-1">
-        {hasFront ? (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-              <CheckCircle className="h-2.5 w-2.5" />
-              {hasBack ? 'Frontal' : 'Recibido'}
-            </span>
-            {frontItem?.needsManualReview ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
-                <AlertTriangle className="h-2.5 w-2.5" />
-                Revisar
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-        {hasBack ? (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-              <CheckCircle className="h-2.5 w-2.5" />
-              Trasera
-            </span>
-            {backItem?.needsManualReview ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
-                <AlertTriangle className="h-2.5 w-2.5" />
-                Revisar
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={(project) => getTableDniAssetsFromProject(project, {
-          includeFront: hasFront && Boolean(frontItem),
-          includeBack: hasBack && Boolean(backItem),
-        })}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
-  );
-}
-
-function SignedPdfsTableCell({
-  projectCode,
-  items,
-  loadProjectDetail,
+function EnergyCertificateStatusBadge({
   energyCertificate,
+  project,
+  loadProjectDetail,
 }: {
-  projectCode: string;
-  items: DashboardSignedPdfItem[];
+  energyCertificate: DashboardEnergyCertificateSummary;
+  project: DashboardProjectRecord;
   loadProjectDetail: LoadProjectDetail;
-  energyCertificate?: DashboardEnergyCertificateSummary;
 }) {
-  const hasEc = energyCertificate?.status === 'completed';
-
-  if (!items.length && !hasEc) {
-    return <span className="text-sm text-gray-300">—</span>;
-  }
+  const [downloading, setDownloading] = useState(false);
+  const completed = energyCertificate.status === 'completed';
 
   return (
-    <div className="min-w-[170px] space-y-2">
-      {items.map((item) => {
-        const status = item.status ?? (item.present ? 'complete' : 'pending');
-        const borderClass =
-          status === 'complete'
-            ? 'border-emerald-200 bg-emerald-50/60'
-            : status === 'deferred'
-              ? 'border-amber-200 bg-amber-50/60'
-              : 'border-gray-200 bg-gray-50';
-
-        return (
-          <div key={item.key} className={`rounded-lg border px-2.5 py-2 ${borderClass}`}>
-            <p
-              className={`text-[11px] font-semibold leading-tight ${
-                status === 'complete'
-                  ? 'text-emerald-800'
-                  : status === 'deferred'
-                    ? 'text-amber-800'
-                    : 'text-gray-700'
-              }`}
-            >
-              {item.label}
-            </p>
-            {item.present ? (
-              <div className="mt-2">
-                <SignedPdfButtons
-                  projectCode={projectCode}
-                  item={item}
-                  loadProjectDetail={loadProjectDetail}
-                  compact
-                />
-              </div>
-            ) : (
-              <p
-                className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${
-                  status === 'deferred' ? 'text-amber-600' : 'text-gray-400'
-                }`}
-              >
-                {status === 'deferred' ? (
-                  <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                ) : null}
-                {status === 'deferred' ? 'Firma diferida' : 'Pendiente'}
-              </p>
-            )}
-          </div>
-        );
-      })}
-      {hasEc ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-2.5 py-2">
-          <p className="text-[11px] font-semibold leading-tight text-emerald-800">
-            Certificado energético
-          </p>
-          <EcPdfTableButtons
-            projectCode={projectCode}
-            loadProjectDetail={loadProjectDetail}
-          />
-        </div>
+    <div
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+        completed
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+          : energyCertificate.status === 'skipped'
+            ? 'border-gray-200 bg-gray-50 text-gray-600'
+            : 'border-amber-200 bg-amber-50 text-amber-700'
+      }`}
+    >
+      {completed ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+      {completed
+        ? 'Certificado energético'
+        : energyCertificate.status === 'skipped'
+          ? 'Certificado energético omitido'
+          : 'Certificado energético pendiente'}
+      {completed ? (
+        <button
+          type="button"
+          data-testid="status-download-energy-certificate"
+          title="Descargar Certificado energético"
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadDashboardStatusGroup(project, 'energy-certificate', { loadProjectDetail });
+            } catch (err) {
+              console.error('Energy certificate status download failed:', err);
+              alert('No se pudo descargar el certificado energético.');
+            } finally {
+              setDownloading(false);
+            }
+          }}
+          className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-emerald-700 disabled:opacity-50"
+        >
+          {downloading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+        </button>
       ) : null}
     </div>
   );
 }
 
 function StatusCell({
-  progressState,
-  allDocs,
+  items,
   submissionCount,
   energyCertificate,
   warnings,
+  project,
+  loadProjectDetail,
 }: {
-  progressState: DashboardProgressState;
-  allDocs: DashboardDocumentItem[];
+  items: DashboardStatusItem[];
   submissionCount: number;
-  energyCertificate?: DashboardEnergyCertificateSummary;
+  energyCertificate: DashboardEnergyCertificateSummary;
   warnings: DashboardWarning[];
+  project: DashboardProjectRecord;
+  loadProjectDetail: LoadProjectDetail;
 }) {
-  const pending = allDocs.filter((doc) => !doc.present);
-  const progressBadge =
-    progressState === 'submitted'
-      ? {
-          label: 'Enviado',
-          className: 'border-emerald-200 bg-emerald-50 text-emerald-600',
-          icon: <CheckCircle className="h-3 w-3" />,
-        }
-      : progressState === 'in-progress'
-        ? {
-            label: 'En curso',
-            className: 'border-blue-200 bg-blue-50 text-blue-700',
-            icon: <Upload className="h-3 w-3" />,
-          }
-        : {
-            label: 'Pendiente',
-            className: 'border-amber-200 bg-amber-50 text-amber-700',
-            icon: <Clock className="h-3 w-3" />,
-          };
+  const toneClasses: Record<DashboardStatusItem['tone'], string> = {
+    success: 'border-emerald-200 bg-emerald-50/80 text-emerald-800',
+    pending: 'border-amber-200 bg-amber-50/80 text-amber-800',
+    warning: 'border-orange-200 bg-orange-50/80 text-orange-800',
+    muted: 'border-gray-200 bg-gray-50 text-gray-700',
+  };
 
   return (
-    <div className="min-w-[160px] space-y-1.5">
-      <div
-        className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${progressBadge.className}`}
-      >
-        {progressBadge.icon}
-        {progressBadge.label}
-      </div>
-      {pending.length === 0 ? (
-        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
-          <CheckCircle className="h-3.5 w-3.5" />
-          Completo
-        </span>
-      ) : (
-        <ul className="space-y-1">
-          {pending.map((doc) => (
+    <div className="min-w-[280px] space-y-2">
+      {items.length > 0 ? (
+        <ul className="space-y-1.5">
+          {items.map((item) => (
             <li
-              key={doc.key}
-              className="flex items-center gap-1.5 text-xs text-amber-700"
+              key={item.key}
+              className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-xs ${toneClasses[item.tone]}`}
             >
-              <Clock className="h-3 w-3 shrink-0" />
-              {doc.shortLabel || doc.label}
+              <span className="font-medium text-gray-800">{item.label}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="whitespace-nowrap font-semibold">{item.stateLabel}</span>
+                <StatusDownloadButton
+                  item={item}
+                  project={project}
+                  loadProjectDetail={loadProjectDetail}
+                />
+              </span>
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-sm text-gray-400">Sin estado documental</p>
       )}
       {submissionCount > 0 ? (
         <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
@@ -304,28 +182,11 @@ function StatusCell({
           {submissionCount} envío{submissionCount !== 1 ? 's' : ''}
         </div>
       ) : null}
-      {energyCertificate ? (
-        <div
-          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
-            energyCertificate.status === 'completed'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-              : energyCertificate.status === 'skipped'
-                ? 'border-gray-200 bg-gray-50 text-gray-600'
-                : 'border-amber-200 bg-amber-50 text-amber-700'
-          }`}
-        >
-          {energyCertificate.status === 'completed' ? (
-            <CheckCircle className="h-3 w-3" />
-          ) : (
-            <Clock className="h-3 w-3" />
-          )}
-          {energyCertificate.status === 'completed'
-            ? 'Certificado energético'
-            : energyCertificate.status === 'skipped'
-              ? 'Certificado energético omitido'
-              : 'Certificado energético pendiente'}
-        </div>
-      ) : null}
+      <EnergyCertificateStatusBadge
+        energyCertificate={energyCertificate}
+        project={project}
+        loadProjectDetail={loadProjectDetail}
+      />
       {warnings.length > 0 ? (
         <ul className="space-y-1">
           {warnings.map((warning) => (
@@ -343,100 +204,94 @@ function StatusCell({
   );
 }
 
-function ElectricityTableCell({
-  pages,
-  projectCode,
-  loadProjectDetail,
-  onOpenDetail,
+function AssessorCell({
+  project,
+  token,
+  onSaved,
 }: {
-  pages: DashboardDocumentItem[];
-  projectCode: string;
-  loadProjectDetail: LoadProjectDetail;
-  onOpenDetail: () => void;
+  project: DashboardProjectRecord;
+  token: string;
+  onSaved: (project: DashboardProjectRecord) => void;
 }) {
-  const uploaded = pages.filter((page) => page.present);
-  if (uploaded.length === 0) {
-    return <PendingBadge />;
-  }
+  const [value, setValue] = useState(project.assessor || '');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-  const manualReview = uploaded.filter((page) => page.needsManualReview).length;
+  useEffect(() => {
+    setValue(project.assessor || '');
+  }, [project.assessor]);
 
-  return (
-    <div className="min-w-[130px] space-y-1.5">
-      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle className="h-3 w-3" />
-        {uploaded.length} página{uploaded.length !== 1 ? 's' : ''}
-      </div>
-      {manualReview > 0 ? (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="h-3 w-3" />
-          {manualReview} revisar
-        </div>
-      ) : null}
-      <DeferredAssetButtons
-        projectCode={projectCode}
-        loadProjectDetail={loadProjectDetail}
-        resolveAssets={getTableElectricityAssetsFromProject}
-        onOpenDetail={onOpenDetail}
-      />
-    </div>
-  );
-}
-
-function AdditionalDocumentsTableCell({ items }: { items: DashboardAssetItem[] }) {
-  if (items.length === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-        <FileText className="h-3 w-3" />
-        Sin docs
-      </span>
-    );
-  }
-
-  const manualReview = items.filter((item) => item.needsManualReview).length;
-  const firstFilename = items[0]?.filename?.trim() || items[0]?.label || 'Documento adicional';
-  const summaryLabel =
-    items.length === 1
-      ? `1 archivo · ${firstFilename}`
-      : `${items.length} archivos · ${firstFilename} +${items.length - 1}`;
+  const saveAssessor = async (nextAssessor: string) => {
+    const previous = value;
+    setValue(nextAssessor);
+    setStatus('saving');
+    try {
+      const response = await updateDashboardProjectAssessor(project.code, nextAssessor, token);
+      if (!response.success) {
+        throw new Error(response.message || 'No se pudo guardar el asesor.');
+      }
+      onSaved((response.project ?? {
+        ...project,
+        assessor: nextAssessor,
+        assessorId: nextAssessor,
+      }) as DashboardProjectRecord);
+      setStatus('saved');
+    } catch (err) {
+      console.error('Assessor reassignment failed:', err);
+      setValue(previous);
+      setStatus('error');
+    }
+  };
 
   return (
-    <div className="max-w-[220px] min-w-0 space-y-1">
-      <p
-        className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-        title={summaryLabel}
+    <div className="min-w-[170px] space-y-1">
+      <select
+        data-testid="dashboard-assessor-select"
+        value={value}
+        disabled={status === 'saving'}
+        onChange={(event) => {
+          void saveAssessor(event.target.value);
+        }}
+        className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-900 shadow-sm focus:border-eltex-blue focus:outline-none"
       >
-        <CheckCircle className="h-3 w-3 shrink-0" />
-        <span className="min-w-0 truncate">{summaryLabel}</span>
+        {approvedAssessors.map((assessor) => (
+          <option key={assessor} value={assessor}>
+            {assessor}
+          </option>
+        ))}
+      </select>
+      <p data-testid="dashboard-assessor-save-status" className="text-[11px] text-gray-500">
+        {status === 'saving'
+          ? 'Guardando...'
+          : status === 'saved'
+            ? 'Guardado'
+            : status === 'error'
+              ? 'No se pudo guardar'
+              : 'Asesor asignado'}
       </p>
-      {manualReview > 0 ? (
-        <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-          <AlertTriangle className="h-3 w-3" />
-          {manualReview} revisar
-        </div>
-      ) : null}
     </div>
   );
 }
 
 const stickyActionsCellClass =
-  'sticky right-0 z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-gray-50';
+  'sticky right-[110px] z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-gray-50';
+const stickyZipCellClass =
+  'sticky right-0 z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top transition-colors group-hover:bg-gray-50';
 
 export function ProjectTableRow({
   project,
   summary,
-  progressState,
   token,
   loadProjectDetail,
   onRefresh,
+  onAssessorUpdated,
   onDelete,
 }: {
   project: DashboardProjectRecord;
   summary: DashboardProjectSummary;
-  progressState: DashboardProgressState;
   token: string;
   loadProjectDetail: LoadProjectDetail;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
+  onAssessorUpdated: (project: DashboardProjectRecord) => void;
   onDelete: (code: string) => void;
 }) {
   const [downloading, setDownloading] = useState(false);
@@ -444,9 +299,6 @@ export function ProjectTableRow({
   const [showDetail, setShowDetail] = useState(false);
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const documents = summary.documents ?? [];
-  const byKey = new Map(documents.map((item) => [item.key, item]));
-  const allDocs = [...documents, ...(summary.electricityPages ?? [])];
 
   const handleOpenForm = async () => {
     const popup = window.open('', '_blank');
@@ -467,9 +319,7 @@ export function ProjectTableRow({
       }
     } catch (err) {
       console.error('Open project form failed:', err);
-      if (popup) {
-        popup.close();
-      }
+      if (popup) popup.close();
       alert('No se pudo abrir el formulario del expediente.');
     } finally {
       setOpeningForm(false);
@@ -477,10 +327,7 @@ export function ProjectTableRow({
   };
 
   const handleDeleteConfirm = async () => {
-    if (confirmTimeoutRef.current) {
-      clearTimeout(confirmTimeoutRef.current);
-    }
-
+    if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
     setDeleteState('deleting');
     try {
       const result = await deleteProject(project.code, token);
@@ -500,18 +347,12 @@ export function ProjectTableRow({
     <>
       <tr className="group bg-white transition-colors hover:bg-gray-50">
         <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <div className="space-y-1 text-sm">
-            <p className="font-semibold text-gray-900">{formatDate(summary.lastUpdated)}</p>
-            <p className="text-xs text-gray-400">Creado {formatDate(project.createdAt)}</p>
-          </div>
-        </td>
-
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-lg bg-eltex-blue-light px-2 py-1 font-mono text-[11px] font-bold text-eltex-blue">
                 {project.code}
               </span>
+              <ProductBadge type={project.productType} />
               {summary.isCompany ? (
                 <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                   <Building2 className="h-3 w-3" />
@@ -525,110 +366,47 @@ export function ProjectTableRow({
                 {summary.companyName}
               </p>
             ) : null}
-            <p className="flex items-center gap-1 truncate text-xs text-gray-500">
-              <User className="h-3 w-3 shrink-0" />
-              {project.assessor || '—'}
+            <p className="truncate text-xs text-gray-500">{locationLabel(summary.location)}</p>
+            <p className="line-clamp-2 text-xs leading-relaxed text-gray-500">
+              {summary.address || 'Sin dirección cargada'}
+            </p>
+            <p className="text-[11px] text-gray-400">
+              Actualizado {formatDate(summary.lastUpdated)} · Creado {formatDate(project.createdAt)}
             </p>
           </div>
         </td>
 
         <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <div className="space-y-2">
-            <ProductBadge type={project.productType} />
-            <p className="truncate text-sm font-medium text-gray-800">
-              {locationLabel(summary.location)}
-            </p>
-          </div>
+          <AssessorCell project={project} token={token} onSaved={onAssessorUpdated} />
         </td>
 
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <p className="line-clamp-3 text-sm leading-relaxed text-gray-800">
-            {summary.address || '—'}
-          </p>
-        </td>
-
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <DNITableCell
-            frontItem={byKey.get('dniFront') as DashboardDocumentItem | undefined}
-            backItem={byKey.get('dniBack') as DashboardDocumentItem | undefined}
-            projectCode={project.code}
-            loadProjectDetail={loadProjectDetail}
-            onOpenDetail={() => setShowDetail(true)}
-          />
-        </td>
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <DocumentTableCell
-            item={byKey.get('ibi') as DashboardDocumentItem | undefined}
-            projectCode={project.code}
-            loadProjectDetail={loadProjectDetail}
-            onOpenDetail={() => setShowDetail(true)}
-          />
-        </td>
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <ElectricityTableCell
-            pages={summary.electricityPages}
-            projectCode={project.code}
-            loadProjectDetail={loadProjectDetail}
-            onOpenDetail={() => setShowDetail(true)}
-          />
-        </td>
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <AdditionalDocumentsTableCell items={summary.additionalDocuments} />
-        </td>
-        <td className="border-b border-gray-100 px-4 py-3 align-top">
-          <SignedPdfsTableCell
-            projectCode={project.code}
-            items={summary.signedDocuments}
-            loadProjectDetail={loadProjectDetail}
-            energyCertificate={summary.energyCertificate}
-          />
-        </td>
         <td className="border-b border-gray-100 px-4 py-3 align-top">
           <StatusCell
-            progressState={progressState}
-            allDocs={allDocs}
+            items={summary.statusItems}
             submissionCount={project.submissionCount || 0}
             energyCertificate={summary.energyCertificate}
             warnings={summary.warnings}
+            project={project}
+            loadProjectDetail={loadProjectDetail}
           />
         </td>
+
         <td className={stickyActionsCellClass}>
-          <div className="grid min-w-[180px] grid-cols-2 gap-1.5">
+          <div className="grid min-w-[180px] gap-1.5">
             <button
               type="button"
               data-testid="ver-expediente-btn"
-              title="Ver expediente"
               onClick={() => setShowDetail(true)}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-eltex-blue/15 bg-eltex-blue px-3 py-2 text-xs font-semibold text-white hover:bg-eltex-blue/90"
             >
               <Eye className="h-3 w-3" />
-              Detalle
-            </button>
-            <button
-              type="button"
-              data-testid="dashboard-row-download-zip-btn"
-              title="Descargar ZIP"
-              disabled={downloading}
-              onClick={async () => {
-                setDownloading(true);
-                try {
-                  await downloadProjectZip(project, { loadProjectDetail, token });
-                } catch {
-                  alert('Error al descargar los archivos del expediente.');
-                } finally {
-                  setDownloading(false);
-                }
-              }}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-            >
-              <Download className="h-3 w-3" />
-              {downloading ? 'ZIP...' : 'ZIP'}
+              Abrir expediente
             </button>
             <button
               type="button"
               onClick={() => void handleOpenForm()}
               disabled={openingForm}
-              className="col-span-2 truncate rounded-lg border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              className="truncate rounded-lg border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700 hover:bg-gray-50"
             >
               {openingForm ? 'Abriendo...' : 'Formulario'}
             </button>
@@ -639,14 +417,14 @@ export function ProjectTableRow({
                   setDeleteState('confirm');
                   confirmTimeoutRef.current = setTimeout(() => setDeleteState('idle'), 4000);
                 }}
-                className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
               >
                 <Trash2 className="h-3 w-3" />
                 Eliminar expediente
               </button>
             ) : null}
             {deleteState === 'confirm' ? (
-              <div className="col-span-2 flex gap-1">
+              <div className="flex gap-1">
                 <button
                   type="button"
                   onClick={() => void handleDeleteConfirm()}
@@ -658,9 +436,7 @@ export function ProjectTableRow({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirmTimeoutRef.current) {
-                      clearTimeout(confirmTimeoutRef.current);
-                    }
+                    if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
                     setDeleteState('idle');
                   }}
                   className="flex flex-1 items-center justify-center rounded-lg border border-gray-200 px-2 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
@@ -670,12 +446,34 @@ export function ProjectTableRow({
               </div>
             ) : null}
             {deleteState === 'deleting' ? (
-              <div className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-500">
+              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-500">
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 Eliminando...
               </div>
             ) : null}
           </div>
+        </td>
+
+        <td className={stickyZipCellClass}>
+          <button
+            type="button"
+            data-testid="dashboard-row-download-zip-btn"
+            disabled={downloading}
+            onClick={async () => {
+              setDownloading(true);
+              try {
+                await downloadProjectZip(project, { loadProjectDetail, token });
+              } catch {
+                alert('Error al descargar los archivos del expediente.');
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          >
+            <Download className="h-3 w-3" />
+            {downloading ? 'Descargando...' : 'ZIP'}
+          </button>
         </td>
       </tr>
       {showDetail

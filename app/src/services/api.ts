@@ -49,6 +49,13 @@ interface ApiResponseShape {
   error?: string;
 }
 
+type ExtractionApiResponse = {
+  success?: boolean;
+  reason?: string;
+  message?: string;
+  error?: string;
+};
+
 interface UploadAssetDescriptor {
   fieldName: string;
   fingerprint: string;
@@ -68,12 +75,6 @@ const EXTRACTION_RETRY_DELAYS_MS = [0, 1_000, 3_000];
 
 type UploadApiResponse = { success: boolean; savedKeys?: string[]; message?: string; error?: string };
 type UploadApiError = Error & { retryable?: boolean };
-type ExtractionApiResponse = {
-  success?: boolean;
-  reason?: string;
-  message?: string;
-  error?: string;
-};
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return null;
@@ -577,6 +578,19 @@ export async function resendDashboardProjectLink(
     method: 'POST',
     headers: { 'x-dashboard-token': token },
     signal: AbortSignal.timeout(DASHBOARD_API_TIMEOUT_MS),
+  });
+  return readJsonResponse(res);
+}
+
+export async function updateDashboardProjectAssessor(
+  code: string,
+  assessor: string,
+  token: string,
+): Promise<{ success: boolean; project?: ProjectData; message?: string; error?: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/project/${encodeURIComponent(code)}/assessor`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'x-dashboard-token': token },
+    body: JSON.stringify({ assessor }),
   });
   return readJsonResponse(res);
 }

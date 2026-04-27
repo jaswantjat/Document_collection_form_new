@@ -52,10 +52,10 @@ describe('normalizeFormData', () => {
     expect(normalized.representation.companyName).toBe('');
     expect(normalized.representation.renderedDocuments).toEqual({});
     expect(normalized.energyCertificate.housing.doorsByOrientation).toMatchObject({
-      north: '',
-      east: '',
-      south: '',
-      west: '',
+      north: '0',
+      east: '0',
+      south: '0',
+      west: '0',
     });
   });
 

@@ -1,5 +1,9 @@
 import type { ProjectData, StoredDocumentFile } from '@/types';
-import type { DashboardAssetGroup, DashboardSignedPdfItem } from '@/lib/dashboardProject';
+import type {
+  DashboardAssetGroup,
+  DashboardAssetItem,
+  DashboardSignedPdfItem,
+} from '@/lib/dashboardProject';
 import {
   getDashboardAdditionalBankDocumentAssets,
   getDashboardProjectSummary,
@@ -38,6 +42,12 @@ export interface DashboardExportEntry {
   createBlob: () => Promise<Blob>;
 }
 
+export interface DashboardStatusDownloadGroup {
+  key: string;
+  label: string;
+  entries: DashboardExportEntry[];
+}
+
 interface DownloadProjectZipOptions {
   loadProjectDetail?: (projectCode: string) => Promise<DashboardProjectExportSource>;
   token?: string;
@@ -66,6 +76,14 @@ function buildLabelFilenameStem(label: string) {
 function buildZipFilename(project: Pick<ProjectData, 'code' | 'customerName'>) {
   const safeName = (project.customerName || project.code).replace(/[^a-zA-Z0-9]/g, '_');
   return `${project.code}_${safeName}.zip`;
+}
+
+function buildMiniZipFilename(project: Pick<ProjectData, 'code'>, label: string) {
+  return `${project.code}_${buildLabelFilenameStem(label)}.zip`;
+}
+
+function buildDirectFilename(project: Pick<ProjectData, 'code'>, entry: DashboardExportEntry) {
+  return entry.filename.startsWith(`${project.code}_`) ? entry.filename : `${project.code}_${entry.filename}`;
 }
 
 function blobFromDataUrl(dataUrl: string): Blob {
@@ -119,7 +137,11 @@ function createAssetEntry(
 }
 
 function assetEntriesFromGroup(category: DashboardExportCategory, group: DashboardAssetGroup) {
-  return group.items.map((asset) => {
+  return assetEntriesFromAssets(category, group.items);
+}
+
+function assetEntriesFromAssets(category: DashboardExportCategory, assets: DashboardAssetItem[]) {
+  return assets.map((asset) => {
     const ext = extensionFromMimeType(asset.mimeType, asset.dataUrl);
     const filename = `${buildLabelFilenameStem(asset.label)}.${ext}`;
     return createAssetEntry(category, asset.key, filename, asset.dataUrl, asset.mimeType);
@@ -190,6 +212,39 @@ function documentEntries(project: DashboardProjectExportSource) {
   ];
 }
 
+function identityDocumentEntries(project: DashboardProjectExportSource) {
+  return [
+    ...assetEntriesFromAssets('documents', [
+      ...getDocumentAssetsFromProject(project, 'dniFront'),
+      ...getDocumentAssetsFromProject(project, 'dniBack'),
+    ]),
+    ...storedDocumentEntries(project, 'DNI_original_pdf', 'dniOriginal', project.formData?.dni?.originalPdfs),
+  ];
+}
+
+function ibiDocumentEntries(project: DashboardProjectExportSource) {
+  return [
+    ...assetEntriesFromAssets('documents', getDocumentAssetsFromProject(project, 'ibi')),
+    ...storedDocumentEntries(project, 'IBI_original_pdf', 'ibiOriginal', project.formData?.ibi?.originalPdfs),
+  ];
+}
+
+function electricityDocumentEntries(project: DashboardProjectExportSource) {
+  return [
+    ...assetEntriesFromAssets('documents', getElectricityAssetsFromProject(project)),
+    ...storedDocumentEntries(
+      project,
+      'Factura_luz_original_pdf',
+      'electricityOriginal',
+      project.formData?.electricityBill?.originalPdfs,
+    ),
+  ];
+}
+
+function additionalDocumentEntries(project: DashboardProjectExportSource) {
+  return assetEntriesFromAssets('documents', getDashboardAdditionalBankDocumentAssets(project));
+}
+
 function signedPdfEntries(project: DashboardProjectExportSource, items: DashboardSignedPdfItem[]) {
   return items
     .filter((item) => item.present)
@@ -240,6 +295,18 @@ async function loadUzip(): Promise<UzipModule> {
   return (imported.default ?? imported) as UzipModule;
 }
 
+async function buildZipFromEntries(entries: DashboardExportEntry[]) {
+  const zipFiles: Record<string, Uint8Array> = {};
+
+  for (const entry of entries) {
+    const blob = await entry.createBlob();
+    zipFiles[entry.archivePath] = new Uint8Array(await blob.arrayBuffer());
+  }
+
+  const UZIP = await loadUzip();
+  return new Blob([UZIP.encode(zipFiles)], { type: 'application/zip' });
+}
+
 export function listDashboardExportEntries(project: DashboardProjectExportSource): DashboardExportEntry[] {
   const summary = getDashboardProjectSummary(project);
   const finalSignatureGroup: DashboardAssetGroup = {
@@ -259,15 +326,44 @@ export function listDashboardExportEntries(project: DashboardProjectExportSource
 
 export async function buildProjectZipBlob(project: DashboardProjectExportSource): Promise<Blob> {
   const entries = listDashboardExportEntries(project);
-  const zipFiles: Record<string, Uint8Array> = {};
+  return buildZipFromEntries(entries);
+}
 
-  for (const entry of entries) {
-    const blob = await entry.createBlob();
-    zipFiles[entry.archivePath] = new Uint8Array(await blob.arrayBuffer());
+export function listDashboardStatusDownloadGroups(
+  project: DashboardProjectExportSource,
+): DashboardStatusDownloadGroup[] {
+  const summary = getDashboardProjectSummary(project);
+
+  return [
+    { key: 'dni', label: 'DNI / NIE', entries: identityDocumentEntries(project) },
+    { key: 'ibi', label: 'IBI / Escritura', entries: ibiDocumentEntries(project) },
+    { key: 'electricity', label: 'Factura de luz', entries: electricityDocumentEntries(project) },
+    { key: 'representation', label: 'Representación', entries: signedPdfEntries(project, summary.signedDocuments) },
+    { key: 'additional-documents', label: 'Documento adicional', entries: additionalDocumentEntries(project) },
+    { key: 'energy-certificate', label: 'Certificado energético', entries: energyCertificateEntries(project, summary.energyCertificate.status) },
+  ].filter((group) => group.entries.length > 0);
+}
+
+export async function downloadDashboardStatusGroup(
+  project: DashboardProjectExportSource,
+  groupKey: string,
+  options: DownloadProjectZipOptions = {},
+) {
+  const detailProject = await resolveProjectDetail(project, options.loadProjectDetail);
+  const group = listDashboardStatusDownloadGroups(detailProject).find((item) => item.key === groupKey);
+
+  if (!group || group.entries.length === 0) {
+    alert('Este documento no tiene archivos descargables aún.');
+    return;
   }
 
-  const UZIP = await loadUzip();
-  return new Blob([UZIP.encode(zipFiles)], { type: 'application/zip' });
+  if (group.entries.length === 1) {
+    const [entry] = group.entries;
+    downloadBlob(await entry.createBlob(), buildDirectFilename(detailProject, entry));
+    return;
+  }
+
+  downloadBlob(await buildZipFromEntries(group.entries), buildMiniZipFilename(detailProject, group.label));
 }
 
 async function downloadLegacyProjectZip(

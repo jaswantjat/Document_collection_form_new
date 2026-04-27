@@ -1,0 +1,58 @@
+{
+  "capturedAt": "2026-04-27T09:50:06.117Z",
+  "baseUrl": "http://127.0.0.1:5003",
+  "results": [
+    {
+      "name": "management-card-desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "/Users/masterjaswant/Documents/new form/docs/proof/dashboard-design-2026-04-27/management-card-desktop.png",
+      "cardBox": {
+        "x": 16,
+        "y": 235,
+        "width": 1408,
+        "height": 295
+      },
+      "phoneInputBox": {
+        "x": 556.59375,
+        "y": 282,
+        "width": 417.203125,
+        "height": 56
+      }
+    },
+    {
+      "name": "management-card-mobile",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "screenshot": "/Users/masterjaswant/Documents/new form/docs/proof/dashboard-design-2026-04-27/management-card-mobile.png",
+      "cardBox": {
+        "x": 16,
+        "y": 219,
+        "width": 358,
+        "height": 682
+      },
+      "phoneInputBox": {
+        "x": 37,
+        "y": 413,
+        "width": 316,
+        "height": 56
+      }
+    }
+  ],
+  "staging": {
+    "capturedAt": "2026-04-27T09:54:08.936Z",
+    "baseUrl": "https://document-collection-form-staging-staging.up.railway.app",
+    "deploymentCommit": "10dd0656c25723bd992c8ca3d3ce79f53912d65c",
+    "screenshot": "/Users/masterjaswant/Documents/new form/docs/proof/dashboard-design-2026-04-27/management-card-staging.png",
+    "cardBox": {
+      "x": 16,
+      "y": 235,
+      "width": 1408,
+      "height": 295
+    }
+  }
+}

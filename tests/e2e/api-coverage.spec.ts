@@ -407,6 +407,34 @@ test.describe('API Coverage', () => {
     const code = createBody.project.code as string;
     const accessToken = createBody.project.accessToken as string;
 
+    const uploadRes = await request.post(`${BASE}/api/project/${code}/upload-assets?token=${encodeURIComponent(accessToken)}`, {
+      multipart: {
+        activeKeys: JSON.stringify(['dniFront', 'dniBack', 'ibi_0', 'electricity_0']),
+        dniFront: {
+          name: 'dni-front.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-dni-front'),
+        },
+        dniBack: {
+          name: 'dni-back.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-dni-back'),
+        },
+        ibi_0: {
+          name: 'ibi.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-ibi'),
+        },
+        electricity_0: {
+          name: 'electricity.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from('fake-electricity'),
+        },
+      },
+      timeout: 15000,
+    });
+    expect(uploadRes.status()).toBe(200);
+
     const submitRes = await request.post(`${BASE}/api/project/${code}/submit?token=${encodeURIComponent(accessToken)}`, {
       headers: { 'Content-Type': 'application/json' },
       data: {
@@ -506,6 +534,65 @@ test.describe('API Coverage', () => {
       success: false,
       message: 'Selecciona un asesor de la lista aprobada.',
     });
+  });
+
+  test('API-05c: dashboard assessor reassignment validates allowlist and invalidates only EC render', async ({ request }) => {
+    const formData = buildLegacyZipFormData();
+    formData.representation.renderedDocuments = {
+      catalunaIva: {
+        imageDataUrl: makeDataUrl('signed-render', 'image/png'),
+        generatedAt: '2026-04-09T10:00:00Z',
+        templateVersion: '2026-04-04.2',
+      },
+    };
+    const createRes = await request.post(`${BASE}/api/project/create`, {
+      data: {
+        phone: uniquePhone(),
+        assessor: APPROVED_ASSESSOR,
+        assessorId: APPROVED_ASSESSOR,
+      },
+      timeout: 15000,
+    });
+    expect(createRes.status()).toBe(200);
+    const createBody = await createRes.json();
+    const code = createBody.project.code as string;
+
+    const saveRes = await request.post(`${BASE}/api/project/${code}/save`, {
+      data: { formData, source: 'customer' },
+      timeout: 15000,
+    });
+    expect(saveRes.status()).toBe(200);
+
+    const dashToken = await loginDashboard(request);
+    const invalidRes = await request.patch(`${BASE}/api/dashboard/project/${code}/assessor`, {
+      headers: { 'x-dashboard-token': dashToken },
+      data: { assessor: 'QA Bot' },
+      failOnStatusCode: false,
+      timeout: 15000,
+    });
+    expect(invalidRes.status()).toBe(400);
+
+    const newAssessor = 'Laura Martín Manzano';
+    const validRes = await request.patch(`${BASE}/api/dashboard/project/${code}/assessor`, {
+      headers: { 'x-dashboard-token': dashToken },
+      data: { assessor: newAssessor },
+      timeout: 15000,
+    });
+    expect(validRes.status()).toBe(200);
+    await expect(validRes.json()).resolves.toMatchObject({
+      success: true,
+      project: { code, assessor: newAssessor },
+    });
+
+    const detailRes = await request.get(`${BASE}/api/dashboard/project/${code}`, {
+      headers: { 'x-dashboard-token': dashToken },
+      timeout: 15000,
+    });
+    const detailBody = await detailRes.json();
+    expect(detailBody.project.assessor).toBe(newAssessor);
+    expect(detailBody.project.formData.energyCertificate.renderedDocument).toBeNull();
+    expect(detailBody.project.formData.representation.renderedDocuments.catalunaIva.templateVersion)
+      .toBe('2026-04-04.2');
   });
 
   test('API-06: reset endpoints recreate missing seeded follow-up fixtures', async ({ request }) => {

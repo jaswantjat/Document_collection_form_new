@@ -28,7 +28,9 @@ const {
   DEFAULT_TEST_CODES,
   ensureDefaultTestProjects,
   getDefaultProjects,
+  resetTestProjectFixture,
 } = require('./lib/testProjects');
+const { pruneTransientQaProjects } = require('./lib/devProjectCleanup');
 const {
   createDashboardProjectRecord,
   findProjectByNormalizedPhone,
@@ -36,6 +38,10 @@ const {
   serializeDashboardProjectAction,
   validateDashboardCreateInput,
 } = require('./lib/dashboardProjectManagement');
+const {
+  createQueuedJsonSaver,
+  writeJsonAtomically,
+} = require('./lib/queuedJsonFile');
 const { isApprovedAssessor } = require('./lib/approvedAssessors');
 const { registerGracefulShutdown } = require('./lib/gracefulShutdown');
 const {

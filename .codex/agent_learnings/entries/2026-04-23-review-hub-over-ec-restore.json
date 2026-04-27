@@ -1,0 +1,11 @@
+{
+  "ts_utc": "2026-04-23T13:45:00Z",
+  "category": "architecture",
+  "issue": "#25",
+  "text": "Returning customers should treat the review screen as the stable hub, not the last deep sub-step.\nWhen the saved section is Energy Certificate, reload should reopen review/status first and preserve the EC sub-step only for when the customer explicitly re-enters that section.\nThis keeps resume behavior understandable while still preserving deep progress.",
+  "pointers": [
+    "app/src/App.tsx",
+    "app/src/lib/customerSectionRouting.ts",
+    "tests/e2e/energy-certificate-flow.spec.ts"
+  ]
+}

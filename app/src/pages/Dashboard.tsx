@@ -17,6 +17,7 @@ import {
   type DashboardProjectActionResult,
 } from '@/services/api';
 import { useDashboardProjects } from '@/hooks/useDashboardProjects';
+import { approvedAssessors } from '@/lib/approvedAssessors';
 import { downloadCSV } from '@/lib/dashboardHelpers';
 import { DashboardProjectManagementCard } from '@/components/dashboard/DashboardProjectManagementCard';
 import { ProjectTableRow } from '@/components/dashboard/DashboardProjectTable';
@@ -62,6 +63,7 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
   }, [onLogout, token]);
 
   const {
+    assessorFilter,
     clearProjectDetail,
     error,
     filter,
@@ -72,12 +74,14 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
     refresh,
     removeProject,
     search,
+    setAssessorFilter,
     setFilter,
     setSearch,
     showInitialLoading,
     totalInProgress,
     totalPending,
     totalSubmitted,
+    updateProject,
   } = useDashboardProjects({
     token,
     onUnauthorized: handleLogout,
@@ -190,27 +194,46 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
             />
           </div>
 
-          <div className="flex shrink-0 gap-1 rounded-xl border border-gray-200 bg-white p-1">
-            {(['all', 'submitted', 'in-progress', 'pending'] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  filter === item
-                    ? 'bg-eltex-blue text-white shadow-sm'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                }`}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="shrink-0">
+              <span className="sr-only">Filtrar por asesor</span>
+              <select
+                data-testid="dashboard-assessor-filter"
+                value={assessorFilter}
+                onChange={(event) => setAssessorFilter(event.target.value)}
+                className="form-input min-w-[240px]"
               >
-                {item === 'all'
-                  ? 'Todos'
-                  : item === 'submitted'
-                    ? 'Enviados'
-                    : item === 'in-progress'
-                      ? 'En curso'
-                      : 'Pendientes'}
-              </button>
-            ))}
+                <option value="all">Todos los asesores</option>
+                {approvedAssessors.map((assessor) => (
+                  <option key={assessor} value={assessor}>
+                    {assessor}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex shrink-0 gap-1 rounded-xl border border-gray-200 bg-white p-1">
+              {(['all', 'submitted', 'in-progress', 'pending'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter(item)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    filter === item
+                      ? 'bg-eltex-blue text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  }`}
+                >
+                  {item === 'all'
+                    ? 'Todos'
+                    : item === 'submitted'
+                      ? 'Enviados'
+                      : item === 'in-progress'
+                        ? 'En curso'
+                        : 'Pendientes'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -237,34 +260,30 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
                 data-testid="dashboard-table-scroll"
                 className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm"
               >
-                <table className="table-fixed min-w-[1940px] w-full">
+                <table className="table-fixed min-w-[1180px] w-full">
                   <thead className="border-b border-gray-100 bg-gray-50">
                     <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                      <th className="w-[130px] whitespace-nowrap px-4 py-3 font-semibold">Last updated</th>
-                      <th className="w-[200px] whitespace-nowrap px-4 py-3 font-semibold">Project / customer</th>
-                      <th className="w-[160px] whitespace-nowrap px-4 py-3 font-semibold">Product / region</th>
-                      <th className="w-[220px] whitespace-nowrap px-4 py-3 font-semibold">Address</th>
-                      <th className="w-[150px] whitespace-nowrap px-4 py-3 font-semibold">DNI / NIE</th>
-                      <th className="w-[130px] whitespace-nowrap px-4 py-3 font-semibold">IBI / escritura</th>
-                      <th className="w-[140px] whitespace-nowrap px-4 py-3 font-semibold">Factura luz</th>
-                      <th className="w-[240px] whitespace-nowrap px-4 py-3 font-semibold">Docs adicionales</th>
-                      <th className="w-[190px] whitespace-nowrap px-4 py-3 font-semibold">Signed PDFs</th>
-                      <th className="w-[200px] whitespace-nowrap px-4 py-3 font-semibold">Status</th>
-                      <th className="sticky right-0 z-30 w-[180px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
-                        Actions
+                      <th className="w-[360px] whitespace-nowrap px-4 py-3 font-semibold">Expediente / cliente</th>
+                      <th className="w-[180px] whitespace-nowrap px-4 py-3 font-semibold">Asesor</th>
+                      <th className="w-[340px] whitespace-nowrap px-4 py-3 font-semibold">Estado</th>
+                      <th className="sticky right-[110px] z-30 w-[190px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
+                        Acciones
+                      </th>
+                      <th className="sticky right-0 z-30 w-[110px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold">
+                        ZIP
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredProjects.map(({ project, summary, progressState }) => (
+                    {filteredProjects.map(({ project, summary }) => (
                       <ProjectTableRow
                         key={project.code}
                         project={project}
                         summary={summary}
-                        progressState={progressState}
                         token={token}
                         loadProjectDetail={loadProjectDetail}
                         onRefresh={refresh}
+                        onAssessorUpdated={updateProject}
                         onDelete={removeProject}
                       />
                     ))}

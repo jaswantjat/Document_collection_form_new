@@ -713,10 +713,21 @@ export function RepresentationSection({ formData, location, onChange, onBack, on
             type="button"
             data-testid="representation-defer-btn"
             onClick={handleDeferSignature}
-            className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 py-1.5 transition-colors"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
           >
-            <Clock className="w-3.5 h-3.5" />
-            Firmar más tarde
+            <span className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                <Clock className="w-4 h-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-700">
+                  Firmar más tarde
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  Podrás volver a este enlace para firmar cuando te venga bien.
+                </span>
+              </span>
+            </span>
           </button>
         </div>
       </div>

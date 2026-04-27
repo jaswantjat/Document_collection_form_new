@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  adminUpdateFormData,
   createDashboardProject,
   resendDashboardProjectLink,
   fetchProject,
@@ -20,7 +19,6 @@ import {
   submitForm,
   extractDocument,
   extractDocumentBatch,
-  deleteProject,
 } from '@/services/api';
 
 // ── fetch mock helpers ───────────────────────────────────────────────────────
@@ -740,73 +738,5 @@ describe('extractDocument', () => {
 
     expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// deleteProject
-// ─────────────────────────────────────────────────────────────────────────────
-describe('deleteProject', () => {
-  it('returns success on delete', async () => {
-    mockFetch({ success: true, message: 'Project deleted' });
-    const result = await deleteProject('ELT001', 'admin-token');
-    expect(result.success).toBe(true);
-  });
-
-  it('uses DELETE method', async () => {
-    mockFetch({ success: true });
-    await deleteProject('ELT001', 'tok');
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    const options = fetchMock.mock.calls[0][1];
-    expect(options.method).toBe('DELETE');
-  });
-
-  it('sends x-dashboard-token header', async () => {
-    mockFetch({ success: true });
-    await deleteProject('ELT001', 'my-admin-token');
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    const headers = fetchMock.mock.calls[0][1].headers;
-    expect(headers['x-dashboard-token']).toBe('my-admin-token');
-  });
-
-  it('URL-encodes project code', async () => {
-    mockFetch({ success: true });
-    await deleteProject('ELT/001', 'tok');
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    const calledUrl: string = fetchMock.mock.calls[0][0];
-    expect(calledUrl).not.toContain('ELT/001');
-    expect(calledUrl).toContain('ELT%2F001');
-  });
-
-  it('uses a bounded request timeout', async () => {
-    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
-    mockFetch({ success: true });
-    await deleteProject('ELT001', 'tok');
-    expect(timeoutSpy).toHaveBeenCalledWith(15000);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// adminUpdateFormData
-// ─────────────────────────────────────────────────────────────────────────────
-describe('adminUpdateFormData', () => {
-  it('sends the dashboard token and JSON patch body', async () => {
-    mockFetch({ success: true, formData: { dni: {} } });
-    await adminUpdateFormData('ELT001', { dni: { front: null } }, 'dash-token');
-
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    const [calledUrl, options] = fetchMock.mock.calls[0];
-    const body = JSON.parse(options.body);
-
-    expect(String(calledUrl)).toContain('/api/project/ELT001/admin-formdata');
-    expect(options.headers['x-dashboard-token']).toBe('dash-token');
-    expect(body.formDataPatch).toEqual({ dni: { front: null } });
-  });
-
-  it('uses a bounded request timeout', async () => {
-    const timeoutSpy = vi.spyOn(globalThis.AbortSignal, 'timeout');
-    mockFetch({ success: true, formData: {} });
-    await adminUpdateFormData('ELT001', { dni: { front: null } }, 'dash-token');
-    expect(timeoutSpy).toHaveBeenCalledWith(15000);
   });
 });

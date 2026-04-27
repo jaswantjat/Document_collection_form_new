@@ -1,4 +1,7 @@
+import type { ProductType } from '@/types';
+
 export interface PropertyDocsProgressInput {
+  productType: ProductType;
   dniDone: boolean;
   ibiDone: boolean;
   electricityDone: boolean;
@@ -14,7 +17,22 @@ export interface PropertyDocsProgressSummary {
   missingCount: number;
 }
 
+export function isElectricityRequired(productType: ProductType): boolean {
+  return productType !== 'aerothermal';
+}
+
+export function hasRequiredPropertyDocs({
+  productType,
+  dniDone,
+  ibiDone,
+  electricityDone,
+}: PropertyDocsProgressInput): boolean {
+  if (!dniDone || !ibiDone) return false;
+  return !isElectricityRequired(productType) || electricityDone;
+}
+
 export function getPropertyDocsProgress({
+  productType,
   dniDone,
   ibiDone,
   electricityDone,
@@ -22,7 +40,11 @@ export function getPropertyDocsProgress({
   const slots = [
     { label: 'DNI / NIE', done: dniDone },
     { label: 'IBI o escritura', done: ibiDone },
-    { label: 'Factura de luz', done: electricityDone },
+    ...(
+      isElectricityRequired(productType)
+        ? [{ label: 'Factura de luz', done: electricityDone }]
+        : []
+    ),
   ];
 
   return {

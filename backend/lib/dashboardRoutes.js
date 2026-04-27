@@ -131,6 +131,44 @@ function registerDashboardRoutes({
     });
   });
 
+  app.patch('/api/dashboard/project/:code/assessor', requireDashboardAuth, (req, res) => {
+    const project = database.projects[req.params.code];
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'PROJECT_NOT_FOUND',
+        message: 'Proyecto no encontrado.',
+      });
+    }
+
+    const input = normalizeDashboardCreateInput({
+      phone: project.phone,
+      assessor: req.body?.assessor,
+    }, normalizePhone);
+    const validationError = validateDashboardCreateInput(input);
+    if (validationError) {
+      return res.status(400).json({ success: false, message: validationError });
+    }
+
+    project.assessor = input.assessor;
+    project.assessorId = input.assessor;
+    if (project.formData?.energyCertificate?.renderedDocument) {
+      project.formData.energyCertificate.renderedDocument = null;
+    }
+    project.lastActivity = new Date().toISOString();
+    saveDB();
+
+    routeLogger.info('dashboard.project_assessor.updated', {
+      route: '/api/dashboard/project/:code/assessor',
+      projectCode: project.code,
+      assessor: input.assessor,
+    });
+    return res.json({
+      success: true,
+      project: serializeProject(project, { includeAccessToken: true }),
+    });
+  });
+
   app.delete('/api/dashboard/project/:code', requireDashboardAuth, async (req, res) => {
     const { code } = req.params;
     const project = database.projects[code];

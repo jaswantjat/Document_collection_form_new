@@ -10,6 +10,10 @@ import {
   normalizeAdditionalBankDocuments,
 } from '@/lib/additionalBankDocuments';
 import { getPropertyPhotoGroups } from '@/lib/propertyPhotoGroups';
+import {
+  getDashboardStatusItems as buildDashboardStatusItems,
+  type DashboardStatusItem,
+} from '@/lib/dashboardStatusItems';
 
 export type DashboardDocumentKey = string;
 
@@ -82,6 +86,7 @@ export interface DashboardProjectSummary {
   additionalDocuments: DashboardAssetItem[];
   photoGroups: DashboardAssetGroup[];
   downloadGroups: DashboardAssetGroup[];
+  statusItems: DashboardStatusItem[];
   warnings: DashboardWarning[];
   counts: {
     documentsPresent: number;
@@ -506,6 +511,15 @@ export function getDashboardAdditionalBankDocumentAssets(project: any): Dashboar
   }));
 }
 
+export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
+  return buildDashboardStatusItems(project, {
+    signedDocuments: getDashboardSignedPdfItems(project),
+    additionalDocuments: getDashboardAdditionalBankDocumentAssets(project),
+    documents: getDashboardDocuments(project),
+    electricityPages: getDashboardElectricityPages(project),
+  });
+}
+
 export function getDashboardPhotoGroups(project: any): DashboardAssetGroup[] {
   const assetFiles = project?.assetFiles || {};
 
@@ -659,6 +673,12 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
   const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
   const photoGroups = getDashboardPhotoGroups(project);
   const downloadGroups = getDashboardDownloadGroups(project);
+  const statusItems = buildDashboardStatusItems(project, {
+    signedDocuments,
+    additionalDocuments,
+    documents,
+    electricityPages,
+  });
   const snapshot = getSnapshot(project);
   const counts = buildCounts(project, documents, electricityPages, signedDocuments, finalSignatures);
   const warnings = computeDashboardWarnings(project);
@@ -692,6 +712,7 @@ export function getDashboardProjectSummary(project: any): DashboardProjectSummar
     additionalDocuments,
     photoGroups,
     downloadGroups,
+    statusItems,
     warnings,
     counts,
   };

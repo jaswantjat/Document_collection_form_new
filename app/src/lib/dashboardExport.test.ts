@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DashboardProjectExportSource } from './dashboardExport';
-import { buildProjectZipBlob, downloadProjectZip, listDashboardExportEntries } from './dashboardExport';
+import {
+  buildProjectZipBlob,
+  downloadDashboardStatusGroup,
+  downloadProjectZip,
+  listDashboardExportEntries,
+} from './dashboardExport';
 
 const {
   downloadBlobMock,
@@ -382,5 +387,56 @@ describe('downloadProjectZip', () => {
 
     await expect(downloadProjectZip(makeProject('cataluna'))).rejects.toThrow('signed pdf failed');
     expect(downloadBlobMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('downloadDashboardStatusGroup', () => {
+  it('direct-downloads a one-file document with the project code prefix', async () => {
+    const project = makeProject('cataluna');
+    project.formData = {
+      ...project.formData!,
+      ibi: {
+        ...project.formData!.ibi,
+        pages: [makePhoto('ibi-one')],
+        originalPdfs: [],
+      },
+    } as DashboardProjectExportSource['formData'] & Record<string, unknown>;
+
+    await downloadDashboardStatusGroup(project, 'ibi');
+
+    expect(downloadBlobMock).toHaveBeenCalledTimes(1);
+    expect(downloadBlobMock.mock.calls[0][1]).toBe('ELTZIP001_ibi_escritura.jpg');
+  });
+
+  it('downloads a document mini ZIP for multi-file status documents', async () => {
+    await downloadDashboardStatusGroup(makeProject('cataluna'), 'ibi');
+
+    expect(downloadBlobMock).toHaveBeenCalledTimes(1);
+    expect(downloadBlobMock.mock.calls[0][1]).toBe('ELTZIP001_ibi_escritura.zip');
+    const archivePaths = await parseZipPaths(downloadBlobMock.mock.calls[0][0] as Blob);
+    expect(archivePaths).toEqual(expect.arrayContaining([
+      '1_documentos/ibi_escritura.jpg',
+      '1_documentos/ibi_escritura_2.jpg',
+      '1_documentos/ibi_original_pdf.pdf',
+    ]));
+  });
+
+  it('regenerates only the energy certificate artifact from the current project', async () => {
+    const project = makeProject('cataluna');
+    project.assessor = 'Laura Martín Manzano';
+    project.formData = {
+      ...project.formData!,
+      energyCertificate: {
+        ...project.formData!.energyCertificate,
+        renderedDocument: null,
+      },
+    } as DashboardProjectExportSource['formData'] & Record<string, unknown>;
+
+    await downloadDashboardStatusGroup(project, 'energy-certificate');
+
+    expect(buildEnergyCertificatePdfFactoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ assessor: 'Laura Martín Manzano' }),
+    );
+    expect(buildSignedPdfFactoryMock).not.toHaveBeenCalled();
   });
 });

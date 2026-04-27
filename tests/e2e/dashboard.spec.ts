@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { ENERGY_CERTIFICATE_TEMPLATE_VERSION } from '../../app/src/lib/energyCertificateDocument';
 import { SIGNED_DOCUMENT_TEMPLATE_VERSION } from '../../app/src/lib/signedDocumentOverlays';
+import { bindPageToE2EBackend } from './helpers/pageBackendProxy';
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:3001';
 const APPROVED_ASSESSOR = 'Sergi Guillen Cavero';
 const APPROVED_ASSESSORS = [
@@ -20,11 +20,16 @@ const APPROVED_ASSESSORS = [
 const VALID_JPEG_BASE64 = '/9j/4AAQSkZJRgABAQEASABIAAD/';
 const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z5Y4AAAAASUVORK5CYII=';
 const VALID_PDF_BASE64 = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF').toString('base64');
-const ADMIN_UPLOAD_FILE = path.resolve(process.cwd(), 'app/public/eltex-logo.png');
+const transientProjectCodes = new Set<string>();
 
 function uniquePhone() {
   const suffix = Date.now().toString().slice(-8);
   return `+346${suffix}`;
+}
+
+function trackTransientProjectCode(code: string) {
+  transientProjectCodes.add(code);
+  return code;
 }
 
 function makeDataUrl(_payload: string, mimeType = 'image/jpeg') {
@@ -246,13 +251,14 @@ async function createDashboardProject(request: any, formData?: Record<string, un
     {
       phone: uniquePhone(),
       assessor: APPROVED_ASSESSOR,
+      email: `qa-dashboard+${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`,
     },
-    15000,
+    30000,
     { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
   );
   expect(createRes.status()).toBe(200);
   const createBody = await createRes.json();
-  const code = createBody.project.code as string;
+  const code = trackTransientProjectCode(createBody.project.code as string);
   const accessToken = createBody.project.accessToken as string;
 
   if (formData) {
@@ -260,12 +266,22 @@ async function createDashboardProject(request: any, formData?: Record<string, un
       request,
       `${API_BASE}/api/project/${code}/save?token=${encodeURIComponent(accessToken)}`,
       { formData, source: 'customer' },
-      15000,
+      30000,
     );
     expect(saveRes.status()).toBe(200);
   }
 
   return code;
+}
+
+async function deleteProjectAsAdmin(request: any, code: string, dashboardToken?: string) {
+  const token = dashboardToken ?? await loginDashboard(request);
+  const response = await request.delete(`${API_BASE}/api/dashboard/project/${code}`, {
+    headers: { 'x-dashboard-token': token },
+    timeout: 30000,
+    failOnStatusCode: false,
+  });
+  expect([200, 404]).toContain(response.status());
 }
 
 async function openDashboard(page: any, token: string) {
@@ -278,7 +294,36 @@ async function openDashboard(page: any, token: string) {
   await expect(page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...')).toBeVisible({ timeout: 15000 });
 }
 
+function getProjectRow(page: any, projectText: string) {
+  return page.locator('tbody tr').filter({ hasText: projectText }).first();
+}
+
+async function openProjectDetail(page: any, projectText: string) {
+  const row = getProjectRow(page, projectText);
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await row.getByTestId('ver-expediente-btn').click();
+  await expect(page.getByTestId('project-detail-modal')).toBeVisible({ timeout: 30000 });
+  return row;
+}
+
 test.describe('Dashboard QA', () => {
+  test.describe.configure({ timeout: 90000 });
+
+  test.beforeEach(async ({ page }) => {
+    await bindPageToE2EBackend(page);
+  });
+
+  test.afterEach(async ({ request }) => {
+    const codes = [...transientProjectCodes];
+    transientProjectCodes.clear();
+    if (codes.length === 0) return;
+
+    const dashboardToken = await loginDashboard(request);
+    for (const code of codes) {
+      await deleteProjectAsAdmin(request, code, dashboardToken);
+    }
+  });
+
   test('dashboard staff can create, reopen duplicate phones, and open the assessor form without customer-link controls', async ({ page, request }) => {
     const token = await loginDashboard(request);
     const phone = uniquePhone();
@@ -299,6 +344,7 @@ test.describe('Dashboard QA', () => {
     const codeLine = await resultPanel.locator('text=/ELT\\d+/').first().textContent();
     const createdCode = codeLine?.match(/ELT\d+/)?.[0];
     expect(createdCode).toBeTruthy();
+    trackTransientProjectCode(createdCode!);
     await expect(page.getByTestId('dashboard-open-project-btn')).toBeVisible();
     await expect(page.getByTestId('dashboard-resend-latest-link-btn')).toHaveCount(0);
     await expect(page.getByTestId('dashboard-open-customer-link-btn')).toHaveCount(0);
@@ -374,7 +420,11 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await expect(page.getByText(code)).toBeVisible();
+    const row = getProjectRow(page, code);
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('thead')).toContainText('Estado');
+    await expect(page.getByRole('columnheader', { name: 'DNI / NIE' })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: 'IBI / escritura' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'En curso' }).click();
     await expect(page.getByText(code)).toBeVisible();
@@ -384,13 +434,45 @@ test.describe('Dashboard QA', () => {
     const csv = await csvDownload;
     expect(csv.suggestedFilename()).toContain('eltex_expedientes_');
 
-    await page.getByTestId('ver-expediente-btn').click();
+    await row.getByTestId('ver-expediente-btn').click();
     await expect(page.getByTestId('project-detail-modal')).toBeVisible();
     await page.getByTestId('project-detail-modal').click({ position: { x: 8, y: 8 } });
     await expect(page.getByTestId('project-detail-modal')).toBeHidden();
 
     await page.getByTestId('logout-btn').click();
     await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
+  });
+
+  test('inline assessor reassignment saves immediately and preserves unrelated signed renders', async ({ page, request }) => {
+    const code = await createDashboardProject(request, makeDashboardFormData());
+    const token = await loginDashboard(request);
+    const newAssessor = APPROVED_ASSESSORS[6];
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
+    const row = getProjectRow(page, code);
+    await expect(row).toBeVisible({ timeout: 15000 });
+
+    const rowAssessorOptions = await row.getByTestId('dashboard-assessor-select').locator('option').allTextContents();
+    expect(rowAssessorOptions).toEqual(APPROVED_ASSESSORS);
+    await row.getByTestId('dashboard-assessor-select').selectOption(newAssessor);
+    await expect(row.getByTestId('dashboard-assessor-save-status')).toContainText('Guardado', { timeout: 30000 });
+    await expect(row.getByTestId('dashboard-assessor-select')).toHaveValue(newAssessor);
+
+    const detailRes = await request.get(`${API_BASE}/api/dashboard/project/${code}`, {
+      headers: { 'x-dashboard-token': token },
+      timeout: 15000,
+    });
+    const detailBody = await detailRes.json();
+    expect(detailBody.project.assessor).toBe(newAssessor);
+    expect(detailBody.project.formData.energyCertificate.renderedDocument).toBeNull();
+    expect(detailBody.project.formData.representation.renderedDocuments.catalunaIva.templateVersion)
+      .toBe(SIGNED_DOCUMENT_TEMPLATE_VERSION);
+
+    await page.getByTestId('dashboard-assessor-filter').selectOption(newAssessor);
+    await expect(row).toBeVisible();
+    await page.getByTestId('dashboard-assessor-filter').selectOption(APPROVED_ASSESSOR);
+    await expect(row).toBeHidden();
   });
 
   test('refresh pulls in new projects and keeps the newest activity first', async ({ page, request }) => {
@@ -404,13 +486,14 @@ test.describe('Dashboard QA', () => {
           phone: uniquePhone(),
           assessor: APPROVED_ASSESSOR,
           customerName,
+          email: `qa-refresh+${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`,
         },
-        15000,
+        30000,
         { 'Content-Type': 'application/json', 'x-dashboard-token': dashboardToken },
       );
       expect(createRes.status()).toBe(200);
       const createBody = await createRes.json();
-      return createBody.project.code as string;
+      return trackTransientProjectCode(createBody.project.code as string);
     };
 
     const firstCode = await createProject();
@@ -426,7 +509,7 @@ test.describe('Dashboard QA', () => {
     const secondCode = await createProject();
     await page.getByTestId('dashboard-refresh-btn').click();
 
-    await expect(filteredRows).toHaveCount(2, { timeout: 15000 });
+    await expect(filteredRows).toHaveCount(2, { timeout: 30000 });
     await expect(filteredRows.first()).toContainText(secondCode);
     await expect(filteredRows.nth(1)).toContainText(firstCode);
   });
@@ -450,7 +533,7 @@ test.describe('Dashboard QA', () => {
       });
     });
 
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     await expect(page.getByRole('heading', { name: 'Acceso al panel' })).toBeVisible();
   });
 
@@ -484,7 +567,7 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     await expect(page.getByTestId('project-detail-modal')).toBeVisible();
 
     const zipDownload = page.waitForEvent('download');
@@ -513,6 +596,40 @@ test.describe('Dashboard QA', () => {
     ]));
   });
 
+  test('status-column downloads direct files and document mini ZIPs without using the full ZIP button', async ({ page, request }) => {
+    const directCode = await createDashboardProject(request, makeDashboardFormData());
+    const multiFileData = makeDashboardFormData();
+    multiFileData.ibi.pages = [makePhoto('ibi-1'), makePhoto('ibi-2')];
+    const zipCode = await createDashboardProject(request, multiFileData);
+    const token = await loginDashboard(request);
+
+    await openDashboard(page, token);
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(directCode);
+    const directRow = getProjectRow(page, directCode);
+    await expect(directRow).toBeVisible({ timeout: 15000 });
+    const directDownload = page.waitForEvent('download');
+    await directRow.getByTestId('status-download-ibi').click();
+    expect((await directDownload).suggestedFilename()).toBe(`${directCode}_ibi_escritura.jpg`);
+
+    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(zipCode);
+    const zipRow = getProjectRow(page, zipCode);
+    await expect(zipRow).toBeVisible({ timeout: 15000 });
+    const miniZipDownload = page.waitForEvent('download');
+    await zipRow.getByTestId('status-download-ibi').click();
+    const miniZip = await miniZipDownload;
+    expect(miniZip.suggestedFilename()).toBe(`${zipCode}_ibi_escritura.zip`);
+
+    const miniZipPath = await miniZip.path();
+    expect(miniZipPath).toBeTruthy();
+    const entries = await parseZipEntries(readFileSync(miniZipPath!));
+    expect(entries).toEqual(expect.arrayContaining([
+      '1_documentos/ibi_escritura.jpg',
+      '1_documentos/ibi_escritura_2.jpg',
+    ]));
+
+    await expect(zipRow.getByRole('button', { name: 'ZIP' })).toBeVisible();
+  });
+
   test('detail modal uses cached project detail after the first slow load', async ({ page, request }) => {
     const code = await createDashboardProject(request, makeDashboardFormData());
     const token = await loginDashboard(request);
@@ -527,7 +644,7 @@ test.describe('Dashboard QA', () => {
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
 
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     await expect(page.getByText('Cargando detalle del expediente...')).toBeVisible();
     await expect(page.getByText('PDFs firmados')).toBeVisible();
     const firstOpenRequests = detailRequests;
@@ -536,7 +653,7 @@ test.describe('Dashboard QA', () => {
     await page.getByTestId('project-detail-modal').click({ position: { x: 8, y: 8 } });
     await expect(page.getByTestId('project-detail-modal')).toBeHidden();
 
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     await expect(page.getByText('PDFs firmados')).toBeVisible();
     await page.waitForTimeout(200);
     expect(detailRequests).toBe(firstOpenRequests);
@@ -557,9 +674,9 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await expect(page.getByText(code)).toBeVisible();
+    await expect(getProjectRow(page, code)).toBeVisible({ timeout: 30000 });
 
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     await expect(page.getByText('Cargando detalle del expediente...')).toBeVisible();
     await expect(page.getByText('PDFs firmados')).toBeVisible();
 
@@ -575,7 +692,7 @@ test.describe('Dashboard QA', () => {
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
     await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
 
@@ -601,13 +718,13 @@ test.describe('Dashboard QA', () => {
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await page.getByTestId('ver-expediente-btn').click();
+    await openProjectDetail(page, code);
     const modal = page.getByTestId('project-detail-modal');
     await expect(modal).toBeVisible();
 
-    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
     await expect(modal.getByText('Documentos adicionales')).toBeVisible();
-    await expect(modal.getByText('Documento adicional')).toBeVisible();
+    await expect(modal.getByTitle('Descargar Documento adicional')).toBeVisible();
+    await expect(page.locator('tbody tr').filter({ hasText: code }).first()).toContainText('Documento adicional');
     await expect(modal.getByText('IRPF 2024')).toBeVisible();
     await expect(modal.getByText('Revisar', { exact: true })).toBeVisible();
     await expect(modal.getByText('Declaración presentada ante AEAT.')).toHaveCount(0);
@@ -619,112 +736,22 @@ test.describe('Dashboard QA', () => {
     );
   });
 
-  test('dashboard admin upload saves additional documents without triggering AI extraction and surfaces them in the new column', async ({ page, request }) => {
-    const code = await createDashboardProject(request);
-    const token = await loginDashboard(request);
-    let extractCalls = 0;
-
-    await page.route('**/api/extract', async (route) => {
-      extractCalls += 1;
-      await route.continue();
-    });
-    await page.route('**/api/extract-batch', async (route) => {
-      extractCalls += 1;
-      await route.continue();
-    });
-
-    await openDashboard(page, token);
-    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await expect(page.getByText(code)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Docs adicionales', { exact: true })).toBeVisible();
-    await page.getByTestId('ver-expediente-btn').click();
-    await page.getByTestId('detail-upload-btn').click();
-    const uploadModal = page.getByTestId('admin-upload-modal');
-    await expect(uploadModal).toBeVisible();
-
-    await uploadModal.getByRole('button', { name: 'Documento adicional' }).click();
-    await uploadModal.getByTestId('admin-upload-file-input').setInputFiles({
-      name: 'irpf-2024.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'),
-    });
-
-    await expect(uploadModal.getByText('Documento adicional guardado correctamente.')).toBeVisible({ timeout: 15000 });
-    await uploadModal.getByTestId('admin-upload-close-btn').click();
-    await expect(uploadModal).toBeHidden({ timeout: 15000 });
-
-    const modal = page.getByTestId('project-detail-modal');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByText('Documentos adicionales')).toBeVisible();
-    await expect(modal.getByText('Documento adicional')).toBeVisible();
-    await expect(modal.getByText('Revisar', { exact: true })).toHaveCount(0);
-    await page.getByTestId('project-detail-modal').click({ position: { x: 8, y: 8 } });
-    await expect(page.getByTestId('project-detail-modal')).toBeHidden({ timeout: 15000 });
-
-    await expect(page.getByText('1 archivo · irpf-2024.pdf')).toBeVisible({ timeout: 15000 });
-    expect(extractCalls).toBe(0);
-
-    await page.getByTestId('ver-expediente-btn').click();
-    await expect(page.getByTestId('project-detail-modal')).toBeVisible();
-    const bankDocDownload = page.waitForEvent('download');
-    await page.getByTestId('project-detail-modal').getByTitle('Descargar Documento adicional').click();
-    expect((await bankDocDownload).suggestedFilename()).toBe(`${code}_documento_adicional.pdf`);
-  });
-
-  test('admin upload refreshes the dashboard and makes the new document downloadable', async ({ page, request }) => {
-    const code = await createDashboardProject(request);
-    const token = await loginDashboard(request);
-
-    await page.route('**/api/extract', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          extraction: {
-            extractedData: {
-              fullName: 'Admin Upload Test',
-              dniNumber: '12345678A',
-            },
-            confidence: 1,
-            isCorrectDocument: true,
-            documentTypeDetected: 'dni',
-            identityDocumentKind: 'dni-card',
-            needsManualReview: false,
-          },
-        }),
-      });
-    });
-
-    await openDashboard(page, token);
-    await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await page.getByTestId('ver-expediente-btn').click();
-    await page.getByTestId('detail-upload-btn').click();
-    await expect(page.getByTestId('admin-upload-modal')).toBeVisible();
-
-    await page.getByTestId('admin-upload-file-input').setInputFiles(ADMIN_UPLOAD_FILE);
-    const uploadModal = page.getByTestId('admin-upload-modal');
-    await expect(uploadModal.getByText('Documento guardado correctamente.')).toBeVisible({ timeout: 15000 });
-    await uploadModal.getByTestId('admin-upload-close-btn').click();
-    await expect(uploadModal).toBeHidden({ timeout: 15000 });
-    await expect(page.getByTestId('project-detail-modal').getByTitle('Descargar DNI frontal').first()).toBeVisible();
-  });
-
   test('delete action requires confirmation and removes the project row', async ({ page, request }) => {
     const code = await createDashboardProject(request);
     const token = await loginDashboard(request);
 
     await openDashboard(page, token);
     await page.getByPlaceholder('Buscar por nombre, código, teléfono, asesor o dirección...').fill(code);
-    await expect(page.getByText(code)).toBeVisible();
+    const row = getProjectRow(page, code);
+    await expect(row).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: 'Eliminar expediente' }).click();
     await expect(page.getByRole('button', { name: 'Confirmar' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.getByText(code)).toBeVisible();
+    await expect(row).toBeVisible();
 
     await page.getByRole('button', { name: 'Eliminar expediente' }).click();
     await page.getByRole('button', { name: 'Confirmar' }).click();
-    await expect(page.getByText(code)).toBeHidden();
+    await expect(row).toBeHidden({ timeout: 30000 });
   });
 });

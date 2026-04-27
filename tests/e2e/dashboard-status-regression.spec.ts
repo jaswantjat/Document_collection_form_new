@@ -198,19 +198,18 @@ test.describe('Dashboard status regressions', () => {
     await expect(rows).toHaveCount(1);
     const inProgressRow = rows.first();
     await expect(inProgressRow).toContainText(inProgress.code);
-    await expect(inProgressRow.locator('td').nth(4)).toContainText('Recibido');
-    await expect(inProgressRow.locator('td').nth(9)).toContainText('En curso');
+    await expect(inProgressRow).toContainText('DNI / NIE');
+    await expect(inProgressRow).toContainText('frontal');
 
     await page.getByRole('button', { name: 'Enviados' }).click();
     await expect(rows).toHaveCount(1);
     const submittedRow = rows.first();
     await expect(submittedRow).toContainText(submitted.code);
-    await expect(submittedRow.locator('td').nth(4)).toContainText('Frontal');
-    await expect(submittedRow.locator('td').nth(4)).toContainText('Trasera');
-    await expect(submittedRow.locator('td').nth(5)).toContainText('Recibido');
-    await expect(submittedRow.locator('td').nth(6)).toContainText('1 página');
-    await expect(submittedRow.locator('td').nth(9)).toContainText('Enviado');
-    await expect(submittedRow.locator('td').nth(9)).toContainText('Completo');
+    await expect(submittedRow).toContainText('DNI / NIE');
+    await expect(submittedRow).toContainText('IBI / Escritura');
+    await expect(submittedRow).toContainText('Factura de luz');
+    await expect(submittedRow).toContainText('1 página');
+    await expect(submittedRow).toContainText('1 envío');
   });
 
   test('detail modal can download primary docs from stored assets after submission strips previews', async ({ page, request }) => {
@@ -303,21 +302,21 @@ test.describe('Dashboard status regressions', () => {
     const row = page.locator('tbody tr');
     await expect(row).toHaveCount(1);
 
-    await expect(row.locator('td').nth(4)).toContainText('Frontal');
-    await expect(row.locator('td').nth(4)).toContainText('Trasera');
-    await expect(row.locator('td').nth(5)).toContainText('Recibido');
-    await expect(row.locator('td').nth(6)).toContainText('1 página');
+    await expect(row).toContainText('DNI / NIE');
+    await expect(row).toContainText('IBI / Escritura');
+    await expect(row).toContainText('Factura de luz');
+    await expect(row).toContainText('1 página');
 
     const dniDownload = page.waitForEvent('download');
-    await row.locator('td').nth(4).getByTestId('download-asset-btn').click();
+    await row.getByTestId('status-download-dni').click();
     expect((await dniDownload).suggestedFilename()).toBe(`${submitted.code}_dni_original_pdf.pdf`);
 
     const ibiDownload = page.waitForEvent('download');
-    await row.locator('td').nth(5).getByTestId('download-asset-btn').click();
+    await row.getByTestId('status-download-ibi').click();
     expect((await ibiDownload).suggestedFilename()).toBe(`${submitted.code}_ibi_original_pdf.pdf`);
 
     const electricityDownload = page.waitForEvent('download');
-    await row.locator('td').nth(6).getByTestId('download-asset-btn').click();
+    await row.getByTestId('status-download-electricity').click();
     expect((await electricityDownload).suggestedFilename()).toBe(
       `${submitted.code}_factura_luz_original_pdf.pdf`,
     );

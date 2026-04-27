@@ -1,4 +1,3 @@
-import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
@@ -8,7 +7,6 @@ import {
   LayoutDashboard,
   Loader2,
   Phone,
-  Upload,
   User,
   Users,
   X,
@@ -23,7 +21,7 @@ import {
   locationLabel,
 } from '@/lib/dashboardHelpers';
 import { downloadProjectZip } from '@/lib/dashboardExport';
-import { DashboardAdminUploadModal } from './DashboardAdminUploadModal';
+import { ProjectDetailUploadWorkspace } from '@/pages/dashboard/ProjectDetailUploadWorkspace';
 import {
   CompanyDisplay,
   DNIDisplay,
@@ -119,7 +117,6 @@ export function ProjectDetailModal({
   const [project, setProject] = useState<DashboardProjectRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,17 +189,6 @@ export function ProjectDetailModal({
               {project ? (
                 <button
                   type="button"
-                  data-testid="detail-upload-btn"
-                  onClick={() => setShowUpload(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-blue-700 transition-colors hover:bg-blue-50"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span className="text-sm font-semibold">Subir docs</span>
-                </button>
-              ) : null}
-              {project ? (
-                <button
-                  type="button"
                   data-testid="download-zip-btn"
                   onClick={async () => {
                     try {
@@ -261,6 +247,11 @@ export function ProjectDetailModal({
                   </div>
                 ) : null}
 
+                <ProjectDetailUploadWorkspace
+                  project={project}
+                  token={token}
+                  onRefresh={refreshProject}
+                />
                 <div className="grid gap-3 md:grid-cols-5">
                   <InfoCard icon={Clock} label="Última actividad" value={formatDate(summary.lastUpdated)} />
                   <InfoCard icon={User} label="Asesor" value={project.assessor || '—'} />
@@ -305,18 +296,6 @@ export function ProjectDetailModal({
           </div>
         </div>
       </div>
-      {showUpload
-        ? createPortal(
-            <DashboardAdminUploadModal
-              projectCode={projectCode}
-              token={token}
-              loadProjectDetail={loadProjectDetail}
-              onClose={() => setShowUpload(false)}
-              onRefresh={refreshProject}
-            />,
-            document.body
-          )
-        : null}
     </>
   );
 }
