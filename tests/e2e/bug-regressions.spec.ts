@@ -63,6 +63,31 @@ test.describe('Bug Regressions', () => {
     await expect(page.locator('input[type="tel"]').first()).toBeVisible();
   });
 
+  test('REG-02b: malformed device backup does not trap the form in Error de carga', async ({ page, request }) => {
+    const code = await createPublicProject(request);
+    const savedAt = Date.now() + 60_000;
+
+    await page.addInitScript(({ projectCode, backupSavedAt }) => {
+      localStorage.setItem(`eltex_section_${projectCode}`, 'property-docs');
+      localStorage.setItem(`eltex_form_backup_${projectCode}`, JSON.stringify({
+        version: 1,
+        savedAt: backupSavedAt,
+        projectCode,
+        formData: {
+          dni: { front: { photo: 'bad-photo' }, originalPdfs: { bad: true } },
+          ibi: { pages: { bad: true }, originalPdfs: { bad: true } },
+          electricityBill: { pages: { bad: true }, originalPdfs: { bad: true } },
+          representation: { companyName: { bad: true }, renderedDocuments: 'bad' },
+        },
+      }));
+    }, { projectCode: code, backupSavedAt: savedAt });
+
+    await page.goto(`/?code=${code}`, { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByText('Error de carga')).toHaveCount(0);
+    await expect(page.locator('h1').first()).toContainText('Documentos', { timeout: 20000 });
+  });
+
   test('REG-03: /api/project/:code stays code-based even if a stray x-project-token header is present', async ({ request }) => {
     const res = await request.get(`${API_BASE}/api/project/ELT20250001`, {
       headers: { 'x-project-token': 'wrong-token' },

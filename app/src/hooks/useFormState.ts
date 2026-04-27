@@ -2,17 +2,21 @@ import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react'
 import { toast } from 'sonner';
 import type {
   FormData, FormErrors, UploadedPhoto,
-  AIExtraction, ProductType, FormItem, DocSlot, RepresentationData,
+  AIExtraction, ProductType, FormItem, RepresentationData,
   StoredDocumentFile, EnergyCertificateData, ContractData, DocumentIssue,
   AdditionalBankDocumentEntry,
   DocumentSlotKey, DocumentProcessingState
 } from '@/types';
 import { saveProgress, preUploadAssets } from '@/services/api';
-import { normalizeAdditionalBankDocuments, withAdditionalBankDocumentAssetKeys } from '@/lib/additionalBankDocuments';
+import {
+  normalizeAdditionalBankDocuments,
+  withAdditionalBankDocumentAssetKeys,
+} from '@/lib/additionalBankDocuments';
 import { mergeStoredDocumentFiles } from '@/lib/photoValidation';
-import { isEnergyCertificateReadyToComplete } from '@/lib/energyCertificateValidation';
+import { normalizeFormData } from '@/lib/formDataNormalization';
 
-const emptyDocSlot = (): DocSlot => ({ photo: null, extraction: null });
+export { initialFormData, normalizeFormData } from '@/lib/formDataNormalization';
+
 const DOCUMENT_SLOT_KEYS: DocumentSlotKey[] = ['dniFront', 'dniBack', 'ibi'];
 const emptyProcessingState = (): DocumentProcessingState => ({ status: 'idle', errorCode: undefined, errorMessage: undefined, pendingPreview: null });
 
@@ -69,221 +73,6 @@ function createInitialDocumentProcessing(formData: FormData) {
     acc[key] = getAcceptedDocumentSlotState(formData, key);
     return acc;
   }, {} as Record<DocumentSlotKey, DocumentProcessingState>);
-}
-
-type LegacyElectricityPage = Partial<DocSlot> | null | undefined;
-type LegacyElectricityBillData = Partial<FormData['electricityBill']> & {
-  front?: LegacyElectricityPage;
-  back?: LegacyElectricityPage;
-  pages?: LegacyElectricityPage[];
-};
-
-function normalizeElectricityPage(page: LegacyElectricityPage): DocSlot {
-  return {
-    photo: page?.photo ?? null,
-    extraction: page?.extraction ?? null,
-  };
-}
-
-function normalizeElectricityPages(saved?: LegacyElectricityBillData | null): DocSlot[] {
-  // Handle old front/back format → migrate to pages
-  if (saved?.front || saved?.back) {
-    const pages: DocSlot[] = [];
-    if (saved.front?.photo) pages.push(normalizeElectricityPage(saved.front));
-    if (saved.back?.photo) pages.push(normalizeElectricityPage(saved.back));
-    return pages;
-  }
-  // New pages format
-  if (Array.isArray(saved?.pages)) {
-    return saved.pages.map((page) => normalizeElectricityPage(page));
-  }
-  return [];
-}
-
-const emptyContractData = (): ContractData => ({ originalPdfs: [], extraction: null, issue: null });
-
-export const initialFormData: FormData = {
-  dni: { front: emptyDocSlot(), back: emptyDocSlot(), originalPdfs: [], issue: null },
-  ibi: { photo: null, pages: [], originalPdfs: [], extraction: null, issue: null },
-  electricityBill: { pages: [], originalPdfs: [], issue: null },
-  contract: emptyContractData(),
-  additionalBankDocuments: [],
-  browserLanguage: typeof navigator !== 'undefined' ? navigator.language : undefined,
-  energyCertificate: {
-    status: 'not-started',
-    housing: {
-      cadastralReference: '',
-      habitableAreaM2: '',
-      floorCount: '',
-      averageFloorHeight: null,
-      bedroomCount: '',
-      doorsByOrientation: { north: '', east: '', south: '', west: '' },
-      windowsByOrientation: { north: '', east: '', south: '', west: '' },
-      windowFrameMaterial: null,
-      doorMaterial: '',
-      windowGlassType: null,
-      hasShutters: null,
-      shutterWindowCount: '',
-    },
-    thermal: {
-      thermalInstallationType: null,
-      boilerFuelType: null,
-      equipmentDetails: '',
-      hasAirConditioning: null,
-      airConditioningType: null,
-      airConditioningDetails: '',
-      heatingEmitterType: null,
-      radiatorMaterial: null,
-    },
-    additional: {
-      soldProduct: null,
-      isExistingCustomer: null,
-      hasSolarPanels: null,
-      solarPanelDetails: '',
-    },
-    customerSignature: null,
-    renderedDocument: null,
-    completedAt: null,
-    skippedAt: null,
-  },
-  signatures: { customerSignature: null, repSignature: null },
-  representation: {
-    location: null,
-    isCompany: false,
-    holderTypeConfirmed: false,
-    companyName: '',
-    companyNIF: '',
-    companyAddress: '',
-    companyMunicipality: '',
-    companyPostalCode: '',
-    postalCode: '',
-    ivaPropertyAddress: '',
-    ivaCertificateSignature: null,
-    representacioSignature: null,
-    generalitatRole: 'titular',
-    generalitatSignature: null,
-    poderRepresentacioSignature: null,
-    ivaCertificateEsSignature: null,
-    renderedDocuments: {},
-  },
-};
-
-function mergeDocSlot(base: DocSlot, slot?: Partial<DocSlot> | null): DocSlot {
-  return {
-    ...base,
-    ...slot,
-    photo: slot?.photo ?? base.photo,
-    extraction: slot?.extraction ?? base.extraction,
-  };
-}
-
-function inferHolderTypeConfirmed(savedRepresentation: Partial<RepresentationData> | null | undefined): boolean {
-  if (!savedRepresentation) return false;
-  if (typeof savedRepresentation.holderTypeConfirmed === 'boolean') {
-    return savedRepresentation.holderTypeConfirmed;
-  }
-
-  return Boolean(
-    savedRepresentation.isCompany
-    || savedRepresentation.companyName?.trim()
-    || savedRepresentation.companyNIF?.trim()
-    || savedRepresentation.companyAddress?.trim()
-    || savedRepresentation.companyMunicipality?.trim()
-    || savedRepresentation.companyPostalCode?.trim()
-    || savedRepresentation.postalCode?.trim()
-    || savedRepresentation.ivaPropertyAddress?.trim()
-    || savedRepresentation.ivaCertificateSignature
-    || savedRepresentation.representacioSignature
-    || savedRepresentation.generalitatSignature
-    || savedRepresentation.poderRepresentacioSignature
-    || savedRepresentation.ivaCertificateEsSignature
-    || Object.keys(savedRepresentation.renderedDocuments ?? {}).length > 0
-  );
-}
-
-export function normalizeFormData(savedFormData?: FormData | null): FormData {
-  const normalizedLocation = savedFormData?.location ?? savedFormData?.representation?.location ?? null;
-
-  // Build the normalized energy certificate object.
-  const rawEc = {
-    ...initialFormData.energyCertificate,
-    ...savedFormData?.energyCertificate,
-    housing: {
-      ...initialFormData.energyCertificate.housing,
-      ...savedFormData?.energyCertificate?.housing,
-      doorsByOrientation: {
-        ...initialFormData.energyCertificate.housing.doorsByOrientation,
-        ...savedFormData?.energyCertificate?.housing?.doorsByOrientation,
-      },
-      windowsByOrientation: {
-        ...initialFormData.energyCertificate.housing.windowsByOrientation,
-        ...savedFormData?.energyCertificate?.housing?.windowsByOrientation,
-      },
-    },
-    thermal: {
-      ...initialFormData.energyCertificate.thermal,
-      ...savedFormData?.energyCertificate?.thermal,
-    },
-    additional: {
-      ...initialFormData.energyCertificate.additional,
-      ...savedFormData?.energyCertificate?.additional,
-    },
-  };
-
-  // Downgrade stale 'completed' status: if the saved data claims 'completed' but
-  // the field data no longer passes full validation (e.g. data saved before per-step
-  // validation was introduced), reset to 'in-progress' so the form routes the user
-  // back to the energy certificate survey instead of treating it as done.
-  // This correction is in-memory only; it persists when the user re-completes the
-  // survey and saves.
-  const normalizedEc =
-    rawEc.status === 'completed' && !isEnergyCertificateReadyToComplete(rawEc)
-      ? { ...rawEc, status: 'in-progress' as const }
-      : rawEc;
-  const holderTypeConfirmed = inferHolderTypeConfirmed(savedFormData?.representation);
-
-  return {
-    ...initialFormData,
-    ...savedFormData,
-    dni: {
-      front: mergeDocSlot(initialFormData.dni.front, savedFormData?.dni?.front),
-      back: mergeDocSlot(initialFormData.dni.back, savedFormData?.dni?.back),
-      originalPdfs: savedFormData?.dni?.originalPdfs ?? initialFormData.dni.originalPdfs,
-      issue: savedFormData?.dni?.issue ?? null,
-    },
-    ibi: {
-      ...initialFormData.ibi,
-      ...savedFormData?.ibi,
-      pages: savedFormData?.ibi?.pages
-        ?? (savedFormData?.ibi?.photo ? [savedFormData.ibi.photo] : initialFormData.ibi.pages),
-      originalPdfs: savedFormData?.ibi?.originalPdfs ?? initialFormData.ibi.originalPdfs,
-      issue: savedFormData?.ibi?.issue ?? null,
-    },
-    electricityBill: {
-      pages: normalizeElectricityPages(savedFormData?.electricityBill),
-      originalPdfs: savedFormData?.electricityBill?.originalPdfs ?? initialFormData.electricityBill.originalPdfs,
-      issue: savedFormData?.electricityBill?.issue ?? null,
-    },
-    contract: {
-      originalPdfs: savedFormData?.contract?.originalPdfs ?? [],
-      extraction: savedFormData?.contract?.extraction ?? null,
-      issue: savedFormData?.contract?.issue ?? null,
-    },
-    additionalBankDocuments: withAdditionalBankDocumentAssetKeys(savedFormData?.additionalBankDocuments),
-    energyCertificate: normalizedEc,
-    signatures: {
-      ...initialFormData.signatures,
-      ...savedFormData?.signatures,
-    },
-    location: normalizedLocation ?? undefined,
-    representation: {
-      ...initialFormData.representation,
-      ...savedFormData?.representation,
-      location: normalizedLocation,
-      holderTypeConfirmed,
-      renderedDocuments: savedFormData?.representation?.renderedDocuments ?? initialFormData.representation.renderedDocuments,
-    },
-  };
 }
 
 export function getFormItems(): FormItem[] {

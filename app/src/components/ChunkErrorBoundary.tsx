@@ -2,6 +2,10 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  clearProjectLocalState,
+  getProjectCodeFromUrl,
+} from '@/lib/projectLocalStateRecovery';
 
 interface Props {
   children: ReactNode;
@@ -20,6 +24,11 @@ interface StorageLike {
 
 const CHUNK_RELOAD_KEY_PREFIX = 'eltex_chunk_reload';
 const CHUNK_RELOAD_WINDOW_MS = 30_000;
+const RUNTIME_RECOVERY_KEY_PREFIX = 'eltex_runtime_recovery';
+const RUNTIME_RECOVERY_WINDOW_MS = 30_000;
+
+type RuntimeRecoveryStage = 'reload' | 'cleared';
+type RuntimeRecoveryAction = 'none' | 'reload' | 'clear-project-state';
 
 export function isChunkLoadError(error: Pick<Error, 'message' | 'name'>): boolean {
   const msg = error.message.toLowerCase();
@@ -43,6 +52,19 @@ function getChunkReloadKey(url: string): string {
   return `${CHUNK_RELOAD_KEY_PREFIX}:${url}`;
 }
 
+function getRuntimeRecoveryKey(url: string): string | null {
+  const projectCode = getProjectCodeFromUrl(url);
+  return projectCode ? `${RUNTIME_RECOVERY_KEY_PREFIX}:${projectCode}` : null;
+}
+
+function parseRuntimeRecovery(value: string | null): { stage: RuntimeRecoveryStage; at: number } | null {
+  if (!value) return null;
+  const [stage, at] = value.split(':');
+  if (stage !== 'reload' && stage !== 'cleared') return null;
+  const timestamp = Number(at);
+  return Number.isFinite(timestamp) ? { stage, at: timestamp } : null;
+}
+
 export function shouldAutoReloadChunkError(
   error: Pick<Error, 'message' | 'name'>,
   storage: StorageLike | null,
@@ -61,6 +83,38 @@ export function markChunkReloadAttempt(storage: StorageLike | null, url: string)
 export function clearChunkReloadAttempt(storage: StorageLike | null, url: string) {
   if (!storage || !url) return;
   storage.removeItem(getChunkReloadKey(url));
+}
+
+export function getRuntimeErrorRecoveryAction(
+  error: Pick<Error, 'message' | 'name'>,
+  storage: StorageLike | null,
+  url: string,
+  now = Date.now()
+): RuntimeRecoveryAction {
+  const key = getRuntimeRecoveryKey(url);
+  if (isChunkLoadError(error) || !storage || !key) return 'none';
+
+  const previous = parseRuntimeRecovery(storage.getItem(key));
+  if (!previous || now - previous.at > RUNTIME_RECOVERY_WINDOW_MS) return 'reload';
+  if (previous.stage === 'reload') return 'clear-project-state';
+  return 'none';
+}
+
+export function markRuntimeErrorRecoveryAttempt(
+  storage: StorageLike | null,
+  url: string,
+  stage: RuntimeRecoveryStage,
+  now = Date.now()
+) {
+  const key = getRuntimeRecoveryKey(url);
+  if (!storage || !key) return;
+  storage.setItem(key, `${stage}:${now}`);
+}
+
+export function clearRuntimeErrorRecoveryAttempt(storage: StorageLike | null, url: string) {
+  const key = getRuntimeRecoveryKey(url);
+  if (!storage || !key) return;
+  storage.removeItem(key);
 }
 
 export class ChunkErrorBoundary extends Component<Props, State> {
@@ -85,15 +139,46 @@ export class ChunkErrorBoundary extends Component<Props, State> {
     );
 
     if (typeof window === 'undefined') return;
-    if (!shouldAutoReloadChunkError(error, window.sessionStorage, window.location.href)) return;
+    if (shouldAutoReloadChunkError(error, window.sessionStorage, window.location.href)) {
+      markChunkReloadAttempt(window.sessionStorage, window.location.href);
+      window.location.reload();
+      return;
+    }
 
-    markChunkReloadAttempt(window.sessionStorage, window.location.href);
-    window.location.reload();
+    const recoveryAction = getRuntimeErrorRecoveryAction(
+      error,
+      window.sessionStorage,
+      window.location.href
+    );
+    if (recoveryAction === 'reload') {
+      markRuntimeErrorRecoveryAttempt(window.sessionStorage, window.location.href, 'reload');
+      window.location.reload();
+      return;
+    }
+    if (recoveryAction === 'clear-project-state') {
+      void this.clearProjectStateAndReload();
+    }
   }
 
-  private handleRetry = () => {
+  private clearProjectStateAndReload = async () => {
+    if (typeof window === 'undefined') return;
+    const url = window.location.href;
+    const projectCode = getProjectCodeFromUrl(url);
+    if (projectCode) {
+      markRuntimeErrorRecoveryAttempt(window.sessionStorage, url, 'cleared');
+      await clearProjectLocalState(projectCode);
+    }
+    window.location.reload();
+  };
+
+  private handleRetry = async () => {
     if (typeof window !== 'undefined') {
       clearChunkReloadAttempt(window.sessionStorage, window.location.href);
+      clearRuntimeErrorRecoveryAttempt(window.sessionStorage, window.location.href);
+      if (!this.state.isNetworkError) {
+        await this.clearProjectStateAndReload();
+        return;
+      }
     }
     window.location.reload();
   };
