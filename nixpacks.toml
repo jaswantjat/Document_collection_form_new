@@ -6,13 +6,13 @@ NIXPACKS_NODE_VERSION = "20.19.0"
 
 [phases.install]
 cmds = [
-  "cd app && npm ci --legacy-peer-deps",
-  "cd backend && npm ci --legacy-peer-deps"
+  "cd app && env -u NPM_CONFIG_PRODUCTION npm ci --legacy-peer-deps",
+  "cd backend && env -u NPM_CONFIG_PRODUCTION npm ci --legacy-peer-deps"
 ]
 
 [phases.build]
 cmds = [
-  "cd app && npm run build"
+  "cd app && env -u NPM_CONFIG_PRODUCTION npm run build"
 ]
 
 [start]
