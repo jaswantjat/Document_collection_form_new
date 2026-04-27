@@ -1,0 +1,185 @@
+{
+  "ok": true,
+  "base": "https://document-collection-form-staging-staging.up.railway.app",
+  "generatedAt": "2026-04-27T09:36:05.968Z",
+  "projectCode": "ELT20260038",
+  "api": {
+    "dashboardStatus": 200,
+    "detailStatus": 200,
+    "downloadZipStatus": 200,
+    "downloadZipContentType": "application/zip",
+    "downloadManifestStatus": 200,
+    "statusLabels": [
+      "DNI / NIE",
+      "IBI / Escritura",
+      "Factura de luz",
+      "Representación",
+      "Documento adicional"
+    ],
+    "downloadCounts": [
+      {
+        "key": "dni",
+        "label": "DNI / NIE",
+        "stateLabel": "✓",
+        "downloadCount": 2
+      },
+      {
+        "key": "ibi",
+        "label": "IBI / Escritura",
+        "stateLabel": "✓",
+        "downloadCount": 1
+      },
+      {
+        "key": "electricity",
+        "label": "Factura de luz",
+        "stateLabel": "✓",
+        "downloadCount": 1
+      },
+      {
+        "key": "representation",
+        "label": "Representación",
+        "stateLabel": "✓",
+        "downloadCount": 3
+      },
+      {
+        "key": "additional-documents",
+        "label": "Documento adicional",
+        "stateLabel": "2 archivos · revisar",
+        "downloadCount": 2
+      }
+    ],
+    "legacyZipEntries": [
+      "1_documentos/DNI_frontal.png",
+      "1_documentos/DNI_trasera.png",
+      "1_documentos/Factura_luz_1.png",
+      "1_documentos/IBI.png",
+      "2_certificados/Certificado_energetico.pdf"
+    ],
+    "manifestLabels": [
+      "DNI_frontal",
+      "DNI_trasera",
+      "IBI",
+      "Factura_luz_1",
+      "Firma_iva_cat",
+      "Firma_generalitat",
+      "Firma_representacio_cat",
+      "Certificado_energetico",
+      "Firma_cliente",
+      "Firma_comercial"
+    ]
+  },
+  "ui": {
+    "statusDownloads": [
+      {
+        "label": "status DNI / NIE",
+        "suggestedFilename": "ELT20260038_dni_nie.zip",
+        "zipEntries": [
+          "1_documentos/dni_frontal.png",
+          "1_documentos/dni_trasera.png"
+        ]
+      },
+      {
+        "label": "status IBI / Escritura",
+        "suggestedFilename": "ELT20260038_ibi_escritura.png",
+        "zipEntries": null
+      },
+      {
+        "label": "status Factura de luz",
+        "suggestedFilename": "ELT20260038_factura_luz_pag_1.png",
+        "zipEntries": null
+      },
+      {
+        "label": "status Representación",
+        "suggestedFilename": "ELT20260038_representacion.zip",
+        "zipEntries": [
+          "2_pdfs_firmados/ELT20260038_autoritzacio-representacio.pdf",
+          "2_pdfs_firmados/ELT20260038_generalitat.pdf",
+          "2_pdfs_firmados/ELT20260038_iva-cat.pdf"
+        ]
+      },
+      {
+        "label": "status Documento adicional",
+        "suggestedFilename": "ELT20260038_documento_adicional.zip",
+        "zipEntries": [
+          "1_documentos/documento_adicional.pdf",
+          "1_documentos/irpf_2024.png"
+        ]
+      },
+      {
+        "label": "status Certificado energético",
+        "suggestedFilename": "ELT20260038_certificado-energetico.pdf",
+        "zipEntries": null
+      }
+    ],
+    "detailDownloads": [
+      {
+        "label": "detail full ZIP",
+        "suggestedFilename": "ELT20260038_QA_Dashboard_Proof_Cliente.zip",
+        "zipEntries": [
+          "1_documentos/dni_frontal.png",
+          "1_documentos/dni_trasera.png",
+          "1_documentos/documento_adicional.pdf",
+          "1_documentos/factura_luz_pag_1.png",
+          "1_documentos/ibi_escritura.png",
+          "1_documentos/irpf_2024.png",
+          "2_pdfs_firmados/ELT20260038_autoritzacio-representacio.pdf",
+          "2_pdfs_firmados/ELT20260038_generalitat.pdf",
+          "2_pdfs_firmados/ELT20260038_iva-cat.pdf",
+          "3_certificado_energetico/ELT20260038_certificado-energetico.pdf",
+          "4_firmas_finales/firma_cliente.png",
+          "4_firmas_finales/firma_comercial.png",
+          "5_fotos_inmueble/cuadro_electrico_1.png",
+          "5_fotos_inmueble/espacio_de_instalacion_1.png",
+          "5_fotos_inmueble/radiadores_1.png",
+          "5_fotos_inmueble/tejado_1.png"
+        ]
+      },
+      {
+        "label": "detail DNI frontal",
+        "suggestedFilename": "ELT20260038_dni_frontal.png",
+        "zipEntries": null
+      },
+      {
+        "label": "detail DNI trasera",
+        "suggestedFilename": "ELT20260038_dni_trasera.png",
+        "zipEntries": null
+      },
+      {
+        "label": "detail IBI",
+        "suggestedFilename": "ELT20260038_ibi_escritura.png",
+        "zipEntries": null
+      },
+      {
+        "label": "detail electricity",
+        "suggestedFilename": "ELT20260038_factura_luz_pag._1.jpg",
+        "zipEntries": null
+      },
+      {
+        "label": "detail signed IVA",
+        "suggestedFilename": "ELT20260038_iva-cat.pdf",
+        "zipEntries": null
+      },
+      {
+        "label": "detail final customer signature",
+        "suggestedFilename": "ELT20260038_firma_cliente.png",
+        "zipEntries": null
+      },
+      {
+        "label": "detail additional document",
+        "suggestedFilename": "ELT20260038_documento_adicional.pdf",
+        "zipEntries": null
+      },
+      {
+        "label": "detail property photo",
+        "suggestedFilename": "ELT20260038_cuadro_electrico_1.png",
+        "zipEntries": null
+      }
+    ],
+    "screenshots": {
+      "dashboardRow": "docs/proof/dashboard-live-qa-2026-04-27/dashboard-row-estado-downloads.png",
+      "dashboardPage": "docs/proof/dashboard-live-qa-2026-04-27/dashboard-filtered-page.png",
+      "detailTop": "docs/proof/dashboard-live-qa-2026-04-27/dashboard-detail-top.png",
+      "detailDownloads": "docs/proof/dashboard-live-qa-2026-04-27/dashboard-detail-downloads.png"
+    }
+  }
+}
