@@ -207,8 +207,7 @@ function getRepresentationSignatureStatus(formData) {
 }
 
 function getFinalSignatureStatus(formData) {
-  const hasCustomerSignature = Boolean(formData?.signatures?.customerSignature);
-  return hasCustomerSignature ? 'completa (1/1)' : 'pendiente (0/1)';
+  return 'no aplica';
 }
 
 function getEnergyCertificateStatus(formData) {
@@ -250,8 +249,6 @@ function buildPendingItems(formData, missingDocLabels) {
       );
     }
   }
-
-  if (!formData?.signatures?.customerSignature) pending.push('Firma final del cliente');
 
   return uniq(pending);
 }

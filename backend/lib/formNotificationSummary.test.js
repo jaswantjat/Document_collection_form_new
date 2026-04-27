@@ -132,16 +132,15 @@ test('buildFormNotificationPayload summarizes a new submission in Spanish with p
     'Nombre de la empresa',
     'NIF de la empresa',
     'Firmas de representación',
-    'Firma final del cliente',
   ]);
   assert.equal(payload.statuses.identity, 'completa');
   assert.equal(payload.statuses.representation_documents, 'pendientes (0/3)');
   assert.equal(payload.statuses.representation_signatures, 'pendientes (0/3)');
-  assert.equal(payload.statuses.final_signatures, 'pendiente (0/1)');
+  assert.equal(payload.statuses.final_signatures, 'no aplica');
   assert.match(payload.teams_message, /Nuevo formulario enviado/);
   assert.match(payload.teams_message, /Asesor: Luciano/);
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260001/);
-  assert.match(payload.teams_message, /Pendiente \(9\):/);
+  assert.match(payload.teams_message, /Pendiente \(8\):/);
   assert.doesNotMatch(payload.teams_message, /Estado actual:/);
   assert.doesNotMatch(payload.teams_message, /Producto:/);
   assert.doesNotMatch(payload.teams_message, /Rellenado por:/);
@@ -211,12 +210,71 @@ test('buildFormNotificationPayload marks updates with no pending items when the 
   assert.equal(payload.documents.progress_label, '7/7');
   assert.equal(payload.sections.representacion, 'completa');
   assert.equal(payload.statuses.representation_signatures, 'completas (2/2)');
-  assert.equal(payload.statuses.final_signatures, 'completa (1/1)');
+  assert.equal(payload.statuses.final_signatures, 'no aplica');
   assert.match(payload.teams_message, /Formulario actualizado \(3 envíos\)/);
   assert.match(payload.teams_message, /Formulario: https:\/\/documentos\.eltex\.es\/\?code=ELT20260002/);
   assert.match(payload.teams_message, /Estado: Todo completo\. No hay nada pendiente\./);
   assert.doesNotMatch(payload.teams_message, /Pendiente \(1\):/);
   assert.doesNotMatch(payload.teams_message, /Rellenado por:/);
+});
+
+test('buildFormNotificationPayload does not require a final customer signature in the current live flow', () => {
+  const payload = buildFormNotificationPayload({
+    eventType: 'form_updated',
+    project: {
+      code: 'ELT20260081',
+      customerName: 'NURIA CORNET TURRO',
+      phone: '+34600111222',
+      email: '',
+      productType: 'solar',
+      assessor: 'Sergi Guillen Cavero',
+      submissions: [{ id: 'sub-1' }, { id: 'sub-2' }],
+    },
+    formData: {
+      representation: {
+        location: 'cataluna',
+        holderTypeConfirmed: true,
+        isCompany: false,
+        ivaCertificateSignature: 'data:image/png;base64,iva',
+        generalitatSignature: 'data:image/png;base64,gen',
+        representacioSignature: 'data:image/png;base64,rep',
+      },
+      signatures: {
+        customerSignature: null,
+        repSignature: null,
+      },
+      energyCertificate: {
+        status: 'skipped',
+      },
+    },
+    snapshot: {
+      fullName: 'NURIA CORNET TURRO',
+      firstName: 'NURIA',
+      lastName: 'CORNET TURRO',
+      address: 'Carrer Major 1',
+      municipality: 'Girona',
+      province: 'Girona',
+      postalCode: '17001',
+    },
+    docsUploaded: [
+      'dni_front',
+      'dni_back',
+      'ibi',
+      'electricity_bill',
+      'cataluna_iva',
+      'cataluna_generalitat',
+      'cataluna_representacio',
+    ],
+    docsRequired: ['dni_front', 'dni_back', 'ibi', 'electricity_bill', 'energy_certificate'],
+    locale: 'es',
+    source: 'customer',
+    submittedAt: '2026-04-27T09:50:00.000Z',
+  });
+
+  assert.deepEqual(payload.documents.pending_labels, ['Nada pendiente']);
+  assert.equal(payload.statuses.final_signatures, 'no aplica');
+  assert.match(payload.teams_message, /Estado: Todo completo\. No hay nada pendiente\./);
+  assert.doesNotMatch(payload.teams_message, /Firma final del cliente/);
 });
 
 test('buildFormNotificationPayload handles passport uploads, deferred signatures, and skipped energy correctly', () => {
@@ -272,7 +330,7 @@ test('buildFormNotificationPayload handles passport uploads, deferred signatures
   assert.equal(payload.statuses.energy_certificate, 'aplazado');
   assert.equal(payload.statuses.representation_documents, 'parciales (1/2)');
   assert.equal(payload.statuses.representation_signatures, 'aplazadas (0/2)');
-  assert.equal(payload.statuses.final_signatures, 'completa (1/1)');
+  assert.equal(payload.statuses.final_signatures, 'no aplica');
   assert.deepEqual(payload.documents.pending_labels, [
     'Poder de representación',
     'Firmas de representación aplazadas',
