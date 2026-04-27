@@ -49,9 +49,10 @@ import {
 import { approvedAssessors } from '@/lib/approvedAssessors';
 import {
   formatDate, locationLabel, languageLabel,
-  extensionFromMimeType,
   downloadBlob, buildProjectUrl,
   downloadDataUrlAsset, openDataUrlInNewTab,
+  getDocumentAssetsFromProject,
+  getElectricityAssetsFromProject,
   getIbiPages,
   viewPDFInNewTab, downloadCSV,
   buildSignedPdfFactory, buildEnergyCertificatePdfFactory,
@@ -773,9 +774,9 @@ function ProjectDetailModal({
                 token={token}
                 onRefresh={refreshProject}
               />
-              <DNIDisplay dni={project.formData?.dni} projectCode={project.code} />
-              <IBIDisplay ibi={project.formData?.ibi} projectCode={project.code} />
-              <ElectricityDisplay bill={project.formData?.electricityBill} projectCode={project.code} />
+              <DNIDisplay project={project} />
+              <IBIDisplay project={project} />
+              <ElectricityDisplay project={project} />
               <SignedDocumentsSection project={project} items={summary.signedDocuments} energyCertificate={summary.energyCertificate} />
               <EnergyCertificatePanel project={project} energyCertificate={summary.energyCertificate} />
               <FinalSignaturesPanel signatures={summary.finalSignatures} projectCode={project.code} />
@@ -852,6 +853,11 @@ function AssessorCell({
   );
 }
 
+const stickyActionsCellClass =
+  'sticky right-[110px] z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-gray-50';
+const stickyZipCellClass =
+  'sticky right-0 z-20 border-b border-l border-gray-100 bg-white px-4 py-3 align-top transition-colors group-hover:bg-gray-50';
+
 function ProjectTableRow({
   project,
   summary,
@@ -927,7 +933,7 @@ function ProjectTableRow({
 
   return (
     <>
-    <tr className="bg-white hover:bg-gray-50 transition-colors">
+    <tr className="group bg-white hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3 align-top border-b border-gray-100">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -969,7 +975,7 @@ function ProjectTableRow({
         />
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100">
+      <td className={stickyActionsCellClass}>
         <div className="grid gap-1.5 min-w-[180px]">
           <button
             type="button"
@@ -1026,9 +1032,10 @@ function ProjectTableRow({
         </div>
       </td>
 
-      <td className="px-4 py-3 align-top border-b border-gray-100">
+      <td className={stickyZipCellClass}>
         <button
           type="button"
+          data-testid="dashboard-row-download-zip-btn"
           disabled={downloading}
           onClick={async () => {
             setDownloading(true);
@@ -1098,28 +1105,19 @@ function ImagePreviewCard({
   );
 }
 
-export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string }) {
-  if (!dni?.front?.photo && !dni?.back?.photo) return null;
+export function DNIDisplay({ project }: { project: any }) {
+  const dni = project?.formData?.dni;
+  const projectCode = project?.code ?? '';
+  const frontAsset = getDocumentAssetsFromProject(project || {}, 'dniFront')[0] || null;
+  const backAsset = getDocumentAssetsFromProject(project || {}, 'dniBack')[0] || null;
+
+  if (!dni || (!frontAsset && !backAsset)) return null;
 
   const frontData = dni.front?.extraction?.extractedData;
   const backData = dni.back?.extraction?.extractedData;
-  const frontAsset = dni.front?.photo?.preview ? {
-    key: 'dni-front',
-    label: 'DNI frontal',
-    dataUrl: dni.front.photo.preview,
-    mimeType: extensionFromMimeType(undefined, dni.front.photo.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
-  } : null;
-  const backAsset = dni.back?.photo?.preview ? {
-    key: 'dni-back',
-    label: 'DNI trasera',
-    dataUrl: dni.back.photo.preview,
-    mimeType: extensionFromMimeType(undefined, dni.back.photo.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
-  } : null;
-
-  // Collect images for autocropper
-  const dniImages: string[] = [];
-  if (dni.front?.photo?.preview) dniImages.push(dni.front.photo.preview);
-  if (dni.back?.photo?.preview) dniImages.push(dni.back.photo.preview);
+  const dniImages = [frontAsset, backAsset]
+    .filter((asset): asset is DashboardAssetItem => Boolean(asset?.dataUrl?.startsWith('data:image/')))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
@@ -1164,23 +1162,19 @@ export function DNIDisplay({ dni, projectCode }: { dni: any; projectCode: string
   );
 }
 
-export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string }) {
+export function IBIDisplay({ project }: { project: any }) {
+  const ibi = project?.formData?.ibi;
+  const projectCode = project?.code ?? '';
   const pages = getIbiPages(ibi);
-  if (pages.length === 0) return null;
+  const assets = getDocumentAssetsFromProject(project || {}, 'ibi');
 
-  const data = ibi.extraction?.extractedData;
-  const assets = pages
-    .filter((page: any) => page?.preview)
-    .map((page: any, index: number) => ({
-      key: `ibi-${index}`,
-      label: `IBI / Escritura${index === 0 ? '' : ` ${index + 1}`}`,
-      dataUrl: page.preview,
-      mimeType: extensionFromMimeType(undefined, page.preview).startsWith('p') ? 'image/png' : 'image/jpeg',
-    }));
+  if (pages.length === 0 && assets.length === 0) return null;
+
+  const data = ibi?.extraction?.extractedData;
   const primaryAsset = assets[0] || null;
-
-  // Collect images for autocropper
-  const ibiImages: string[] = assets.map(a => a.dataUrl);
+  const ibiImages = assets
+    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
@@ -1229,7 +1223,7 @@ export function IBIDisplay({ ibi, projectCode }: { ibi: any; projectCode: string
           <FieldRow label="Provincia" value={data?.provincia} />
           <FieldRow label="Ejercicio" value={data?.ejercicio} />
           <FieldRow label="Importe" value={data?.importe} />
-          {ibi.extraction?.needsManualReview && (
+          {ibi?.extraction?.needsManualReview && (
             <span className="text-orange-600 text-xs flex items-center gap-1 pt-1">
               <AlertTriangle className="w-3 h-3" />
               Revisar manualmente
@@ -1258,7 +1252,9 @@ export function CompanyDisplay({ representation }: { representation: any }) {
   );
 }
 
-export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCode: string }) {
+export function ElectricityDisplay({ project }: { project: any }) {
+  const bill = project?.formData?.electricityBill;
+  const projectCode = project?.code ?? '';
   const pages: any[] = bill?.pages ?? [];
   // backward compat: migrate old front/back into pages if needed
   const normalised = pages.length === 0
@@ -1266,21 +1262,18 @@ export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCo
     : pages;
 
   const uploadedPages = normalised.filter((p: any) => p?.photo);
-  if (uploadedPages.length === 0) return null;
+  const assets = getElectricityAssetsFromProject(project || {});
+  if (assets.length === 0) return null;
 
-  // Collect images for autocropper
-  const electricityImages: string[] = [];
-  uploadedPages.forEach((page: any) => {
-    if (page?.photo?.preview) {
-      electricityImages.push(page.photo.preview);
-    }
-  });
+  const electricityImages = assets
+    .filter((asset) => asset.dataUrl.startsWith('data:image/'))
+    .map((asset) => asset.dataUrl);
 
   return (
     <div className="space-y-3">
       <SectionHeading
         icon={Zap}
-        label={`Factura de electricidad — ${uploadedPages.length} imagen${uploadedPages.length !== 1 ? 'es' : ''}`}
+        label={`Factura de electricidad — ${assets.length} imagen${assets.length !== 1 ? 'es' : ''}`}
         actions={electricityImages.length > 0 ? (
           <AutocropperButton
             documentType="electricity"
@@ -1290,13 +1283,8 @@ export function ElectricityDisplay({ bill, projectCode }: { bill: any; projectCo
         ) : undefined}
       />
       <div className="grid lg:grid-cols-2 gap-4">
-        {uploadedPages.map((page: any, i: number) => {
-          const asset = page?.photo?.preview ? {
-            key: `electricity-${i}`,
-            label: `Factura luz — pág. ${i + 1}`,
-            dataUrl: page.photo.preview,
-            mimeType: 'image/jpeg',
-          } : null;
+        {assets.map((asset, i: number) => {
+          const page = uploadedPages[i];
           const data = page?.extraction?.extractedData;
           return (
             <ImagePreviewCard
@@ -1899,15 +1887,22 @@ export function Dashboard({ token, onLogout }: DashboardProps) {
               </div>
             ) : (
               <>
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+                <div
+                  data-testid="dashboard-table-scroll"
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto"
+                >
                   <table className="table-fixed min-w-[1180px] w-full">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[360px]">Expediente / cliente</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[180px]">Asesor</th>
                         <th className="px-4 py-3 font-semibold whitespace-nowrap w-[340px]">Estado</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[190px]">Acciones</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap w-[110px]">ZIP</th>
+                        <th className="sticky right-[110px] z-30 w-[190px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold shadow-[-12px_0_16px_-16px_rgba(15,23,42,0.45)]">
+                          Acciones
+                        </th>
+                        <th className="sticky right-0 z-30 w-[110px] whitespace-nowrap border-l border-gray-100 bg-gray-50 px-4 py-3 font-semibold">
+                          ZIP
+                        </th>
                       </tr>
                     </thead>
                     <tbody>

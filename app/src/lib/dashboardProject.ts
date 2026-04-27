@@ -149,6 +149,29 @@ function getIbiPages(formData: any): any[] {
   return formData?.ibi?.photo ? [formData.ibi.photo] : [];
 }
 
+function hasDownloadablePhoto(photo: any) {
+  if (!photo) return false;
+  if (typeof photo === 'string') return photo.startsWith('data:');
+  return Boolean(photo.preview);
+}
+
+function hasStoredAssetWithPrefix(assetFiles: Record<string, string>, prefix: string) {
+  return Object.keys(assetFiles).some((key) => key.startsWith(prefix));
+}
+
+function countStoredAssetPrefix(assetFiles: Record<string, string>, prefix: string) {
+  return Object.keys(assetFiles).filter((key) => key.startsWith(prefix)).length;
+}
+
+function countStoredOriginals(formData: any, assetFiles: Record<string, string>, section: 'dni' | 'ibi' | 'electricityBill') {
+  const prefixes = {
+    dni: 'dniOriginal_',
+    ibi: 'ibiOriginal_',
+    electricityBill: 'electricityOriginal_',
+  } as const;
+  return Math.max(countStoredPdfs(formData, section), countStoredAssetPrefix(assetFiles, prefixes[section]));
+}
+
 function mergeElectricityData(pages: any[]): Record<string, any> {
   const merged: Record<string, any> = {};
   for (const page of pages) {
@@ -236,17 +259,26 @@ function toAssetItem(key: string, label: string, dataUrl: string | null | undefi
 
 export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
   const formData = project?.formData || {};
+  const assetFiles = project?.assetFiles || {};
   const ibiPages = getIbiPages(formData);
   const primaryIbiPage = ibiPages[0] || null;
+  const ibiAssetKeys = Object.keys(assetFiles).filter((key) => key.startsWith('ibi_')).sort();
+  const primaryIbiAsset = ibiAssetKeys[0] ? assetFiles[ibiAssetKeys[0]] : null;
+  const hasDniOriginal = hasStoredAssetWithPrefix(assetFiles, 'dniOriginal_');
+  const hasIbiOriginal = hasStoredAssetWithPrefix(assetFiles, 'ibiOriginal_');
 
   const staticDocs: DashboardDocumentItem[] = [
     {
       key: 'dniFront',
       label: 'DNI frontal',
       shortLabel: 'DNI frontal',
-      present: Boolean(formData?.dni?.front?.photo?.preview),
-      dataUrl: formData?.dni?.front?.photo?.preview || null,
-      mimeType: getMimeType(formData?.dni?.front?.photo?.preview),
+      present: Boolean(
+        hasDownloadablePhoto(formData?.dni?.front?.photo)
+        || assetFiles.dniFront
+        || (hasDniOriginal && (formData?.dni?.front?.photo || formData?.dni?.front?.extraction))
+      ),
+      dataUrl: formData?.dni?.front?.photo?.preview || assetFiles.dniFront || null,
+      mimeType: getMimeType(formData?.dni?.front?.photo?.preview) || getPathMimeType(assetFiles.dniFront),
       needsManualReview: Boolean(formData?.dni?.front?.extraction?.needsManualReview),
       extractedData: formData?.dni?.front?.extraction?.extractedData || null,
     },
@@ -254,9 +286,13 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
       key: 'dniBack',
       label: 'DNI trasera',
       shortLabel: 'DNI trasera',
-      present: Boolean(formData?.dni?.back?.photo?.preview),
-      dataUrl: formData?.dni?.back?.photo?.preview || null,
-      mimeType: getMimeType(formData?.dni?.back?.photo?.preview),
+      present: Boolean(
+        hasDownloadablePhoto(formData?.dni?.back?.photo)
+        || assetFiles.dniBack
+        || (hasDniOriginal && (formData?.dni?.back?.photo || formData?.dni?.back?.extraction))
+      ),
+      dataUrl: formData?.dni?.back?.photo?.preview || assetFiles.dniBack || null,
+      mimeType: getMimeType(formData?.dni?.back?.photo?.preview) || getPathMimeType(assetFiles.dniBack),
       needsManualReview: Boolean(formData?.dni?.back?.extraction?.needsManualReview),
       extractedData: formData?.dni?.back?.extraction?.extractedData || null,
     },
@@ -264,9 +300,9 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: ibiPages.length > 0,
-      dataUrl: primaryIbiPage?.preview || null,
-      mimeType: getMimeType(primaryIbiPage?.preview),
+      present: ibiPages.some((page) => hasDownloadablePhoto(page)) || ibiAssetKeys.length > 0 || hasIbiOriginal,
+      dataUrl: primaryIbiPage?.preview || primaryIbiAsset || null,
+      mimeType: getMimeType(primaryIbiPage?.preview) || getPathMimeType(primaryIbiAsset),
       needsManualReview: Boolean(formData?.ibi?.extraction?.needsManualReview),
       extractedData: formData?.ibi?.extraction?.extractedData || null,
     },
@@ -277,9 +313,40 @@ export function getDashboardDocuments(project: any): DashboardDocumentItem[] {
 
 export function getDashboardElectricityPages(project: any): DashboardDocumentItem[] {
   const formData = project?.formData || {};
+  const assetFiles = project?.assetFiles || {};
   const pages = getElectricityPages(formData);
+  const electricityAssetKeys = Object.keys(assetFiles)
+    .filter((key) => key.startsWith('electricity_'))
+    .sort();
+  const hasElectricityOriginal = hasStoredAssetWithPrefix(assetFiles, 'electricityOriginal_');
 
   if (pages.length === 0) {
+    if (electricityAssetKeys.length > 0) {
+      return electricityAssetKeys.map((key, index) => ({
+        key,
+        label: `Factura luz — pág. ${index + 1}`,
+        shortLabel: `Luz ${index + 1}`,
+        present: true,
+        dataUrl: assetFiles[key],
+        mimeType: getPathMimeType(assetFiles[key]),
+        needsManualReview: false,
+        extractedData: null,
+      }));
+    }
+
+    if (hasElectricityOriginal) {
+      return [{
+        key: 'electricity_0',
+        label: 'Factura de luz',
+        shortLabel: 'Luz',
+        present: true,
+        dataUrl: null,
+        mimeType: null,
+        needsManualReview: false,
+        extractedData: null,
+      }];
+    }
+
     return [{
       key: 'electricity_0',
       label: 'Factura de luz',
@@ -296,9 +363,13 @@ export function getDashboardElectricityPages(project: any): DashboardDocumentIte
     key: `electricity_${i}`,
     label: `Factura luz — pág. ${i + 1}`,
     shortLabel: `Luz ${i + 1}`,
-    present: Boolean(page?.photo?.preview),
-    dataUrl: page?.photo?.preview || null,
-    mimeType: getMimeType(page?.photo?.preview),
+    present: Boolean(
+      hasDownloadablePhoto(page?.photo)
+      || assetFiles[`electricity_${i}`]
+      || (hasElectricityOriginal && (page?.photo || page?.extraction))
+    ),
+    dataUrl: page?.photo?.preview || assetFiles[`electricity_${i}`] || null,
+    mimeType: getMimeType(page?.photo?.preview) || getPathMimeType(assetFiles[`electricity_${i}`]),
     needsManualReview: Boolean(page?.extraction?.needsManualReview),
     extractedData: page?.extraction?.extractedData || null,
   }));
@@ -522,9 +593,22 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
   }
 
   const formData = project?.formData || {};
+  const assetFiles = project?.assetFiles || {};
   const dniFront = formData?.dni?.front || {};
   const dniBack = formData?.dni?.back || {};
-  const dniComplete = isIdentityDocumentComplete({ front: dniFront, back: dniBack });
+  const hasDniOriginal = hasStoredAssetWithPrefix(assetFiles, 'dniOriginal_');
+  const dniFrontPresent = Boolean(
+    hasDownloadablePhoto(dniFront?.photo)
+    || assetFiles.dniFront
+    || (hasDniOriginal && (dniFront?.photo || dniFront?.extraction))
+  );
+  const dniBackPresent = Boolean(
+    hasDownloadablePhoto(dniBack?.photo)
+    || assetFiles.dniBack
+    || (hasDniOriginal && (dniBack?.photo || dniBack?.extraction))
+  );
+  const dniComplete = isIdentityDocumentComplete({ front: dniFront, back: dniBack })
+    || (dniFrontPresent && dniBackPresent);
   const dniPendingLabel = getIdentityDocumentPendingLabel(dniFront, dniBack) || 'pendiente';
   const dniNeedsManualReview = Boolean(
     dniFront?.extraction?.needsManualReview
@@ -535,19 +619,32 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
   const electricityPages = getElectricityPages(formData);
   const signedDocuments = getDashboardSignedPdfItems(project);
   const additionalDocuments = getDashboardAdditionalBankDocumentAssets(project);
-  const dniDownloadCount = [
-    dniFront?.photo,
-    dniBack?.photo,
-  ].filter(Boolean).length + countStoredPdfs(formData, 'dni');
-  const ibiDownloadCount = ibiPages.length + countStoredPdfs(formData, 'ibi');
-  const electricityDownloadCount = electricityPages.length + countStoredPdfs(formData, 'electricityBill');
+  const directDniDownloadCount = [
+    hasDownloadablePhoto(dniFront?.photo) || assetFiles.dniFront,
+    hasDownloadablePhoto(dniBack?.photo) || assetFiles.dniBack,
+  ].filter(Boolean).length;
+  const directIbiDownloadCount = Math.max(
+    ibiPages.filter((page) => hasDownloadablePhoto(page)).length,
+    countStoredAssetPrefix(assetFiles, 'ibi_'),
+  );
+  const directElectricityDownloadCount = Math.max(
+    electricityPages.filter((page) => hasDownloadablePhoto(page?.photo)).length,
+    countStoredAssetPrefix(assetFiles, 'electricity_'),
+  );
+  const dniDownloadCount = directDniDownloadCount + countStoredOriginals(formData, assetFiles, 'dni');
+  const ibiDownloadCount = directIbiDownloadCount + countStoredOriginals(formData, assetFiles, 'ibi');
+  const electricityDownloadCount = directElectricityDownloadCount
+    + countStoredOriginals(formData, assetFiles, 'electricityBill');
+  const ibiPresent = directIbiDownloadCount > 0 || countStoredOriginals(formData, assetFiles, 'ibi') > 0;
+  const electricityPresent = directElectricityDownloadCount > 0
+    || countStoredOriginals(formData, assetFiles, 'electricityBill') > 0;
 
   const items: DashboardStatusItem[] = [
     statusFromPresence('dni', 'DNI / NIE', dniComplete, dniNeedsManualReview, dniPendingLabel, dniDownloadCount),
     statusFromPresence(
       'ibi',
       'IBI / Escritura',
-      ibiPages.length > 0,
+      ibiPresent,
       Boolean(formData?.ibi?.extraction?.needsManualReview),
       'pendiente',
       ibiDownloadCount,
@@ -558,7 +655,7 @@ export function getDashboardStatusItems(project: any): DashboardStatusItem[] {
     items.push(statusFromPresence(
       'electricity',
       'Factura de luz',
-      electricityPages.length > 0,
+      electricityPresent,
       electricityPages.some((page: any) => Boolean(page?.extraction?.needsManualReview)),
       'pendiente',
       electricityDownloadCount,

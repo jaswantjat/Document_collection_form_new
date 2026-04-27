@@ -491,6 +491,24 @@ function getIbiPages(formData) {
   return formData?.ibi?.photo ? [formData.ibi.photo] : [];
 }
 
+function hasDownloadablePhoto(photo) {
+  if (!photo) return false;
+  if (typeof photo === 'string') return photo.startsWith('data:');
+  return Boolean(photo.preview);
+}
+
+function hasStoredAssetWithPrefix(assetFiles, prefix) {
+  return Object.keys(assetFiles || {}).some((key) => key.startsWith(prefix));
+}
+
+function countStoredAssetPrefix(assetFiles, prefix) {
+  return Object.keys(assetFiles || {}).filter((key) => key.startsWith(prefix)).length;
+}
+
+function countStoredOriginals(formData, assetFiles, section, prefix) {
+  return Math.max(countOriginalPdfs(formData, section), countStoredAssetPrefix(assetFiles, prefix));
+}
+
 function getFirstElectricityData(formData) {
   const pages = getElectricityPages(formData);
   const merged = {};
@@ -732,6 +750,7 @@ function countOriginalPdfs(formData, section) {
 function buildDashboardSummary(project) {
   const formData = project?.formData || null;
   const snapshot = getProjectSnapshot(formData);
+  const assetFiles = project?.assetFiles || {};
   const location = snapshot.location;
   const locality = [snapshot.postalCode, snapshot.municipality].filter(Boolean).join(' ');
   const displayAddress = [
@@ -741,25 +760,66 @@ function buildDashboardSummary(project) {
   ].filter(Boolean).join(', ') || null;
 
   const electricityPages = getElectricityPages(formData);
+  const electricityAssetKeys = Object.keys(assetFiles)
+    .filter((key) => key.startsWith('electricity_'))
+    .sort();
+  const hasElectricityOriginal = hasStoredAssetWithPrefix(assetFiles, 'electricityOriginal_');
   const electricityDocs = electricityPages.length > 0
     ? electricityPages.map((page, i) => ({
         key: `electricity_${i}`,
         label: `Factura luz — pág. ${i + 1}`,
         shortLabel: `Luz ${i + 1}`,
-        present: !!page?.photo?.preview || !!project.assetFiles?.[`electricity_${i}`],
+        present: Boolean(
+          hasDownloadablePhoto(page?.photo)
+          || assetFiles[`electricity_${i}`]
+          || (hasElectricityOriginal && (page?.photo || page?.extraction))
+        ),
         dataUrl: null,
         mimeType: null,
         needsManualReview: !!page?.extraction?.needsManualReview,
         extractedData: null,
       }))
+    : electricityAssetKeys.length > 0
+      ? electricityAssetKeys.map((key, i) => ({
+          key,
+          label: `Factura luz — pág. ${i + 1}`,
+          shortLabel: `Luz ${i + 1}`,
+          present: true,
+          dataUrl: null,
+          mimeType: null,
+          needsManualReview: false,
+          extractedData: null,
+        }))
+    : hasElectricityOriginal
+      ? [{
+          key: 'electricity_0',
+          label: 'Factura de luz',
+          shortLabel: 'Luz',
+          present: true,
+          dataUrl: null,
+          mimeType: null,
+          needsManualReview: false,
+          extractedData: null,
+        }]
     : [{ key: 'electricity_0', label: 'Factura de luz', shortLabel: 'Luz', present: false, dataUrl: null, mimeType: null, needsManualReview: false, extractedData: null }];
+
+  const ibiPages = getIbiPages(formData);
+  const ibiAssetKeys = Object.keys(assetFiles)
+    .filter((key) => key.startsWith('ibi_'))
+    .sort();
+  const hasDniOriginal = hasStoredAssetWithPrefix(assetFiles, 'dniOriginal_');
+  const hasIbiOriginal = hasStoredAssetWithPrefix(assetFiles, 'ibiOriginal_');
 
   const documents = [
     {
       key: 'dniFront',
       label: 'DNI frontal',
       shortLabel: 'DNI frontal',
-      present: !!formData?.dni?.front?.photo?.preview || !!project.assetFiles?.dniFront,
+      present: Boolean(
+        hasDownloadablePhoto(formData?.dni?.front?.photo)
+        || assetFiles.dniFront
+        || (hasDniOriginal && (formData?.dni?.front?.photo || formData?.dni?.front?.extraction))
+      ),
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.dni?.front?.extraction?.needsManualReview,
@@ -769,7 +829,11 @@ function buildDashboardSummary(project) {
       key: 'dniBack',
       label: 'DNI trasera',
       shortLabel: 'DNI trasera',
-      present: !!formData?.dni?.back?.photo?.preview || !!project.assetFiles?.dniBack,
+      present: Boolean(
+        hasDownloadablePhoto(formData?.dni?.back?.photo)
+        || assetFiles.dniBack
+        || (hasDniOriginal && (formData?.dni?.back?.photo || formData?.dni?.back?.extraction))
+      ),
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.dni?.back?.extraction?.needsManualReview,
@@ -779,7 +843,9 @@ function buildDashboardSummary(project) {
       key: 'ibi',
       label: 'IBI / Escritura',
       shortLabel: 'IBI',
-      present: getIbiPages(formData).length > 0,
+      present: ibiPages.some((page) => hasDownloadablePhoto(page))
+        || ibiAssetKeys.length > 0
+        || hasIbiOriginal,
       dataUrl: null,
       mimeType: null,
       needsManualReview: !!formData?.ibi?.extraction?.needsManualReview,
@@ -829,12 +895,30 @@ function buildDashboardSummary(project) {
   const allDocuments = [...documents, ...electricityDocs];
   const warnings = computeDashboardWarnings(formData);
   const energyCertificatePresent = energyCertificateStatus === 'completed';
-  const dniDownloadCount = [
-    formData?.dni?.front?.photo || project.assetFiles?.dniFront,
-    formData?.dni?.back?.photo || project.assetFiles?.dniBack,
-  ].filter(Boolean).length + countOriginalPdfs(formData, 'dni');
-  const ibiDownloadCount = getIbiPages(formData).length + countOriginalPdfs(formData, 'ibi');
-  const electricityDownloadCount = electricityPages.length + countOriginalPdfs(formData, 'electricityBill');
+  const dniFrontPresent = documents.find((item) => item.key === 'dniFront')?.present;
+  const dniBackPresent = documents.find((item) => item.key === 'dniBack')?.present;
+  const directDniDownloadCount = [
+    hasDownloadablePhoto(formData?.dni?.front?.photo) || assetFiles.dniFront,
+    hasDownloadablePhoto(formData?.dni?.back?.photo) || assetFiles.dniBack,
+  ].filter(Boolean).length;
+  const directIbiDownloadCount = Math.max(
+    ibiPages.filter((page) => hasDownloadablePhoto(page)).length,
+    countStoredAssetPrefix(assetFiles, 'ibi_'),
+  );
+  const directElectricityDownloadCount = Math.max(
+    electricityPages.filter((page) => hasDownloadablePhoto(page?.photo)).length,
+    countStoredAssetPrefix(assetFiles, 'electricity_'),
+  );
+  const dniDownloadCount = directDniDownloadCount
+    + countStoredOriginals(formData, assetFiles, 'dni', 'dniOriginal_');
+  const ibiDownloadCount = directIbiDownloadCount
+    + countStoredOriginals(formData, assetFiles, 'ibi', 'ibiOriginal_');
+  const electricityDownloadCount = directElectricityDownloadCount
+    + countStoredOriginals(formData, assetFiles, 'electricityBill', 'electricityOriginal_');
+  const ibiPresent = directIbiDownloadCount > 0
+    || countStoredOriginals(formData, assetFiles, 'ibi', 'ibiOriginal_') > 0;
+  const electricityPresent = directElectricityDownloadCount > 0
+    || countStoredOriginals(formData, assetFiles, 'electricityBill', 'electricityOriginal_') > 0;
   const statusItems = [
     (() => {
       const needsManualReview = Boolean(
@@ -842,11 +926,12 @@ function buildDashboardSummary(project) {
         || formData?.dni?.back?.extraction?.needsManualReview,
       );
       if (needsManualReview) return buildDashboardStatusItem('dni', 'DNI / NIE', 'revisar', 'warning', dniDownloadCount);
-      if (isDashboardIdentityComplete(formData)) return buildDashboardStatusItem('dni', 'DNI / NIE', '✓', 'success', dniDownloadCount);
+      if (isDashboardIdentityComplete(formData) || (dniFrontPresent && dniBackPresent)) {
+        return buildDashboardStatusItem('dni', 'DNI / NIE', '✓', 'success', dniDownloadCount);
+      }
       return buildDashboardStatusItem('dni', 'DNI / NIE', getDashboardIdentityPendingLabel(formData), 'pending', dniDownloadCount);
     })(),
     (() => {
-      const ibiPresent = getIbiPages(formData).length > 0;
       const needsManualReview = Boolean(formData?.ibi?.extraction?.needsManualReview);
       if (needsManualReview) return buildDashboardStatusItem('ibi', 'IBI / Escritura', 'revisar', 'warning', ibiDownloadCount);
       return buildDashboardStatusItem('ibi', 'IBI / Escritura', ibiPresent ? '✓' : 'pendiente', ibiPresent ? 'success' : 'pending', ibiDownloadCount);
@@ -855,7 +940,6 @@ function buildDashboardSummary(project) {
       project?.productType === 'aerothermal'
         ? []
         : [(() => {
-            const electricityPresent = electricityPages.length > 0;
             const needsManualReview = electricityPages.some((page) => Boolean(page?.extraction?.needsManualReview));
             if (needsManualReview) return buildDashboardStatusItem('electricity', 'Factura de luz', 'revisar', 'warning', electricityDownloadCount);
             return buildDashboardStatusItem('electricity', 'Factura de luz', electricityPresent ? '✓' : 'pendiente', electricityPresent ? 'success' : 'pending', electricityDownloadCount);
