@@ -1,0 +1,27 @@
+{
+  "stagingUrl": "https://document-collection-form-staging-staging.up.railway.app",
+  "projectCodes": {
+    "pureAeroCode": "ELT20260026",
+    "nonAeroCode": "ELT20260027",
+    "resumeCode": "ELT20260028",
+    "directCode": "ELT20260029",
+    "miniZipCode": "ELT20260030",
+    "uploadCode": "ELT20260031"
+  },
+  "screenshots": {
+    "pureAerothermalReview": "docs/proof/issue-29/live-pure-aerothermal-review.png",
+    "nonAerothermalElectricity": "docs/proof/issue-29/live-non-aerothermal-electricity.png",
+    "reviewFirstReload": "docs/proof/issue-29/live-review-first-reload.png",
+    "ecResume": "docs/proof/issue-29/live-ec-resume-substep.png",
+    "inlineAssessor": "docs/proof/issue-29/live-inline-assessor-save.png",
+    "statusDownloads": "docs/proof/issue-29/live-status-column-downloads.png",
+    "dragDropUpload": "docs/proof/issue-29/live-drag-drop-upload.png",
+    "additionalDocStatus": "docs/proof/issue-29/live-additional-doc-status.png"
+  },
+  "downloads": {
+    "directSingleFile": "ELT20260029_ibi_escritura.jpg",
+    "fullProjectZip": "ELT20260029_QA_Issue29_DIRECT_DOWNLOAD.zip",
+    "documentMiniZip": "ELT20260030_ibi_escritura.zip",
+    "additionalDocument": "ELT20260031_documento_adicional.pdf"
+  }
+}
