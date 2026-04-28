@@ -59,6 +59,22 @@ describe('normalizeFormData', () => {
     });
   });
 
+  it('repairs stale holder type flags when downstream representation data proves completion', () => {
+    const normalized = normalizeFormData({
+      location: 'cataluna',
+      representation: {
+        location: 'cataluna',
+        holderTypeConfirmed: false,
+        isCompany: false,
+        ivaCertificateSignature: 'data:image/png;base64,iva',
+        generalitatSignature: 'data:image/png;base64,gen',
+        representacioSignature: 'data:image/png;base64,rep',
+      },
+    });
+
+    expect(normalized.representation.holderTypeConfirmed).toBe(true);
+  });
+
   it('lets device-backup merge ignore malformed backup arrays instead of throwing', () => {
     const serverProject = makeProject({
       ibi: {

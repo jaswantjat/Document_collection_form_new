@@ -82,9 +82,42 @@ function getLocationLabel(formData, snapshot) {
   return 'Pendiente';
 }
 
+function hasText(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasRenderedRepresentationDocs(renderedDocuments) {
+  if (!renderedDocuments || typeof renderedDocuments !== 'object' || Array.isArray(renderedDocuments)) {
+    return false;
+  }
+  return Object.keys(renderedDocuments).length > 0;
+}
+
+function hasHolderTypeConfirmed(formData) {
+  const representation = formData?.representation;
+  if (!representation) return false;
+  if (representation.holderTypeConfirmed === true) return true;
+  return Boolean(
+    representation.isCompany
+    || hasText(representation.companyName)
+    || hasText(representation.companyNIF)
+    || hasText(representation.companyAddress)
+    || hasText(representation.companyMunicipality)
+    || hasText(representation.companyPostalCode)
+    || hasText(representation.postalCode)
+    || hasText(representation.ivaPropertyAddress)
+    || hasText(representation.ivaCertificateSignature)
+    || hasText(representation.representacioSignature)
+    || hasText(representation.generalitatSignature)
+    || hasText(representation.poderRepresentacioSignature)
+    || hasText(representation.ivaCertificateEsSignature)
+    || hasRenderedRepresentationDocs(representation.renderedDocuments)
+  );
+}
+
 function getHolderTypeLabel(formData) {
   const representation = formData?.representation;
-  if (!representation?.holderTypeConfirmed) return 'Pendiente de seleccionar';
+  if (!hasHolderTypeConfirmed(formData)) return 'Pendiente de seleccionar';
   return representation.isCompany ? 'Empresa' : 'Particular';
 }
 
@@ -232,7 +265,7 @@ function buildPendingItems(formData, missingDocLabels) {
   const pending = [...missingDocLabels];
   const representation = formData?.representation || {};
   if (!getLocationKey(formData, null)) pending.push('Ubicación / provincia');
-  if (!representation.holderTypeConfirmed) pending.push('Titular del contrato (persona o empresa)');
+  if (!hasHolderTypeConfirmed(formData)) pending.push('Titular del contrato (persona o empresa)');
   if (representation.isCompany) {
     if (!representation.companyName?.trim()) pending.push('Nombre de la empresa');
     if (!representation.companyNIF?.trim()) pending.push('NIF de la empresa');

@@ -277,6 +277,70 @@ test('buildFormNotificationPayload does not require a final customer signature i
   assert.doesNotMatch(payload.teams_message, /Firma final del cliente/);
 });
 
+test('buildFormNotificationPayload ignores stale holder type flags when representation completion is already proven', () => {
+  const payload = buildFormNotificationPayload({
+    eventType: 'form_updated',
+    project: {
+      code: 'ELT20260085',
+      customerName: 'ALBERT RECASENS DALMAU',
+      phone: '+34600999888',
+      email: '',
+      productType: 'solar',
+      assessor: 'Albert Llacha',
+      submissions: [{ id: 'sub-1' }, { id: 'sub-2' }],
+    },
+    formData: {
+      representation: {
+        location: 'cataluna',
+        holderTypeConfirmed: false,
+        isCompany: false,
+        postalCode: '08200',
+        ivaPropertyAddress: 'Carrer Major 1',
+        ivaCertificateSignature: 'data:image/png;base64,iva',
+        generalitatSignature: 'data:image/png;base64,gen',
+        representacioSignature: 'data:image/png;base64,rep',
+        renderedDocuments: {
+          catalunaIva: {
+            imageDataUrl: 'data:image/png;base64,doc',
+            generatedAt: '2026-04-27T19:28:00.000Z',
+            templateVersion: 'v1',
+          },
+        },
+      },
+      energyCertificate: {
+        status: 'skipped',
+      },
+    },
+    snapshot: {
+      fullName: 'ALBERT RECASENS DALMAU',
+      firstName: 'ALBERT',
+      lastName: 'RECASENS DALMAU',
+      address: 'Carrer Major 1',
+      municipality: 'Sabadell',
+      province: 'Barcelona',
+      postalCode: '08200',
+    },
+    docsUploaded: [
+      'dni_front',
+      'dni_back',
+      'ibi',
+      'electricity_bill',
+      'cataluna_iva',
+      'cataluna_generalitat',
+      'cataluna_representacio',
+    ],
+    docsRequired: ['dni_front', 'dni_back', 'ibi', 'electricity_bill', 'energy_certificate'],
+    locale: 'es',
+    source: 'customer',
+    submittedAt: '2026-04-27T19:28:00.000Z',
+  });
+
+  assert.equal(payload.project.holder_type_label, 'Particular');
+  assert.deepEqual(payload.documents.pending_labels, ['Nada pendiente']);
+  assert.match(payload.teams_message, /Estado: Todo completo\. No hay nada pendiente\./);
+  assert.doesNotMatch(payload.teams_message, /Titular del contrato \(persona o empresa\)/);
+});
+
 test('buildFormNotificationPayload handles passport uploads, deferred signatures, and skipped energy correctly', () => {
   const payload = buildFormNotificationPayload({
     eventType: 'form_updated',

@@ -215,8 +215,7 @@ function hasText(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function inferHolderTypeConfirmed(representation: Record<string, unknown>): boolean {
-  if (typeof representation.holderTypeConfirmed === 'boolean') return representation.holderTypeConfirmed;
+function hasRepresentationCompletionSignal(representation: Record<string, unknown>): boolean {
   return Boolean(
     representation.isCompany
     || hasText(representation.companyName)
@@ -233,6 +232,11 @@ function inferHolderTypeConfirmed(representation: Record<string, unknown>): bool
     || hasText(representation.ivaCertificateEsSignature)
     || Object.keys(normalizeRenderedDocuments(representation.renderedDocuments)).length > 0
   );
+}
+
+function inferHolderTypeConfirmed(representation: Record<string, unknown>): boolean {
+  if (representation.holderTypeConfirmed === true) return true;
+  return hasRepresentationCompletionSignal(representation);
 }
 
 function normalizeRepresentation(value: unknown, location: LocationRegion | null): RepresentationData {
