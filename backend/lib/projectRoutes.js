@@ -6,6 +6,7 @@ const {
 } = require('./formNotificationDedupe');
 const { extractCompletedDocKeys } = require('./formNotificationProjectState');
 const { recordDeliveryAttempt } = require('./deliveryStatus');
+const { requestUpstream } = require('./upstreamHttp');
 
 function checkCataloniaPDFs(formData) {
   if (!formData) {
@@ -116,14 +117,14 @@ function createFormNotificationSender({
     }
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await requestUpstream(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Eltex-Webhook-Secret': FORM_NOTIFICATIONS_WEBHOOK_SECRET,
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(5000),
+        timeoutMs: 5000,
       });
 
       if (!response.ok) {
@@ -230,14 +231,14 @@ function createDocFlowSenders({
     });
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await requestUpstream(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET,
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(5000),
+        timeoutMs: 5000,
       });
       if (!response.ok) {
         const responseText = await response.text().catch(() => '');
@@ -310,14 +311,14 @@ function createDocFlowSenders({
     });
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await requestUpstream(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Eltex-Webhook-Secret': LEGACY_DOCFLOW_WEBHOOK_SECRET,
         },
         body: JSON.stringify({ type: 'doc_update', order_id: project.code, docs_uploaded: docsUploaded }),
-        signal: AbortSignal.timeout(5000),
+        timeoutMs: 5000,
       });
 
       if (!response.ok) {

@@ -1,4 +1,5 @@
 const AdmZip = require('adm-zip');
+const { requestUpstream } = require('./upstreamHttp');
 
 function registerPdfConversionRoutes({
   app,
@@ -45,13 +46,14 @@ function registerPdfConversionRoutes({
         Buffer.from(fileFooter),
       ]);
 
-      const stirlingRes = await fetch(STIRLING_PDF_URL, {
+      const stirlingRes = await requestUpstream(STIRLING_PDF_URL, {
         method: 'POST',
         headers: {
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
           'X-API-KEY': apiKey,
         },
         body: bodyParts,
+        timeoutMs: 60000,
       });
 
       if (!stirlingRes.ok) {

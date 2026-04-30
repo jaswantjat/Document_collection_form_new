@@ -1,3 +1,5 @@
+const { requestUpstream } = require('./upstreamHttp');
+
 function registerAutocropperRoutes({ app, AUTOCROPPER_URL }) {
   app.post('/api/autocropper/process', async (req, res) => {
     try {
@@ -17,10 +19,11 @@ function registerAutocropperRoutes({ app, AUTOCROPPER_URL }) {
         });
       }
 
-      const response = await fetch(`${AUTOCROPPER_URL}/api/process`, {
+      const response = await requestUpstream(`${AUTOCROPPER_URL}/api/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentType, images }),
+        timeoutMs: 15000,
       });
 
       if (!response.ok) {
@@ -45,7 +48,9 @@ function registerAutocropperRoutes({ app, AUTOCROPPER_URL }) {
 
   app.get('/api/autocropper/health', async (_req, res) => {
     try {
-      const response = await fetch(`${AUTOCROPPER_URL}/health`);
+      const response = await requestUpstream(`${AUTOCROPPER_URL}/health`, {
+        timeoutMs: 5000,
+      });
       if (response.ok) {
         const health = await response.json();
         return res.json({ ...health, proxy: 'connected' });

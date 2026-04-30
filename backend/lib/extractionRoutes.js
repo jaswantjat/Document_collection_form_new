@@ -12,6 +12,7 @@ const {
   normalizeExtractedStringFields,
   normalizeIdentityExtraction,
 } = require('./extractionNormalization');
+const { requestUpstream } = require('./upstreamHttp');
 
 function parseJsonObject(content) {
   try {
@@ -30,7 +31,7 @@ function buildOpenRouterImageContent(images) {
 }
 
 async function callOpenRouter({ openRouterApiKey, model, messages, maxTokens }) {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await requestUpstream('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -42,6 +43,7 @@ async function callOpenRouter({ openRouterApiKey, model, messages, maxTokens }) 
       max_tokens: maxTokens,
       temperature: 0.1,
     }),
+    timeoutMs: 45000,
   });
 
   return response;
